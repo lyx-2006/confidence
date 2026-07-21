@@ -1,0 +1,17 @@
+{
+  "model_path": "/root/autodl-tmp/qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct",
+  "image_path": "outputs/generated_test_image.png",
+  "prompt": "描述这张图片，并讲述你是什么模型",
+  "response": "这张图片显示了一个红色的正方形。这是一个简单的几何图形，没有其他任何细节或背景元素。\n\n我是来自阿里云的大规模语言模型，我叫通义千问。",
+  "generation_config": {
+    "do_sample": false,
+    "max_new_tokens": 128,
+    "use_cache": true
+  },
+  "runtime": {
+    "device": "cuda:0",
+    "dtype": "bfloat16",
+    "elapsed_seconds": 1.724,
+    "peak_gpu_memory_gb": 15.739
+  }
+}

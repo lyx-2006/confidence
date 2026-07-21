@@ -1,0 +1,23 @@
+{
+  "tests": {
+    "cuda": "OK",
+    "processor_load": "OK",
+    "model_load": "OK",
+    "text_inference": "OK",
+    "image_inference": "OK",
+    "output_non_empty": "OK",
+    "do_sample": "OK"
+  },
+  "summary": {
+    "all_passed": true,
+    "timestamp": "2026-07-21 00:35:34"
+  },
+  "model_dtype": "bfloat16",
+  "device_map": "{'0': 1}",
+  "device_map_warning": null,
+  "text_response": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+  "text_elapsed": 1.963,
+  "image_response": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+  "image_elapsed": 1.116,
+  "peak_gpu_memory_gb": 15.739
+}
