@@ -25,31 +25,31 @@ import torch
 
 
 CONFIDENCE_CLASSES = [
-    "No chance",
-    "Really unlikely",
-    "Chances are slight",
-    "Unlikely",
-    "Less than even",
-    "Better than even",
-    "Likely",
-    "Very good chance",
-    "Highly likely",
-    "Almost certain",
+    "No chance(0.0-0.1)",
+    "Really unlikely(0.1-0.2)",
+    "Chances are slight(0.2-0.3)",
+    "Unlikely(0.3-0.4)",
+    "Less than even(0.4-0.5)",
+    "Better than even(0.5-0.6)",
+    "Likely(0.6-0.7)",
+    "Very good chance(0.7-0.8)",
+    "Highly likely(0.8-0.9)",
+    "Almost certain(0.9-1.0)",
 ]
 
 CLASS_MIDPOINTS = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
 
 CONFIDENCE_CLASS_TEXT = """Confidence classes:
-- No chance
-- Really unlikely
-- Chances are slight
-- Unlikely
-- Less than even
-- Better than even
-- Likely
-- Very good chance
-- Highly likely
-- Almost certain"""
+- No chance(0.0-0.1)
+- Really unlikely(0.1-0.2)
+- Chances are slight(0.2-0.3)
+- Unlikely(0.3-0.4)
+- Less than even(0.4-0.5)
+- Better than even(0.5-0.6)
+- Likely(0.6-0.7)
+- Very good chance(0.7-0.8)
+- Highly likely(0.8-0.9)
+- Almost certain(0.9-1.0)"""
 
 STAGE2_TEXT_CONFIDENCE_PROMPT = """You will be shown a question together with an answer you previously provided before.
 

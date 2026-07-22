@@ -1,0 +1,28 @@
+# Model files (large)
+qwen-2.5-vl/models/
+
+qwen-2.5-vl/huggingface_cache
+
+qwen-2.5-vl/logs
+
+qwen-2.5-vl/outputs
+
+# VQA datasets
+VQA_datasets/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# datasets
+datasets/
+
+# figure
+figures/
+
+# hidden states
+layer_metacognition/output/main/hidden_states
+
+qwen-2.5-vl/huggingface_cache/
+
+layer_metacognition/output/main/results.jsonl

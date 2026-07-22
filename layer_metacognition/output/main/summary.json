@@ -1,0 +1,470 @@
+{
+  "case_count": 2043,
+  "layer_count": 28,
+  "skipped_layers": 0,
+  "layers": {
+    "0": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "orange": 236,
+        "white": 1346,
+        "teal": 165,
+        "magenta": 269,
+        "violet": 27
+      },
+      "mean_answer_probability": 0.245,
+      "mean_answer_entropy": 2.089,
+      "mean_soft_confidence": 0.38
+    },
+    "1": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "white": 1577,
+        "orange": 5,
+        "teal": 451,
+        "magenta": 10
+      },
+      "mean_answer_probability": 0.359,
+      "mean_answer_entropy": 1.982,
+      "mean_soft_confidence": 0.562
+    },
+    "2": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "cyan": 538,
+        "white": 1035,
+        "orange": 4,
+        "purple": 5,
+        "teal": 461
+      },
+      "mean_answer_probability": 0.288,
+      "mean_answer_entropy": 2.061,
+      "mean_soft_confidence": 0.643
+    },
+    "3": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "brown": 197,
+        "red": 286,
+        "white": 1045,
+        "cyan": 54,
+        "teal": 455,
+        "olive": 6
+      },
+      "mean_answer_probability": 0.263,
+      "mean_answer_entropy": 2.096,
+      "mean_soft_confidence": 0.599
+    },
+    "4": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "cyan": 1524,
+        "white": 57,
+        "olive": 454,
+        "maroon": 7,
+        "purple": 1
+      },
+      "mean_answer_probability": 0.309,
+      "mean_answer_entropy": 1.988,
+      "mean_soft_confidence": 0.546
+    },
+    "5": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "cyan": 1567,
+        "red": 15,
+        "maroon": 461
+      },
+      "mean_answer_probability": 0.379,
+      "mean_answer_entropy": 1.886,
+      "mean_soft_confidence": 0.552
+    },
+    "6": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "cyan": 1427,
+        "red": 136,
+        "white": 19,
+        "maroon": 461
+      },
+      "mean_answer_probability": 0.41,
+      "mean_answer_entropy": 1.748,
+      "mean_soft_confidence": 0.408
+    },
+    "7": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "maroon": 461
+      },
+      "mean_answer_probability": 0.572,
+      "mean_answer_entropy": 1.55,
+      "mean_soft_confidence": 0.389
+    },
+    "8": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "maroon": 461
+      },
+      "mean_answer_probability": 0.823,
+      "mean_answer_entropy": 0.805,
+      "mean_soft_confidence": 0.606
+    },
+    "9": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "maroon": 461
+      },
+      "mean_answer_probability": 0.543,
+      "mean_answer_entropy": 1.624,
+      "mean_soft_confidence": 0.568
+    },
+    "10": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "maroon": 459,
+        "magenta": 2
+      },
+      "mean_answer_probability": 0.568,
+      "mean_answer_entropy": 1.5,
+      "mean_soft_confidence": 0.387
+    },
+    "11": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "magenta": 461
+      },
+      "mean_answer_probability": 0.436,
+      "mean_answer_entropy": 1.771,
+      "mean_soft_confidence": 0.14
+    },
+    "12": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "maroon": 456,
+        "magenta": 4,
+        "violet": 1
+      },
+      "mean_answer_probability": 0.303,
+      "mean_answer_entropy": 2.09,
+      "mean_soft_confidence": 0.137
+    },
+    "13": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "maroon": 441,
+        "violet": 16,
+        "magenta": 4
+      },
+      "mean_answer_probability": 0.315,
+      "mean_answer_entropy": 2.032,
+      "mean_soft_confidence": 0.211
+    },
+    "14": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1570,
+        "blue": 1,
+        "white": 11,
+        "maroon": 444,
+        "coral": 3,
+        "violet": 4,
+        "silver": 7,
+        "magenta": 3
+      },
+      "mean_answer_probability": 0.274,
+      "mean_answer_entropy": 2.02,
+      "mean_soft_confidence": 0.115
+    },
+    "15": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1227,
+        "blue": 355,
+        "violet": 433,
+        "maroon": 28
+      },
+      "mean_answer_probability": 0.286,
+      "mean_answer_entropy": 1.969,
+      "mean_soft_confidence": 0.123
+    },
+    "16": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "violet": 460,
+        "maroon": 1
+      },
+      "mean_answer_probability": 0.431,
+      "mean_answer_entropy": 1.817,
+      "mean_soft_confidence": 0.093
+    },
+    "17": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "violet": 418,
+        "maroon": 13,
+        "coral": 9,
+        "teal": 21
+      },
+      "mean_answer_probability": 0.609,
+      "mean_answer_entropy": 1.401,
+      "mean_soft_confidence": 0.068
+    },
+    "18": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1582,
+        "beige": 55,
+        "maroon": 293,
+        "navy": 47,
+        "magenta": 33,
+        "coral": 11,
+        "violet": 22
+      },
+      "mean_answer_probability": 0.556,
+      "mean_answer_entropy": 1.497,
+      "mean_soft_confidence": 0.079
+    },
+    "19": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1540,
+        "green": 42,
+        "beige": 121,
+        "maroon": 286,
+        "coral": 19,
+        "turquoise": 15,
+        "magenta": 20
+      },
+      "mean_answer_probability": 0.467,
+      "mean_answer_entropy": 1.684,
+      "mean_soft_confidence": 0.131
+    },
+    "20": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1326,
+        "green": 206,
+        "white": 38,
+        "black": 12,
+        "coral": 95,
+        "magenta": 246,
+        "maroon": 80,
+        "turquoise": 1,
+        "beige": 25,
+        "teal": 12,
+        "silver": 2
+      },
+      "mean_answer_probability": 0.404,
+      "mean_answer_entropy": 1.777,
+      "mean_soft_confidence": 0.106
+    },
+    "21": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "red": 1132,
+        "white": 136,
+        "orange": 79,
+        "black": 152,
+        "green": 48,
+        "blue": 32,
+        "coral": 307,
+        "magenta": 130,
+        "maroon": 1,
+        "beige": 22,
+        "turquoise": 1,
+        "yellow": 3
+      },
+      "mean_answer_probability": 0.426,
+      "mean_answer_entropy": 1.735,
+      "mean_soft_confidence": 0.182
+    },
+    "22": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "yellow": 71,
+        "white": 208,
+        "red": 835,
+        "green": 213,
+        "brown": 87,
+        "orange": 49,
+        "blue": 35,
+        "black": 74,
+        "cyan": 10,
+        "coral": 221,
+        "violet": 21,
+        "gold": 44,
+        "maroon": 15,
+        "magenta": 131,
+        "lime": 4,
+        "beige": 13,
+        "silver": 12
+      },
+      "mean_answer_probability": 0.437,
+      "mean_answer_entropy": 1.689,
+      "mean_soft_confidence": 0.325
+    },
+    "23": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "yellow": 192,
+        "gray": 32,
+        "red": 389,
+        "white": 104,
+        "green": 222,
+        "brown": 129,
+        "orange": 133,
+        "cyan": 90,
+        "purple": 48,
+        "blue": 70,
+        "black": 112,
+        "pink": 61,
+        "coral": 69,
+        "navy": 59,
+        "magenta": 139,
+        "gold": 36,
+        "olive": 10,
+        "silver": 47,
+        "lime": 17,
+        "beige": 65,
+        "maroon": 3,
+        "turquoise": 16
+      },
+      "mean_answer_probability": 0.62,
+      "mean_answer_entropy": 1.197,
+      "mean_soft_confidence": 0.502
+    },
+    "24": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "yellow": 261,
+        "gray": 50,
+        "green": 187,
+        "brown": 139,
+        "orange": 165,
+        "red": 179,
+        "white": 131,
+        "cyan": 135,
+        "purple": 82,
+        "blue": 66,
+        "pink": 75,
+        "black": 112,
+        "coral": 68,
+        "navy": 47,
+        "magenta": 95,
+        "violet": 9,
+        "maroon": 28,
+        "gold": 21,
+        "olive": 13,
+        "lime": 17,
+        "beige": 59,
+        "silver": 54,
+        "turquoise": 25,
+        "teal": 25
+      },
+      "mean_answer_probability": 0.703,
+      "mean_answer_entropy": 0.954,
+      "mean_soft_confidence": 0.584
+    },
+    "25": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "yellow": 199,
+        "gray": 54,
+        "green": 266,
+        "cyan": 190,
+        "brown": 137,
+        "orange": 174,
+        "pink": 128,
+        "white": 86,
+        "red": 127,
+        "purple": 84,
+        "black": 102,
+        "blue": 35,
+        "coral": 84,
+        "navy": 156,
+        "magenta": 16,
+        "silver": 144,
+        "maroon": 14,
+        "gold": 2,
+        "olive": 3,
+        "lime": 8,
+        "beige": 19,
+        "turquoise": 15
+      },
+      "mean_answer_probability": 0.753,
+      "mean_answer_entropy": 0.77,
+      "mean_soft_confidence": 0.641
+    },
+    "26": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "yellow": 144,
+        "gray": 60,
+        "green": 290,
+        "brown": 217,
+        "orange": 113,
+        "red": 134,
+        "pink": 114,
+        "white": 126,
+        "cyan": 169,
+        "purple": 60,
+        "blue": 34,
+        "black": 121,
+        "coral": 39,
+        "navy": 61,
+        "gold": 76,
+        "silver": 128,
+        "magenta": 19,
+        "maroon": 36,
+        "olive": 12,
+        "lime": 17,
+        "turquoise": 51,
+        "teal": 9,
+        "beige": 13
+      },
+      "mean_answer_probability": 0.787,
+      "mean_answer_entropy": 0.642,
+      "mean_soft_confidence": 0.512
+    },
+    "27": {
+      "case_count": 2043,
+      "answer_distribution": {
+        "yellow": 161,
+        "gray": 57,
+        "cyan": 356,
+        "brown": 200,
+        "green": 137,
+        "orange": 193,
+        "white": 92,
+        "red": 101,
+        "pink": 85,
+        "purple": 93,
+        "black": 97,
+        "blue": 10,
+        "coral": 48,
+        "navy": 45,
+        "magenta": 29,
+        "teal": 106,
+        "maroon": 36,
+        "gold": 12,
+        "turquoise": 39,
+        "olive": 38,
+        "lime": 18,
+        "silver": 36,
+        "beige": 54
+      },
+      "mean_answer_probability": 0.818,
+      "mean_answer_entropy": 0.538,
+      "mean_soft_confidence": 0.525
+    }
+  }
+}

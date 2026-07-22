@@ -6,6 +6,7 @@
 
 - [confidence_analysis.py](/root/autodl-tmp/confidence_analysis.py)：独立执行 Stage 2 confidence 分析。
 - [generate_color_pool.py](</root/autodl-tmp/generate color pool/generate_color_pool.py>)：执行 prior 筛选、DeepSeek 候选生成、稳定性测试和颜色池保存。
+- [test_deepseek_connection.py](/root/autodl-tmp/test_deepseek_connection.py)：低并发独立诊断 DeepSeek API 超时。
 
 不会修改 `qwen-2.5-vl/inference.py`。
 
@@ -31,7 +32,23 @@ export CSTCLOUD_API_KEY="你的 API key"
 # 或 export OPENAI_API_KEY="你的 API key"
 ```
 
-固定使用 `https://uni-api.cstcloud.cn/v1` 的 `DeepSeek-V4-Flash`。
+固定使用 `https://uni-api.cstcloud.cn/v1` 的 `deepseek-v4-flash`，单次响应上限为 `2048` tokens。
+
+## DeepSeek 超时诊断
+
+先用单请求、单并发测试，不会加载 Qwen 或写入颜色池：
+
+```bash
+python test_deepseek_connection.py --repeat 1 --concurrency 1 --timeout 120
+```
+
+如果单并发成功，再测试并发是否导致服务限流或容量不足：
+
+```bash
+python test_deepseek_connection.py --repeat 5 --concurrency 5 --timeout 120
+```
+
+诊断脚本关闭 OpenAI SDK 自动重试，并输出每个请求的耗时、异常类型和响应长度。主颜色池程序也使用 `timeout=120` 秒和 `max_retries=0`，由自己的三次重试逻辑统一记录。单并发成功而五并发失败，通常表示并发过高或服务端限流；单并发也超时，则优先检查 API endpoint、Token 权限或服务状态。
 
 ## 独立 Confidence 分析
 
@@ -84,6 +101,8 @@ python "generate color pool/generate_color_pool.py" --find --resume
 
 find 顺序固定为：提取已有 prior → 本地模型测试 → 接纳合格 prior → 完成全部 find → 调用 DeepSeek 补齐缺失档位。find 完成前 DeepSeek 调用数为 0。
 
+运行 `--find` 时终端会显示 `[Find] started`、每条 prior 的 accepted/bin/reason、每个颜色的 bin 汇总，以及 `[Find] completed all colors`。
+
 小规模试运行：
 
 ```bash
@@ -96,6 +115,19 @@ python "generate color pool/generate_color_pool.py" \
 ```bash
 python "generate color pool/generate_color_pool.py" --colors yellow,red,blue
 ```
+
+只生成指定 confidence bins：
+
+```bash
+# 使用 bin 编号，只生成最低两档和最高档
+python "generate color pool/generate_color_pool.py" --select_pool 0,1,4
+
+# 等价的区间写法
+python "generate color pool/generate_color_pool.py" \
+  --select_pool 0.0-0.2,0.2-0.4,0.8-1.0
+```
+
+未被 `--select_pool` 选中的档位不会创建 Generator 或 Analyzer，也不会进行 DeepSeek 候选生成。`--find` 仍会测试数据集已有 prior，但只为所选档位补充生成内容。
 
 `--after` 不包含参数本身的颜色：
 
@@ -114,7 +146,8 @@ python "generate color pool/generate_color_pool.py" --after gray    # 从 maroon
 | `--input PATH` | `/root/autodl-tmp/datasets/dataset.json` | 输入数据集。 |
 | `--output PATH` | `datasets/color_prior_pool.json` | 主结果 JSON。 |
 | `--target-per-bin N` | `5` | 每个颜色、每个 bin 至少保留的 prior 数量。 |
-| `--bin-batch-sizes A,B,C,D,E` | `30,30,20,10,20` | Bin 0 到 Bin 4 每轮候选数。 |
+| `--select_pool BINS` | `all` | 需要生成的 bins；支持 `0,1,4`、`bin0,bin1,bin4` 或区间写法。 |
+| `--bin-batch-sizes A,B,C,D,E` | `40,40,20,10,40` | Bin 0 到 Bin 4 每轮候选数。 |
 | `--deepseek-workers N` | `5` | DeepSeek 最大并发数；本地 Qwen 始终串行。 |
 | `--colors A,B,C` | 全部颜色 | 只处理逗号分隔的颜色子集。 |
 | `--resume` | 关闭 | 显式启用恢复语义；默认增量模式同样读取已有结果。 |
@@ -126,13 +159,15 @@ python "generate color pool/generate_color_pool.py" --after gray    # 从 maroon
 
 | Bin | soft confidence 范围 | 默认每轮候选数 |
 | --- | --- | ---: |
-| 0 | `[0.0, 0.2)` | 30 |
-| 1 | `[0.2, 0.4)` | 30 |
+| 0 | `[0.0, 0.2)` | 40 |
+| 1 | `[0.2, 0.4)` | 40 |
 | 2 | `[0.4, 0.6)` | 20 |
 | 3 | `[0.6, 0.8)` | 10 |
-| 4 | `[0.8, 1.0]` | 20 |
+| 4 | `[0.8, 1.0]` | 40 |
 
-Bin 0、Bin 1 每轮必须分别包含 10 条 `multi_step_reasoning`、10 条 `not_exclusion`、10 条 `pure_hard`。
+默认 40 条时，Bin 0、Bin 1 每轮必须分别包含 14 条 `multi_step_reasoning`、13 条 `not_exclusion`、13 条 `pure_hard`；自定义 batch size 时按三类尽量均分。
+
+Bin 0、Bin 1 的 prompt 强调“目标颜色仍是唯一最佳答案，但证据较弱并保留多个可信替代项”，避免为了降低 confidence 而让答案本身发生变化。Bin 4 强调直接、典型、无歧义的常识关联，避免模糊、否定、冷门事实和竞争答案。Bin 2、Bin 3 的策略与批量保持不变。
 
 每条 prior 在三个不同 shape 问题上测试：三次答案必须都是目标颜色，三次 Stage 2 必须成功，且 `max(soft_values) - min(soft_values) < stability_threshold`，三次平均值必须落入目标 bin。首测失败立即停止后续两题。问题不足时，会从同一 `Choose from:` 集合的真实问题模板替换 shape，并记录 `question_source: "template_rewrite"`。
 
@@ -148,7 +183,10 @@ generate color pool/output/color_prior_generation.log
 generate color pool/output/color_prior_prompt_history.json
 ```
 
-不会按候选、推理或轮次写 checkpoint。中断时当前颜色不会落盘，最多重做当前颜色；已完成颜色不会删除或覆盖。
+不会按候选、推理或轮次写 checkpoint。
+
+DeepSeek 请求会实时打印到终端：请求开始、成功解析（含响应字符数）、失败原因和重试信息；这些实时日志不会触发 checkpoint 写入，也不会打印 API key 或完整 prompt。中断时当前颜色不会落盘，最多重做当前颜色；已完成颜色不会删除或覆盖。
+每个颜色的每一轮结束后也会立即打印 `[ColorPool] color=... round=... accepted=... missing_bins=... color_complete=...`，用于确认该轮是否正常完成。
 
 ## 注意事项
 

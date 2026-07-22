@@ -46,7 +46,7 @@ COLOR_SET_B = [
 ALL_COLORS = COLOR_SET_A + COLOR_SET_B
 
 BIN_RANGES = [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.0)]
-DEFAULT_BATCH_SIZE_BY_BIN = {0: 30, 1: 30, 2: 20, 3: 10, 4: 20}
+DEFAULT_BATCH_SIZE_BY_BIN = {0: 40, 1: 40, 2: 20, 3: 10, 4: 40}
 LOW_BIN_DIFFICULTIES = ("multi_step_reasoning", "not_exclusion", "pure_hard")
 PRIOR_FIELD_NAMES = {"text_clue", "selected_text_priors", "text_prior", "prior", "clue"}
 SYNTHETIC_SHAPES = [
@@ -77,11 +77,8 @@ Output exactly:
 Do not include any additional text."""
 
 BIN_STRATEGIES = {
-    0: "The target must be only a very weak best guess. Produce exactly 10 multi_step_reasoning, 10 not_exclusion, and 10 pure_hard candidates.",
-    1: "Give the target a slight advantage while retaining several credible alternatives. Produce exactly 10 multi_step_reasoning, 10 not_exclusion, and 10 pure_hard candidates.",
     2: "Make the target the strongest candidate while retaining one or two reasonable alternatives.",
     3: "Clearly support the target while preserving a small amount of reasonable uncertainty.",
-    4: "Use strongly diagnostic common-knowledge clues that point to the target colour.",
 }
 
 GENERATOR_PROMPT = """You are the generation agent responsible only for confidence bin
@@ -266,6 +263,42 @@ def bin_label(bin_id: int) -> str:
     low, high = BIN_RANGES[bin_id]
     close = "]" if bin_id == 4 else ")"
     return f"[{low:.1f}, {high:.1f}{close}"
+
+
+def low_bin_difficulty_quotas(batch_size: int) -> dict[str, int]:
+    base, remainder = divmod(batch_size, len(LOW_BIN_DIFFICULTIES))
+    return {
+        name: base + (1 if index < remainder else 0)
+        for index, name in enumerate(LOW_BIN_DIFFICULTIES)
+    }
+
+
+def build_bin_strategy(bin_id: int, batch_size: int) -> str:
+    if bin_id in (0, 1):
+        quotas = low_bin_difficulty_quotas(batch_size)
+        strength = (
+            "extremely weak: several alternatives must remain plausible, but the target must still be the unique best answer"
+            if bin_id == 0
+            else "weak but noticeable: the target must be the unique best answer while two or three alternatives remain credible"
+        )
+        return (
+            f"The evidence must be {strength}. "
+            "Correct-answer preservation is mandatory: never make the clue so generic that another candidate becomes equally good or better. "
+            "Use one subtle, truthful, target-specific anchor, then weaken confidence with hedging, incomplete evidence, indirect wording, limited source reliability, or explicit residual alternatives. "
+            "Do not state the target color or another candidate color. Avoid direct canonical objects that make the answer obvious. "
+            f"Produce exactly {quotas['multi_step_reasoning']} multi_step_reasoning clues whose two weak facts jointly favor the target, "
+            f"{quotas['not_exclusion']} not_exclusion clues that remove some competitors but deliberately leave several plausible, and "
+            f"{quotas['pure_hard']} pure_hard clues using obscure but valid associations where the target remains the best guess. "
+            "Vary domains and constructions; each clue must remain shape-independent and semantically distinct."
+        )
+    if bin_id == 4:
+        return (
+            "Make the target the only reasonable answer using direct, universally recognizable, common-knowledge evidence. "
+            "Use canonical objects, materials, symbols, natural phenomena, or conventional associations strongly tied to the target. "
+            "Avoid hedging, negation, obscure trivia, unreliable sources, competing alternatives, and indirect multi-step reasoning. "
+            "Do not state any candidate color name in the clue. Diversify domains and wording while keeping every clue precise, truthful, and unambiguous."
+        )
+    return BIN_STRATEGIES[bin_id]
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -571,11 +604,22 @@ class DeepSeekClient:
         api_key = "70753601968e6440544540e4cc55bd0f596bd4cbf8655df21091803a9b32b28f"
         if not api_key:
             raise RuntimeError("Set CSTCLOUD_API_KEY or OPENAI_API_KEY for DeepSeek generation")
-        self.client = OpenAI(api_key=api_key, base_url="https://uni-api.cstcloud.cn/v1")
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url="https://uni-api.cstcloud.cn/v1",
+            timeout=120.0,
+            max_retries=0,
+        )
         self.workers = workers
         self.generator_calls = 0
         self.analyzer_calls = 0
         self._counter_lock = threading.Lock()
+        self._print_lock = threading.Lock()
+
+    def _log(self, message: str) -> None:
+        """Print immediate API health logs without writing a checkpoint."""
+        with self._print_lock:
+            print(f"[DeepSeek][{utc_now()}] {message}", flush=True)
 
     @staticmethod
     def _parse_json(content: str) -> dict[str, Any]:
@@ -595,18 +639,25 @@ class DeepSeekClient:
                 self.analyzer_calls += 1
         last_error: Exception | None = None
         for attempt in range(1, retries + 1):
+            self._log(f"{kind} request started (attempt {attempt}/{retries})")
             try:
                 response = self.client.chat.completions.create(
-                    model="DeepSeek-V4-Flash",
+                    model="deepseek-v4-flash-aistar",
                     messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"},
-                    temperature=0.8 if kind == "generator" else 0.2,
+                    temperature=0.7,
+                    max_tokens=2048,
                 )
                 content = response.choices[0].message.content or ""
-                return self._parse_json(content)
+                parsed = self._parse_json(content)
+                self._log(
+                    f"{kind} request succeeded (attempt {attempt}, response_chars={len(content)})"
+                )
+                return parsed
             except Exception as exc:
                 last_error = exc
+                self._log(f"{kind} request failed (attempt {attempt}): {exc}")
                 if attempt < retries:
+                    self._log(f"{kind} request will retry")
                     time.sleep(min(2 ** (attempt - 1), 4))
         raise RuntimeError(f"DeepSeek {kind} failed after {retries} attempts: {last_error}")
 
@@ -695,8 +746,9 @@ def validate_generator_response(
         return [], [{"rejection_reason": "wrong_candidate_count", "actual": len(raw_candidates) if isinstance(raw_candidates, list) else None}]
     if state.bin_id in (0, 1):
         counts = Counter(str(item.get("difficulty_type", "")) for item in raw_candidates if isinstance(item, dict))
-        if any(counts[name] != 10 for name in LOW_BIN_DIFFICULTIES):
-            return [], [{"rejection_reason": "wrong_low_bin_difficulty_quota", "counts": dict(counts)}]
+        expected = low_bin_difficulty_quotas(batch_size)
+        if any(counts[name] != expected[name] for name in LOW_BIN_DIFFICULTIES):
+            return [], [{"rejection_reason": "wrong_low_bin_difficulty_quota", "counts": dict(counts), "expected": expected}]
 
     candidates: list[Candidate] = []
     existing = [prior["text_clue"] for prior in state.accepted_priors if prior.get("text_clue")]
@@ -742,7 +794,7 @@ def initial_generator_prompt(state: AgentState, batch_size: int, choices: list[s
         batch_size=batch_size,
         accepted_priors=compact_json([p.get("text_clue") for p in state.accepted_priors]),
         rejected_results=compact_json(state.rejected_results),
-        bin_strategy=BIN_STRATEGIES[state.bin_id],
+        bin_strategy=build_bin_strategy(state.bin_id, batch_size),
         bin_id=state.bin_id,
     )
 
@@ -812,6 +864,7 @@ class PoolBuilder:
                 "input": str(self.input_path),
                 "output": str(self.output_path),
                 "selected_colors": args.selected_colors,
+                "selected_bins": args.selected_bins,
                 "checkpoint_policy": "once_per_completed_color",
                 "find_enabled": args.find,
             }
@@ -854,11 +907,17 @@ class PoolBuilder:
         for level in entry["prior_levels"]:
             level["complete"] = len(level.get("priors", [])) >= self.args.target_per_bin
         entry["complete"] = all(level["complete"] for level in entry["prior_levels"])
+        entry["selected_bins_complete"] = all(
+            level_for(entry, bin_id)["complete"] for bin_id in self.args.selected_bins
+        )
         entry["checkpointed_at"] = utc_now()
         self.report["updated_at"] = utc_now()
         self.report["colors"] = {
             item["color"]: {
                 "complete": bool(item.get("complete")),
+                "selected_bins_complete": all(
+                    bool(level_for(item, bin_id).get("complete")) for bin_id in self.args.selected_bins
+                ),
                 "bin_counts": {
                     str(level["bin_id"]): len(level.get("priors", []))
                     for level in item["prior_levels"]
@@ -871,9 +930,16 @@ class PoolBuilder:
         self.report["deepseek_generator_calls"] = self.deepseek.generator_calls if self.deepseek else 0
         self.report["deepseek_analyzer_calls"] = self.deepseek.analyzer_calls if self.deepseek else 0
         self.report["incomplete"] = [
-            {"color": item["color"], "bins": [level["bin_id"] for level in item["prior_levels"] if not level["complete"]]}
+            {
+                "color": item["color"],
+                "bins": [
+                    bin_id for bin_id in self.args.selected_bins
+                    if not level_for(item, bin_id).get("complete")
+                ],
+            }
             for item in self.pool
-            if item.get("color") in self.args.selected_colors and not item.get("complete")
+            if item.get("color") in self.args.selected_colors
+            and any(not level_for(item, bin_id).get("complete") for bin_id in self.args.selected_bins)
         ]
         atomic_write_json(self.output_path, self.pool)
         atomic_write_json(self.artifact_dir / "color_prior_generation_report.json", self.report)
@@ -894,6 +960,7 @@ class PoolBuilder:
         assert self.tester is not None
         existing = extract_existing_priors(self.dataset)
         self.event("find_started", generator_calls=0, analyzer_calls=0)
+        print(f"[Find] started colors={self.args.selected_colors} deepseek_calls=0", flush=True)
         for color in self.args.selected_colors:
             entry = self.pool_by_color[color]
             tested = set(entry.get("tested_prior_keys", []))
@@ -915,14 +982,25 @@ class PoolBuilder:
                     level_for(entry, int(result["bin_id"]))["priors"].append(result)
                     already_accepted.append(clue)
                 self.event("find_prior_tested", color=color, accepted=result["accepted"], reason=result["rejection_reason"])
+                print(
+                    f"[Find] color={color} prior_tested accepted={result["accepted"]} "
+                    f"bin={result.get("bin_id")} reason={result["rejection_reason"]}",
+                    flush=True,
+                )
             entry["tested_prior_keys"] = sorted(tested)
+            print(
+                f"[Find] color={color} completed tested={len(tested)} "
+                f"bin_counts={ {level["bin_id"]: len(level.get("priors", [])) for level in entry["prior_levels"]} }",
+                flush=True,
+            )
         self.event("find_completed", generator_calls=0, analyzer_calls=0)
+        print("[Find] completed all colors; deepseek_generator_calls=0 deepseek_analyzer_calls=0", flush=True)
 
     def _make_states(self, color: str) -> dict[int, AgentState]:
         entry = self.pool_by_color[color]
         histories = [item for item in self.prompt_history if item.get("color") == color]
         states: dict[int, AgentState] = {}
-        for bin_id in range(5):
+        for bin_id in self.args.selected_bins:
             level = level_for(entry, bin_id)
             latest = max(
                 (item for item in histories if int(item.get("bin_id", -1)) == bin_id),
@@ -1070,6 +1148,14 @@ class PoolBuilder:
                 round=round_index,
                 bin_counts={str(bin_id): len(state.accepted_priors) for bin_id, state in states.items()},
             )
+            bin_counts = {bin_id: len(state.accepted_priors) for bin_id, state in states.items()}
+            missing_bins = [bin_id for bin_id, count in bin_counts.items() if count < self.args.target_per_bin]
+            print(
+                f"[ColorPool] color={color} round={round_index} completed "
+                f"accepted={bin_counts} missing_bins={missing_bins} "
+                f"color_complete={not missing_bins}",
+                flush=True,
+            )
 
         for bin_id, state in states.items():
             level = level_for(entry, bin_id)
@@ -1089,7 +1175,7 @@ class PoolBuilder:
         needs_generation = any(
             len(level_for(self.pool_by_color[color], bin_id)["priors"]) < self.args.target_per_bin
             for color in self.args.selected_colors
-            for bin_id in range(5)
+            for bin_id in self.args.selected_bins
         )
         if needs_generation:
             self.deepseek = DeepSeekClient(self.args.deepseek_workers)
@@ -1097,7 +1183,7 @@ class PoolBuilder:
         for color in self.args.selected_colors:
             entry = self.pool_by_color[color]
             missing = [
-                bin_id for bin_id in range(5)
+                bin_id for bin_id in self.args.selected_bins
                 if len(level_for(entry, bin_id)["priors"]) < self.args.target_per_bin
             ]
             if missing:
@@ -1105,6 +1191,52 @@ class PoolBuilder:
                 self.generate_color(color)
             self.event("color_completed", color=color)
             self.checkpoint_color(color)
+
+
+BIN_SELECTOR_ALIASES = {
+    "0": 0, "bin0": 0, "0.0-0.2": 0,
+    "1": 1, "bin1": 1, "0.2-0.4": 1,
+    "2": 2, "bin2": 2, "0.4-0.6": 2,
+    "3": 3, "bin3": 3, "0.6-0.8": 3,
+    "4": 4, "bin4": 4, "0.8-1.0": 4,
+}
+
+
+def parse_select_pool(value: str) -> list[int]:
+    normalized = value.strip().lower().replace(" ", "")
+    if normalized == "all":
+        return list(range(5))
+    parts = [part for part in normalized.split(",") if part]
+    if not parts:
+        raise argparse.ArgumentTypeError("--select_pool requires at least one bin")
+
+    selected: set[int] = set()
+    boundaries = {0.0, 0.2, 0.4, 0.6, 0.8, 1.0}
+    invalid: list[str] = []
+    for part in parts:
+        if part in BIN_SELECTOR_ALIASES:
+            selected.add(BIN_SELECTOR_ALIASES[part])
+            continue
+        match = re.fullmatch(r"(0(?:\.\d+)?|1(?:\.0+)?)\-(0(?:\.\d+)?|1(?:\.0+)?)", part)
+        if not match:
+            invalid.append(part)
+            continue
+        low, high = float(match.group(1)), float(match.group(2))
+        if low not in boundaries or high not in boundaries or low >= high:
+            invalid.append(part)
+            continue
+        covered = [
+            bin_id for bin_id, (bin_low, bin_high) in enumerate(BIN_RANGES)
+            if bin_low >= low and bin_high <= high
+        ]
+        if not covered:
+            invalid.append(part)
+            continue
+        selected.update(covered)
+    if invalid:
+        choices = "bin IDs (0-4) or ranges aligned to 0.0,0.2,0.4,0.6,0.8,1.0"
+        raise argparse.ArgumentTypeError(f"Unknown bin selector(s): {invalid}; use {choices}")
+    return sorted(selected)
 
 
 def parse_csv_ints(value: str) -> list[int]:
@@ -1125,7 +1257,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default="/root/autodl-tmp/datasets/dataset.json")
     parser.add_argument("--output", default="datasets/color_prior_pool.json")
     parser.add_argument("--target-per-bin", type=int, default=5)
-    parser.add_argument("--bin-batch-sizes", type=parse_csv_ints, default=parse_csv_ints("30,30,20,10,20"))
+    parser.add_argument(
+        "--select_pool", "--select-pool",
+        type=parse_select_pool,
+        default=list(range(5)),
+        help="Bins to generate: e.g. 0,1,4 or ranges such as 0.4-0.8",
+    )
+    parser.add_argument("--bin-batch-sizes", type=parse_csv_ints, default=parse_csv_ints("40,40,20,10,40"))
     parser.add_argument("--deepseek-workers", type=int, default=5)
     parser.add_argument("--colors", help="Comma-separated subset of the 24 supported colours")
     parser.add_argument("--resume", action="store_true", help="Explicit alias for the default incremental-create behavior")
@@ -1153,6 +1291,7 @@ def parse_args() -> argparse.Namespace:
     if not selected:
         parser.error("No colours remain after applying --after and --colors")
     args.selected_colors = selected
+    args.selected_bins = list(args.select_pool)
     args.batch_sizes = dict(enumerate(args.bin_batch_sizes))
     return args
 
