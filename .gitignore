@@ -26,3 +26,9 @@ layer_metacognition/output/main/hidden_states
 qwen-2.5-vl/huggingface_cache/
 
 layer_metacognition/output/main/results.jsonl
+
+confidence_test/logs
+
+confidence_test/output
+
+output.log

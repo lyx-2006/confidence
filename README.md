@@ -116,6 +116,16 @@ python "generate color pool/generate_color_pool.py" \
 python "generate color pool/generate_color_pool.py" --colors yellow,red,blue
 ```
 
+一次可以选择 6 个颜色；它们按最多 3 色的同步 cohort 执行：
+
+```bash
+python "generate color pool/generate_color_pool.py" \
+  --colors red,orange,yellow,green,blue,cyan \
+  --color-workers 6
+```
+
+颜色级并行只作用于 DeepSeek 文本生成和 Analyzer。每个低档 bin 使用 3 个专属 Generator 和 3 个一一对应的 Analyzer；其他 bin 各使用 1 对。三个颜色同时处理 Bin 0、Bin 1 时，每个远端阶段会同步发出 `3 colors × 2 bins × 3 agents = 18` 个请求。默认选择全部 5 个 bin，峰值为 `3 × (2×3 + 3×1) = 27`，因此默认使用 27 路 DeepSeek 并发。Generator 完成后，本地 Qwen 仍按 candidate 串行评测；三个颜色会在 cohort barrier 等齐，随后同步发出对应的 18 个低档 Analyzer 请求。下一组颜色在前一 cohort 完成后开始。
+
 只生成指定 confidence bins：
 
 ```bash
@@ -148,7 +158,8 @@ python "generate color pool/generate_color_pool.py" --after gray    # 从 maroon
 | `--target-per-bin N` | `5` | 每个颜色、每个 bin 至少保留的 prior 数量。 |
 | `--select_pool BINS` | `all` | 需要生成的 bins；支持 `0,1,4`、`bin0,bin1,bin4` 或区间写法。 |
 | `--bin-batch-sizes A,B,C,D,E` | `40,40,20,10,40` | Bin 0 到 Bin 4 每轮候选数。 |
-| `--deepseek-workers N` | `5` | DeepSeek 最大并发数；本地 Qwen 始终串行。 |
+| `--deepseek-workers N` | `27` | DeepSeek 最大并发数；低档每 bin 按 3 个智能体计数，其他档按 1 个计数。只选两个低档且并发 3 色时至少为 18；全选时至少为 27。 |
+| `--color-workers N` | `6` | 一次调度的颜色数，范围 `1-6`；实际按最多 3 色的同步 cohort 执行，本地 Qwen 始终串行。 |
 | `--colors A,B,C` | 全部颜色 | 只处理逗号分隔的颜色子集。 |
 | `--resume` | 关闭 | 显式启用恢复语义；默认增量模式同样读取已有结果。 |
 | `--seed N` | `42` | 问题选择、模板改写等确定性随机种子。 |
@@ -165,11 +176,11 @@ python "generate color pool/generate_color_pool.py" --after gray    # 从 maroon
 | 3 | `[0.6, 0.8)` | 10 |
 | 4 | `[0.8, 1.0]` | 40 |
 
-默认 40 条时，Bin 0、Bin 1 每轮必须分别包含 14 条 `multi_step_reasoning`、13 条 `not_exclusion`、13 条 `pure_hard`；自定义 batch size 时按三类尽量均分。
+默认 40 条时，Bin 0、Bin 1 使用三个互相隔离的 Generator–Analyzer 对：`prior_knowledge_agent` 负责 15 条 `prior_knowledge_multistep`（类似 “The color has the same color as a morpho butterfly's wings”）以及剩余 5 条 `free_form`；`not_exclusion_agent` 负责 10 条显式使用 `not` 并否定其他候选颜色的 `not_exclusion`；`high_difficulty_agent` 负责 10 条 `high_difficulty`。每个 Analyzer 只读取所属 Generator、所属源 bin 的评测结果和跨档结果，并独立维护下一轮 prompt。自定义 batch size 时仍按 `15:10:10:5` 等比例调整。
 
 Bin 0、Bin 1 的 prompt 强调“目标颜色仍是唯一最佳答案，但证据较弱并保留多个可信替代项”，避免为了降低 confidence 而让答案本身发生变化。Bin 4 强调直接、典型、无歧义的常识关联，避免模糊、否定、冷门事实和竞争答案。Bin 2、Bin 3 的策略与批量保持不变。
 
-每条 prior 在三个不同 shape 问题上测试：三次答案必须都是目标颜色，三次 Stage 2 必须成功，且 `max(soft_values) - min(soft_values) < stability_threshold`，三次平均值必须落入目标 bin。首测失败立即停止后续两题。问题不足时，会从同一 `Choose from:` 集合的真实问题模板替换 shape，并记录 `question_source: "template_rewrite"`。
+每条 prior 在三个不同 shape 问题上测试：三次答案必须都是目标颜色，三次 Stage 2 必须成功，且 `max(soft_values) - min(soft_values) < stability_threshold`。Bin 0、Bin 1 生成的候选即使首测越出目标档也会继续完成三问；稳定后按照三次 `soft_mean` 的实际区间归档，例如为 Bin 0 生成但实测均值为 `0.35` 的数据会写入 Bin 1。其他档位仍要求落入其生成目标档，首测越界会立即停止。问题不足时，会从同一 `Choose from:` 集合的真实问题模板替换 shape，并记录 `question_source: "template_rewrite"`。
 
 ## 输出与磁盘保护
 

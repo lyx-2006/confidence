@@ -47,7 +47,23 @@ ALL_COLORS = COLOR_SET_A + COLOR_SET_B
 
 BIN_RANGES = [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.0)]
 DEFAULT_BATCH_SIZE_BY_BIN = {0: 40, 1: 40, 2: 20, 3: 10, 4: 40}
-LOW_BIN_DIFFICULTIES = ("multi_step_reasoning", "not_exclusion", "pure_hard")
+LOW_BIN_DIFFICULTY_WEIGHTS = (
+    ("prior_knowledge_multistep", 15),
+    ("not_exclusion", 10),
+    ("high_difficulty", 10),
+    ("free_form", 5),
+)
+LOW_BIN_DIFFICULTIES = tuple(name for name, _weight in LOW_BIN_DIFFICULTY_WEIGHTS)
+LOW_BIN_GENERATOR_AGENTS = (
+    "prior_knowledge_agent",
+    "not_exclusion_agent",
+    "high_difficulty_agent",
+)
+LOW_BIN_AGENT_DIFFICULTIES = {
+    "prior_knowledge_agent": ("prior_knowledge_multistep", "free_form"),
+    "not_exclusion_agent": ("not_exclusion",),
+    "high_difficulty_agent": ("high_difficulty",),
+}
 PRIOR_FIELD_NAMES = {"text_clue", "selected_text_priors", "text_prior", "prior", "clue"}
 SYNTHETIC_SHAPES = [
     "triangle", "hexagon", "star", "diamond", "pentagon", "oval",
@@ -106,6 +122,9 @@ Previously accepted clues:
 Previously rejected clues and measured results:
 {rejected_results}
 
+Previously generated clues that were stable but measured into another bin:
+{routed_priors}
+
 Use the following bin-specific strategy:
 {bin_strategy}
 
@@ -125,10 +144,10 @@ Return JSON only:
   ]
 }}"""
 
-ANALYZER_PROMPT = """You are the analysis agent paired exclusively with the generator for
-target color "{target_color}" and confidence bin "{target_bin}".
+ANALYZER_PROMPT = """You are the analysis agent paired exclusively with generator agent
+"{generator_agent}" for target color "{target_color}" and confidence bin "{target_bin}".
 
-Do not analyze or modify any other confidence bin.
+Do not analyze or modify any other generator agent or confidence bin.
 
 Current generator prompt:
 {current_generator_prompt}
@@ -138,6 +157,12 @@ Accepted candidates:
 
 Rejected candidates and measured results:
 {rejected_results}
+
+Stable candidates routed to other measured bins:
+{routed_results}
+
+Mandatory bin-specific generation contract:
+{bin_strategy}
 
 Summary statistics:
 {statistics}
@@ -152,7 +177,9 @@ Analyze:
 6. Which strategies produce soft confidence range greater than or equal to 0.1?
 7. Which strategies create duplicates or shape-dependent clues?
 
-The next prompt must continue to request exactly {batch_size} candidates.
+The next prompt must continue to request exactly {batch_size} candidates and
+must preserve the mandatory bin-specific generation contract verbatim in
+substance, including every exact difficulty_type quota.
 
 If answers are wrong, add a subtle target-specific cue.
 If confidence is too high, weaken evidence and preserve more alternatives.
@@ -165,6 +192,7 @@ Return JSON only:
   "target_color": "{target_color}",
   "bin_id": {bin_id},
   "target_bin": "{target_bin}",
+  "generator_agent": "{generator_agent}",
   "analysis": {{
     "successful_strategies": [],
     "strategies_to_reduce": [],
@@ -195,6 +223,7 @@ class Candidate:
     strategy_family: str
     difficulty_type: str
     text_clue: str
+    generator_agent: str = "bin_general"
 
 
 @dataclass
@@ -204,6 +233,8 @@ class AgentState:
     current_generator_prompt: str
     accepted_priors: list[dict[str, Any]] = field(default_factory=list)
     rejected_results: list[dict[str, Any]] = field(default_factory=list)
+    routed_priors: list[dict[str, Any]] = field(default_factory=list)
+    agent_prompts: dict[str, str] = field(default_factory=dict)
     round_index: int = 1
 
 
@@ -266,31 +297,102 @@ def bin_label(bin_id: int) -> str:
 
 
 def low_bin_difficulty_quotas(batch_size: int) -> dict[str, int]:
-    base, remainder = divmod(batch_size, len(LOW_BIN_DIFFICULTIES))
+    """Scale the required 15/10/10/5 mix when a non-default batch is used."""
+    total_weight = sum(weight for _name, weight in LOW_BIN_DIFFICULTY_WEIGHTS)
+    exact = [batch_size * weight / total_weight for _name, weight in LOW_BIN_DIFFICULTY_WEIGHTS]
+    counts = [int(value) for value in exact]
+    remainder = batch_size - sum(counts)
+    order = sorted(
+        range(len(exact)),
+        key=lambda index: (exact[index] - counts[index], -index),
+        reverse=True,
+    )
+    for index in order[:remainder]:
+        counts[index] += 1
     return {
-        name: base + (1 if index < remainder else 0)
-        for index, name in enumerate(LOW_BIN_DIFFICULTIES)
+        name: counts[index]
+        for index, (name, _weight) in enumerate(LOW_BIN_DIFFICULTY_WEIGHTS)
     }
+
+
+def low_bin_generation_contract(batch_size: int) -> str:
+    quotas = low_bin_difficulty_quotas(batch_size)
+    return (
+        "NON-NEGOTIABLE LOW-BIN MIX (the four groups are mutually exclusive; use the exact difficulty_type strings):\n"
+        f"1. Exactly {quotas['prior_knowledge_multistep']} candidates with difficulty_type=\"prior_knowledge_multistep\". "
+        "Each must require at least two reasoning hops: identify an indirect or obscure referent, recall a color-related fact about it, "
+        "then map that fact to the best candidate color. They must depend strongly on prior/world knowledge. Structural example only: "
+        "\"The color has the same color as a morpho butterfly's wings\" requires knowing what a morpho is and recalling its wing color. "
+        "Do not copy that example repeatedly; diversify across biology, minerals, astronomy, chemistry, artifacts, history, geography, and culture.\n"
+        f"2. Exactly {quotas['not_exclusion']} candidates with difficulty_type=\"not_exclusion\". "
+        "Every clue must contain the explicit word \"not\" and negate one or more OTHER candidate color names. Never negate or state the target color. "
+        "Leave several candidates viable so exclusion does not make the target obvious, and vary which competing colors are negated.\n"
+        f"3. Exactly {quotas['high_difficulty']} candidates with difficulty_type=\"high_difficulty\". "
+        "Use genuinely difficult, obscure, technical, culturally specific, or deliberately indirect evidence. The clue must still be truthful and make the target "
+        "the unique best answer, but it must not reuse the explicit two-hop referent template from group 1 or the explicit-not construction from group 2.\n"
+        f"4. Exactly {quotas['free_form']} candidates with difficulty_type=\"free_form\". "
+        "Explore distinct approaches not used above while preserving the target answer and requested confidence range.\n"
+        "Across all groups, do not create paraphrase families, do not mention a shape, and keep every clue semantically distinct."
+    )
+
+
+def low_bin_agent_batch_size(agent_name: str, batch_size: int) -> int:
+    quotas = low_bin_difficulty_quotas(batch_size)
+    return sum(quotas[name] for name in LOW_BIN_AGENT_DIFFICULTIES[agent_name])
+
+
+def low_bin_agent_contract(agent_name: str, batch_size: int) -> str:
+    quotas = low_bin_difficulty_quotas(batch_size)
+    marker = f"NON-NEGOTIABLE SPECIALIST CONTRACT: {agent_name}. "
+    if agent_name == "prior_knowledge_agent":
+        return (
+            marker + "You are the dedicated prior-knowledge/multi-step generator. Do not generate not_exclusion or high_difficulty items. "
+            f"Generate exactly {quotas['prior_knowledge_multistep']} items with difficulty_type=\"prior_knowledge_multistep\" and "
+            f"exactly {quotas['free_form']} items with difficulty_type=\"free_form\". "
+            "The prior_knowledge_multistep items must require at least two hops: identify an indirect or obscure referent, recall its color-related fact, "
+            "then map that fact to the best candidate. Structural example only: \"The color has the same color as a morpho butterfly's wings\". "
+            "Diversify across biology, minerals, astronomy, chemistry, artifacts, history, geography, and culture. The free_form items must use distinct approaches. "
+            "Never state any candidate color name and do not use the explicit word \"not\"."
+        )
+    if agent_name == "not_exclusion_agent":
+        return (
+            marker + "You are the dedicated explicit-negation generator. Do not generate any other difficulty_type. "
+            f"Generate exactly {quotas['not_exclusion']} items with difficulty_type=\"not_exclusion\". "
+            "Every item must contain the explicit word \"not\" and negate one or more OTHER colors from the candidate set. "
+            "Never state or negate the target color. Leave several candidates viable, vary the competitors negated, and include a subtle indirect reason "
+            "that keeps the target as the unique best answer without making it obvious."
+        )
+    if agent_name == "high_difficulty_agent":
+        return (
+            marker + "You are the dedicated high-difficulty generator. Do not generate any other difficulty_type. "
+            f"Generate exactly {quotas['high_difficulty']} items with difficulty_type=\"high_difficulty\". "
+            "Use genuinely obscure, technical, culturally specific, or deliberately indirect evidence while keeping the target the unique best answer. "
+            "Do not use the explicit two-hop referent template assigned to the prior-knowledge agent, do not use the word \"not\", and never state any candidate color name."
+        )
+    raise ValueError(f"Unknown low-bin generator agent: {agent_name}")
+
+
+def low_bin_base_strategy(bin_id: int) -> str:
+    strength = (
+        "extremely weak: several alternatives must remain plausible, but the target must still be the unique best answer"
+        if bin_id == 0
+        else "weak but noticeable: the target must be the unique best answer while two or three alternatives remain credible"
+    )
+    return (
+        f"The evidence must be {strength}. "
+        "Correct-answer preservation is mandatory: never make the clue so generic that another candidate becomes equally good or better. "
+        "Use subtle, truthful, target-specific anchors and keep every clue shape-independent and semantically distinct. "
+        "Avoid direct canonical objects that make the answer obvious."
+    )
+
+
+def build_low_bin_agent_strategy(bin_id: int, agent_name: str, batch_size: int) -> str:
+    return f"{low_bin_base_strategy(bin_id)}\n\n{low_bin_agent_contract(agent_name, batch_size)}"
 
 
 def build_bin_strategy(bin_id: int, batch_size: int) -> str:
     if bin_id in (0, 1):
-        quotas = low_bin_difficulty_quotas(batch_size)
-        strength = (
-            "extremely weak: several alternatives must remain plausible, but the target must still be the unique best answer"
-            if bin_id == 0
-            else "weak but noticeable: the target must be the unique best answer while two or three alternatives remain credible"
-        )
-        return (
-            f"The evidence must be {strength}. "
-            "Correct-answer preservation is mandatory: never make the clue so generic that another candidate becomes equally good or better. "
-            "Use one subtle, truthful, target-specific anchor, then weaken confidence with hedging, incomplete evidence, indirect wording, limited source reliability, or explicit residual alternatives. "
-            "Do not state the target color or another candidate color. Avoid direct canonical objects that make the answer obvious. "
-            f"Produce exactly {quotas['multi_step_reasoning']} multi_step_reasoning clues whose two weak facts jointly favor the target, "
-            f"{quotas['not_exclusion']} not_exclusion clues that remove some competitors but deliberately leave several plausible, and "
-            f"{quotas['pure_hard']} pure_hard clues using obscure but valid associations where the target remains the best guess. "
-            "Vary domains and constructions; each clue must remain shape-independent and semantically distinct."
-        )
+        return f"{low_bin_base_strategy(bin_id)}\n\n{low_bin_generation_contract(batch_size)}"
     if bin_id == 4:
         return (
             "Make the target the only reasonable answer using direct, universally recognizable, common-knowledge evidence. "
@@ -520,8 +622,13 @@ class LocalTester:
                 candidate, False, "first_answer_incorrect_or_no_soft_confidence",
             )
         first_bin = bin_for_value(float(first["soft_confidence"]))
+        allow_cross_bin = source == "deepseek_generated" and target_bin_id in (0, 1)
         effective_bin = first_bin if source == "existing_dataset" else target_bin_id
-        if effective_bin is None or (source != "existing_dataset" and not in_bin(float(first["soft_confidence"]), effective_bin)):
+        if effective_bin is None or (
+            source != "existing_dataset"
+            and not allow_cross_bin
+            and not in_bin(float(first["soft_confidence"]), effective_bin)
+        ):
             return self._final_result(
                 text_clue, source, generation_round, effective_bin, tests,
                 candidate, False, "first_soft_confidence_outside_target_bin",
@@ -544,15 +651,17 @@ class LocalTester:
         soft_range = max(soft_values) - min(soft_values)
         soft_mean = sum(soft_values) / 3.0
         stable = answers_unchanged and soft_range < self.stability_threshold
+        if allow_cross_bin:
+            effective_bin = bin_for_value(soft_mean)
         if not answers_unchanged:
             reason = "answers_changed"
         elif not soft_range < self.stability_threshold:
             reason = "soft_confidence_unstable"
-        elif not in_bin(soft_mean, int(effective_bin)):
+        elif effective_bin is None or not in_bin(soft_mean, int(effective_bin)):
             reason = "soft_mean_outside_target_bin"
         else:
             reason = "accepted"
-        accepted = stable and in_bin(soft_mean, int(effective_bin))
+        accepted = stable and effective_bin is not None and in_bin(soft_mean, int(effective_bin))
         final = self._final_result(
             text_clue, source, generation_round, effective_bin, tests,
             candidate, accepted, reason,
@@ -561,6 +670,8 @@ class LocalTester:
         final["soft_range"] = soft_range
         final["soft_mean"] = soft_mean
         final["stable"] = stable
+        if source == "deepseek_generated":
+            final["generated_for_bin_id"] = target_bin_id
         return final
 
     @staticmethod
@@ -590,6 +701,7 @@ class LocalTester:
                     "candidate_id": candidate.candidate_id,
                     "strategy_family": candidate.strategy_family,
                     "difficulty_type": candidate.difficulty_type,
+                    "generator_agent": candidate.generator_agent,
                 }
             )
         return value
@@ -615,6 +727,7 @@ class DeepSeekClient:
         self.analyzer_calls = 0
         self._counter_lock = threading.Lock()
         self._print_lock = threading.Lock()
+        self._request_semaphore = threading.BoundedSemaphore(workers)
 
     def _log(self, message: str) -> None:
         """Print immediate API health logs without writing a checkpoint."""
@@ -631,7 +744,14 @@ class DeepSeekClient:
             raise ValueError("DeepSeek response JSON must be an object")
         return parsed
 
-    def call(self, prompt: str, kind: str, retries: int = 3) -> dict[str, Any]:
+    def call(
+        self,
+        prompt: str,
+        kind: str,
+        retries: int = 3,
+        context: str = "",
+    ) -> dict[str, Any]:
+        log_name = f"{kind} {context}".strip()
         with self._counter_lock:
             if kind == "generator":
                 self.generator_calls += 1
@@ -639,25 +759,32 @@ class DeepSeekClient:
                 self.analyzer_calls += 1
         last_error: Exception | None = None
         for attempt in range(1, retries + 1):
-            self._log(f"{kind} request started (attempt {attempt}/{retries})")
             try:
-                response = self.client.chat.completions.create(
-                    model="deepseek-v4-flash-aistar",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=2048,
-                )
+                acquired = self._request_semaphore.acquire(blocking=False)
+                if not acquired:
+                    self._log(f"{log_name} request queued (attempt {attempt}/{retries})")
+                    self._request_semaphore.acquire()
+                try:
+                    self._log(f"{log_name} request started (attempt {attempt}/{retries})")
+                    response = self.client.chat.completions.create(
+                        model="deepseek-v4-flash-aistar",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7,
+                        max_tokens=8192,
+                    )
+                finally:
+                    self._request_semaphore.release()
                 content = response.choices[0].message.content or ""
                 parsed = self._parse_json(content)
                 self._log(
-                    f"{kind} request succeeded (attempt {attempt}, response_chars={len(content)})"
+                    f"{log_name} request succeeded (attempt {attempt}, response_chars={len(content)})"
                 )
                 return parsed
             except Exception as exc:
                 last_error = exc
-                self._log(f"{kind} request failed (attempt {attempt}): {exc}")
+                self._log(f"{log_name} request failed (attempt {attempt}): {exc}")
                 if attempt < retries:
-                    self._log(f"{kind} request will retry")
+                    self._log(f"{log_name} request will retry")
                     time.sleep(min(2 ** (attempt - 1), 4))
         raise RuntimeError(f"DeepSeek {kind} failed after {retries} attempts: {last_error}")
 
@@ -737,6 +864,8 @@ def validate_generator_response(
     batch_size: int,
     near_duplicate_threshold: float,
     tested_keys: set[str],
+    choice_colors: list[str],
+    expected_low_counts: dict[str, int] | None = None,
 ) -> tuple[list[Candidate], list[dict[str, Any]]]:
     rejected: list[dict[str, Any]] = []
     if normalize_answer(str(payload.get("color", ""))) != state.color or int(payload.get("bin_id", -1)) != state.bin_id:
@@ -746,8 +875,8 @@ def validate_generator_response(
         return [], [{"rejection_reason": "wrong_candidate_count", "actual": len(raw_candidates) if isinstance(raw_candidates, list) else None}]
     if state.bin_id in (0, 1):
         counts = Counter(str(item.get("difficulty_type", "")) for item in raw_candidates if isinstance(item, dict))
-        expected = low_bin_difficulty_quotas(batch_size)
-        if any(counts[name] != expected[name] for name in LOW_BIN_DIFFICULTIES):
+        expected = expected_low_counts or low_bin_difficulty_quotas(batch_size)
+        if set(counts) != set(expected) or any(counts[name] != expected[name] for name in expected):
             return [], [{"rejection_reason": "wrong_low_bin_difficulty_quota", "counts": dict(counts), "expected": expected}]
 
     candidates: list[Candidate] = []
@@ -758,6 +887,7 @@ def validate_generator_response(
             continue
         clue = str(item.get("text_clue", "")).strip()
         lowered = normalize_text(clue)
+        difficulty_type = str(item.get("difficulty_type", "unspecified"))
         if not clue:
             rejected.append({"rejection_reason": "empty_clue", "candidate_index": index})
             continue
@@ -767,6 +897,37 @@ def validate_generator_response(
         if any(re.search(rf"\b{re.escape(shape)}\b", lowered) for shape in SHAPE_WORDS):
             rejected.append({"text_clue": clue, "rejection_reason": "shape_dependent"})
             continue
+        if state.bin_id in (0, 1):
+            target_pattern = rf"\b{re.escape(normalize_text(state.color))}\b"
+            other_colors = [color for color in choice_colors if normalize_answer(color) != state.color]
+            mentioned_others = [
+                color for color in other_colors
+                if re.search(rf"\b{re.escape(normalize_text(color))}\b", lowered)
+            ]
+            if re.search(target_pattern, lowered):
+                rejected.append({"text_clue": clue, "rejection_reason": "low_bin_states_target_color"})
+                continue
+            if difficulty_type == "not_exclusion":
+                if not re.search(r"\bnot\b", lowered) or not mentioned_others:
+                    rejected.append({
+                        "text_clue": clue,
+                        "rejection_reason": "invalid_not_exclusion_structure",
+                        "mentioned_other_colors": mentioned_others,
+                    })
+                    continue
+            elif re.search(r"\bnot\b", lowered):
+                rejected.append({
+                    "text_clue": clue,
+                    "rejection_reason": "not_used_outside_not_exclusion",
+                })
+                continue
+            elif mentioned_others:
+                rejected.append({
+                    "text_clue": clue,
+                    "rejection_reason": "other_color_named_outside_not_exclusion",
+                    "mentioned_other_colors": mentioned_others,
+                })
+                continue
         if is_near_duplicate(clue, existing + [candidate.text_clue for candidate in candidates], near_duplicate_threshold):
             rejected.append({"text_clue": clue, "rejection_reason": "duplicate_or_near_duplicate"})
             continue
@@ -774,11 +935,54 @@ def validate_generator_response(
             Candidate(
                 candidate_id=str(item.get("candidate_id", f"{state.color}-{state.bin_id}-{state.round_index}-{index}")),
                 strategy_family=str(item.get("strategy_family", "unspecified")),
-                difficulty_type=str(item.get("difficulty_type", "unspecified")),
+                difficulty_type=difficulty_type,
                 text_clue=clue,
+                generator_agent=str(item.get("generator_agent", "bin_general")),
             )
         )
     return candidates, rejected
+
+
+def validate_low_bin_agent_response(
+    payload: dict[str, Any],
+    state: AgentState,
+    agent_name: str,
+    batch_size: int,
+) -> dict[str, Any] | None:
+    if normalize_answer(str(payload.get("color", ""))) != state.color or int(payload.get("bin_id", -1)) != state.bin_id:
+        return {
+            "rejection_reason": "generator_agent_identity_mismatch",
+            "generator_agent": agent_name,
+            "payload": payload,
+        }
+    raw_candidates = payload.get("candidates")
+    expected_total = low_bin_agent_batch_size(agent_name, batch_size)
+    if not isinstance(raw_candidates, list) or len(raw_candidates) != expected_total:
+        return {
+            "rejection_reason": "wrong_generator_agent_candidate_count",
+            "generator_agent": agent_name,
+            "actual": len(raw_candidates) if isinstance(raw_candidates, list) else None,
+            "expected": expected_total,
+        }
+    quotas = low_bin_difficulty_quotas(batch_size)
+    allowed = LOW_BIN_AGENT_DIFFICULTIES[agent_name]
+    counts = Counter(
+        str(item.get("difficulty_type", ""))
+        for item in raw_candidates
+        if isinstance(item, dict)
+    )
+    expected_counts = {name: quotas[name] for name in allowed}
+    if set(counts) != set(allowed) or any(counts[name] != expected_counts[name] for name in allowed):
+        return {
+            "rejection_reason": "wrong_generator_agent_difficulty_quota",
+            "generator_agent": agent_name,
+            "counts": dict(counts),
+            "expected": expected_counts,
+        }
+    for item in raw_candidates:
+        item["generator_agent"] = agent_name
+        item["candidate_id"] = f"{agent_name}:{item.get('candidate_id', 'candidate')}"
+    return None
 
 
 def compact_json(value: Any, limit: int = 12000) -> str:
@@ -794,7 +998,67 @@ def initial_generator_prompt(state: AgentState, batch_size: int, choices: list[s
         batch_size=batch_size,
         accepted_priors=compact_json([p.get("text_clue") for p in state.accepted_priors]),
         rejected_results=compact_json(state.rejected_results),
+        routed_priors=compact_json(state.routed_priors),
         bin_strategy=build_bin_strategy(state.bin_id, batch_size),
+        bin_id=state.bin_id,
+    )
+
+
+def result_belongs_to_agent(
+    result: dict[str, Any],
+    agent_name: str,
+    generated_for_bin_id: int,
+) -> bool:
+    if result.get("source") == "existing_dataset":
+        return False
+    source_bin = result.get("generated_for_bin_id")
+    if source_bin is None and result.get("source") == "deepseek_generated":
+        source_bin = result.get("bin_id")
+    if source_bin is not None and int(source_bin) != generated_for_bin_id:
+        return False
+    recorded_agent = str(result.get("generator_agent", ""))
+    if recorded_agent:
+        return recorded_agent in {agent_name, "bin_combined"}
+    difficulty_type = str(result.get("difficulty_type", ""))
+    return difficulty_type in LOW_BIN_AGENT_DIFFICULTIES[agent_name]
+
+
+def results_for_agent(
+    results: list[dict[str, Any]],
+    agent_name: str,
+    generated_for_bin_id: int,
+) -> list[dict[str, Any]]:
+    return [
+        result for result in results
+        if result_belongs_to_agent(result, agent_name, generated_for_bin_id)
+    ]
+
+
+def initial_low_bin_agent_prompt(
+    state: AgentState,
+    agent_name: str,
+    batch_size: int,
+    choices: list[str],
+) -> str:
+    agent_batch_size = low_bin_agent_batch_size(agent_name, batch_size)
+    return GENERATOR_PROMPT.format(
+        target_bin=bin_label(state.bin_id),
+        target_color=state.color,
+        choice_colors=", ".join(choices),
+        batch_size=agent_batch_size,
+        accepted_priors=compact_json(
+            [
+                p.get("text_clue")
+                for p in results_for_agent(state.accepted_priors, agent_name, state.bin_id)
+            ]
+        ),
+        rejected_results=compact_json(
+            results_for_agent(state.rejected_results, agent_name, state.bin_id)
+        ),
+        routed_priors=compact_json(
+            results_for_agent(state.routed_priors, agent_name, state.bin_id)
+        ),
+        bin_strategy=build_low_bin_agent_strategy(state.bin_id, agent_name, batch_size),
         bin_id=state.bin_id,
     )
 
@@ -807,7 +1071,7 @@ def summarize_state(state: AgentState) -> dict[str, Any]:
     difficulty_pass = Counter()
     soft_values: list[float] = []
     wrong_answers = Counter()
-    for result in state.rejected_results + state.accepted_priors:
+    for result in state.rejected_results + state.accepted_priors + state.routed_priors:
         strategy = str(result.get("strategy_family", "unspecified"))
         difficulty = str(result.get("difficulty_type", "unspecified"))
         strategy_total[strategy] += 1
@@ -821,8 +1085,11 @@ def summarize_state(state: AgentState) -> dict[str, Any]:
             if test.get("normalized_answer") and not test.get("answer_correct"):
                 wrong_answers[str(test["normalized_answer"])] += 1
     return {
-        "generated_count": len(state.rejected_results) + len(state.accepted_priors),
-        "valid_candidate_count": sum(1 for r in state.rejected_results + state.accepted_priors if r.get("text_clue")),
+        "generated_count": len(state.rejected_results) + len(state.accepted_priors) + len(state.routed_priors),
+        "valid_candidate_count": sum(
+            1 for r in state.rejected_results + state.accepted_priors + state.routed_priors
+            if r.get("text_clue")
+        ),
         "duplicate_count": reasons["duplicate_or_near_duplicate"],
         "first_answer_wrong_count": reasons["first_answer_incorrect_or_no_soft_confidence"],
         "confidence_too_low_count": reasons["confidence_too_low"],
@@ -830,6 +1097,7 @@ def summarize_state(state: AgentState) -> dict[str, Any]:
         "answer_changed_count": reasons["answers_changed"] + reasons["answer_changed_or_stage2_failed"],
         "soft_unstable_count": reasons["soft_confidence_unstable"],
         "accepted_count": len(state.accepted_priors),
+        "routed_to_other_bin_count": len(state.routed_priors),
         "strategy_family_pass_rate": {
             name: strategy_pass[name] / total for name, total in strategy_total.items()
         },
@@ -865,6 +1133,7 @@ class PoolBuilder:
                 "output": str(self.output_path),
                 "selected_colors": args.selected_colors,
                 "selected_bins": args.selected_bins,
+                "color_workers": args.color_workers,
                 "checkpoint_policy": "once_per_completed_color",
                 "find_enabled": args.find,
             }
@@ -872,6 +1141,12 @@ class PoolBuilder:
         self.inference: Any = None
         self.tester: LocalTester | None = None
         self.deepseek: DeepSeekClient | None = None
+        self._local_evaluation_lock = threading.Lock()
+        self._state_lock = threading.Lock()
+        # Admit at most three colors to a DeepSeek phase at once. Combined with
+        # the validated worker count, every active bin of those colors can start
+        # immediately instead of waiting for a global API slot.
+        self._deepseek_color_phase_slots = threading.BoundedSemaphore(3)
 
     def _load_optional_json(self, name: str, default: Any) -> Any:
         path = self.artifact_dir / name
@@ -894,8 +1169,9 @@ class PoolBuilder:
 
     def event(self, event_type: str, **details: Any) -> None:
         value = {"timestamp": utc_now(), "event": event_type, **details}
-        self.events.append(value)
-        self.log_lines.append(f"{value['timestamp']} {event_type} {compact_json(details, 2000)}")
+        with self._state_lock:
+            self.events.append(value)
+            self.log_lines.append(f"{value['timestamp']} {event_type} {compact_json(details, 2000)}")
 
     def load_local_model(self) -> None:
         inference_class = load_inference_class(ROOT_DIR / "qwen-2.5-vl" / "inference.py")
@@ -1002,107 +1278,345 @@ class PoolBuilder:
         states: dict[int, AgentState] = {}
         for bin_id in self.args.selected_bins:
             level = level_for(entry, bin_id)
-            latest = max(
-                (item for item in histories if int(item.get("bin_id", -1)) == bin_id),
-                key=lambda item: int(item.get("round", 0)),
-                default=None,
-            )
             state = AgentState(
                 color=color,
                 bin_id=bin_id,
                 current_generator_prompt="",
                 accepted_priors=level["priors"],
-                round_index=(int(latest.get("round", 0)) + 1) if latest else 1,
+                routed_priors=[
+                    prior
+                    for other_level in entry["prior_levels"]
+                    for prior in other_level.get("priors", [])
+                    if prior.get("generated_for_bin_id") == bin_id
+                    and int(prior.get("bin_id", -1)) != bin_id
+                ],
             )
             batch_size = self.args.batch_sizes[bin_id]
-            state.current_generator_prompt = (
-                str(latest.get("next_generator_prompt"))
-                if latest and latest.get("next_generator_prompt")
-                else initial_generator_prompt(state, batch_size, entry["choice_colors"])
-            )
+            if bin_id in (0, 1):
+                latest_round = 0
+                for agent_name in LOW_BIN_GENERATOR_AGENTS:
+                    latest = max(
+                        (
+                            item for item in histories
+                            if int(item.get("bin_id", -1)) == bin_id
+                            and item.get("generator_agent") == agent_name
+                        ),
+                        key=lambda item: int(item.get("round", 0)),
+                        default=None,
+                    )
+                    if latest:
+                        latest_round = max(latest_round, int(latest.get("round", 0)))
+                    state.agent_prompts[agent_name] = (
+                        str(latest.get("next_generator_prompt"))
+                        if latest and latest.get("next_generator_prompt")
+                        else initial_low_bin_agent_prompt(
+                            state, agent_name, batch_size, entry["choice_colors"]
+                        )
+                    )
+                state.round_index = latest_round + 1
+            else:
+                latest = max(
+                    (item for item in histories if int(item.get("bin_id", -1)) == bin_id),
+                    key=lambda item: int(item.get("round", 0)),
+                    default=None,
+                )
+                state.current_generator_prompt = (
+                    str(latest.get("next_generator_prompt"))
+                    if latest and latest.get("next_generator_prompt")
+                    else initial_generator_prompt(state, batch_size, entry["choice_colors"])
+                )
+                state.round_index = (int(latest.get("round", 0)) + 1) if latest else 1
             states[bin_id] = state
         return states
 
-    def _generate_one(self, state: AgentState) -> tuple[int, dict[str, Any] | Exception]:
+    def _generate_one(
+        self,
+        state: AgentState,
+        agent_name: str,
+    ) -> tuple[int, str, dict[str, Any] | Exception]:
         assert self.deepseek is not None
         try:
-            return state.bin_id, self.deepseek.call(state.current_generator_prompt, "generator")
+            if state.bin_id in (0, 1):
+                prompt = state.agent_prompts[agent_name]
+                marker = f"NON-NEGOTIABLE SPECIALIST CONTRACT: {agent_name}"
+                if marker not in prompt:
+                    prompt = (
+                        f"{prompt}\n\n"
+                        f"{build_low_bin_agent_strategy(state.bin_id, agent_name, self.args.batch_sizes[state.bin_id])}"
+                    )
+                state.agent_prompts[agent_name] = prompt
+            else:
+                prompt = state.current_generator_prompt
+            return state.bin_id, agent_name, self.deepseek.call(
+                prompt,
+                "generator",
+                context=f"color={state.color} bin={state.bin_id} agent={agent_name}",
+            )
         except Exception as exc:
-            return state.bin_id, exc
+            return state.bin_id, agent_name, exc
 
-    def _analyze_one(self, state: AgentState) -> tuple[int, dict[str, Any] | Exception]:
+    def _analyze_one(
+        self,
+        state: AgentState,
+        agent_name: str,
+    ) -> tuple[int, str, dict[str, Any] | Exception]:
         assert self.deepseek is not None
-        statistics = summarize_state(state)
+        if state.bin_id in (0, 1):
+            accepted_results = results_for_agent(
+                state.accepted_priors, agent_name, state.bin_id
+            )
+            rejected_results = results_for_agent(
+                state.rejected_results, agent_name, state.bin_id
+            )
+            routed_results = results_for_agent(
+                state.routed_priors, agent_name, state.bin_id
+            )
+            current_prompt = state.agent_prompts[agent_name]
+            marker = f"NON-NEGOTIABLE SPECIALIST CONTRACT: {agent_name}"
+            if marker not in current_prompt:
+                current_prompt = (
+                    f"{current_prompt}\n\n"
+                    f"{build_low_bin_agent_strategy(state.bin_id, agent_name, self.args.batch_sizes[state.bin_id])}"
+                )
+                state.agent_prompts[agent_name] = current_prompt
+            analyzer_batch_size = low_bin_agent_batch_size(
+                agent_name, self.args.batch_sizes[state.bin_id]
+            )
+            bin_strategy = build_low_bin_agent_strategy(
+                state.bin_id, agent_name, self.args.batch_sizes[state.bin_id]
+            )
+            statistics = summarize_state(AgentState(
+                color=state.color,
+                bin_id=state.bin_id,
+                current_generator_prompt=current_prompt,
+                accepted_priors=accepted_results,
+                rejected_results=rejected_results,
+                routed_priors=routed_results,
+            ))
+        else:
+            accepted_results = state.accepted_priors
+            rejected_results = state.rejected_results
+            routed_results = state.routed_priors
+            current_prompt = state.current_generator_prompt
+            analyzer_batch_size = self.args.batch_sizes[state.bin_id]
+            bin_strategy = build_bin_strategy(state.bin_id, analyzer_batch_size)
+            statistics = summarize_state(state)
         prompt = ANALYZER_PROMPT.format(
             target_color=state.color,
             target_bin=bin_label(state.bin_id),
-            current_generator_prompt=state.current_generator_prompt,
-            accepted_results=compact_json(state.accepted_priors),
-            rejected_results=compact_json(state.rejected_results),
+            generator_agent=agent_name,
+            current_generator_prompt=current_prompt,
+            accepted_results=compact_json(accepted_results),
+            rejected_results=compact_json(rejected_results),
+            routed_results=compact_json(routed_results),
             statistics=compact_json(statistics),
-            batch_size=self.args.batch_sizes[state.bin_id],
+            batch_size=analyzer_batch_size,
+            bin_strategy=bin_strategy,
             bin_id=state.bin_id,
         )
         try:
-            result = self.deepseek.call(prompt, "analyzer", retries=3)
-            if normalize_answer(str(result.get("target_color", ""))) != state.color or int(result.get("bin_id", -1)) != state.bin_id:
-                raise ValueError("Analyzer returned a different color or bin")
-            return state.bin_id, result
+            result = self.deepseek.call(
+                prompt,
+                "analyzer",
+                retries=3,
+                context=f"color={state.color} bin={state.bin_id} agent={agent_name}",
+            )
+            if (
+                normalize_answer(str(result.get("target_color", ""))) != state.color
+                or int(result.get("bin_id", -1)) != state.bin_id
+                or str(result.get("generator_agent", "")) != agent_name
+            ):
+                raise ValueError("Analyzer returned a different color, bin, or generator agent")
+            return state.bin_id, agent_name, result
         except Exception as exc:
-            return state.bin_id, exc
+            return state.bin_id, agent_name, exc
 
-    def generate_color(self, color: str) -> None:
+    def generate_color(
+        self,
+        color: str,
+        phase_barrier: threading.Barrier | None = None,
+    ) -> None:
         assert self.tester is not None and self.deepseek is not None
         entry = self.pool_by_color[color]
         states = self._make_states(color)
+        starting_rounds = {
+            bin_id: state.round_index for bin_id, state in states.items()
+        }
         for round_index in range(1, self.args.rounds + 1):
             active = [
                 state for state in states.values()
                 if len(state.accepted_priors) < self.args.target_per_bin
             ]
-            if not active:
+            if not active and phase_barrier is None:
                 break
+            if phase_barrier is not None:
+                # Cohort starts every Generator phase together.
+                phase_barrier.wait()
             for state in active:
-                state.round_index = round_index
-                state.current_generator_prompt = initial_generator_prompt(
-                    state, self.args.batch_sizes[state.bin_id], entry["choice_colors"]
-                ) if round_index == 1 and not state.current_generator_prompt else state.current_generator_prompt
+                state.round_index = starting_rounds[state.bin_id] + round_index - 1
+                if state.bin_id not in (0, 1):
+                    state.current_generator_prompt = initial_generator_prompt(
+                        state, self.args.batch_sizes[state.bin_id], entry["choice_colors"]
+                    ) if round_index == 1 and not state.current_generator_prompt else state.current_generator_prompt
 
-            generated: dict[int, dict[str, Any] | Exception] = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(self.args.deepseek_workers, len(active))) as executor:
-                for bin_id, result in executor.map(self._generate_one, active):
-                    generated[bin_id] = result
+            generation_jobs = [
+                (state, agent_name)
+                for state in active
+                for agent_name in (
+                    LOW_BIN_GENERATOR_AGENTS if state.bin_id in (0, 1) else ("bin_general",)
+                )
+            ]
+            generated: dict[tuple[int, str], dict[str, Any] | Exception] = {}
+            if generation_jobs:
+                with self._deepseek_color_phase_slots:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(generation_jobs)) as executor:
+                        futures = [
+                            executor.submit(self._generate_one, state, agent_name)
+                            for state, agent_name in generation_jobs
+                        ]
+                        for future in concurrent.futures.as_completed(futures):
+                            bin_id, agent_name, result = future.result()
+                            generated[(bin_id, agent_name)] = result
 
             tested_keys = set(entry.get("tested_prior_keys", []))
             for state in active:  # Deliberately serial: one local Qwen call chain at a time.
-                payload = generated[state.bin_id]
-                if isinstance(payload, Exception):
-                    state.rejected_results.append({"rejection_reason": "generator_api_failure", "error": str(payload)})
-                    continue
-                candidates, validation_rejections = validate_generator_response(
-                    payload,
-                    state,
-                    self.args.batch_sizes[state.bin_id],
-                    self.args.near_duplicate_threshold,
-                    tested_keys,
-                )
+                candidates: list[Candidate] = []
+                validation_rejections: list[dict[str, Any]] = []
+                if state.bin_id in (0, 1):
+                    for agent_name in LOW_BIN_GENERATOR_AGENTS:
+                        agent_payload = generated[(state.bin_id, agent_name)]
+                        if isinstance(agent_payload, Exception):
+                            state.rejected_results.append({
+                                "rejection_reason": "generator_api_failure",
+                                "error": str(agent_payload),
+                                "generator_agent": agent_name,
+                                "generated_for_bin_id": state.bin_id,
+                            })
+                            continue
+                        validation_error = validate_low_bin_agent_response(
+                            agent_payload,
+                            state,
+                            agent_name,
+                            self.args.batch_sizes[state.bin_id],
+                        )
+                        if validation_error:
+                            validation_error["generated_for_bin_id"] = state.bin_id
+                            state.rejected_results.append(validation_error)
+                            continue
+                        quotas = low_bin_difficulty_quotas(self.args.batch_sizes[state.bin_id])
+                        expected_counts = {
+                            name: quotas[name]
+                            for name in LOW_BIN_AGENT_DIFFICULTIES[agent_name]
+                        }
+                        agent_candidates, agent_rejections = validate_generator_response(
+                            agent_payload,
+                            state,
+                            low_bin_agent_batch_size(
+                                agent_name, self.args.batch_sizes[state.bin_id]
+                            ),
+                            self.args.near_duplicate_threshold,
+                            tested_keys,
+                            entry["choice_colors"],
+                            expected_low_counts=expected_counts,
+                        )
+                        for rejection in agent_rejections:
+                            rejection.setdefault("generator_agent", agent_name)
+                            rejection.setdefault("generated_for_bin_id", state.bin_id)
+                        candidates.extend(agent_candidates)
+                        validation_rejections.extend(agent_rejections)
+                else:
+                    payload = generated[(state.bin_id, "bin_general")]
+                    if isinstance(payload, Exception):
+                        state.rejected_results.append({
+                            "rejection_reason": "generator_api_failure",
+                            "error": str(payload),
+                            "generator_agent": "bin_general",
+                            "generated_for_bin_id": state.bin_id,
+                        })
+                        continue
+                    candidates, validation_rejections = validate_generator_response(
+                        payload,
+                        state,
+                        self.args.batch_sizes[state.bin_id],
+                        self.args.near_duplicate_threshold,
+                        tested_keys,
+                        entry["choice_colors"],
+                    )
+                    for rejection in validation_rejections:
+                        rejection.setdefault("generator_agent", "bin_general")
+                        rejection.setdefault("generated_for_bin_id", state.bin_id)
                 state.rejected_results.extend(validation_rejections)
                 for candidate in candidates:
-                    if len(state.accepted_priors) >= self.args.target_per_bin:
+                    if state.bin_id in (0, 1):
+                        if all(
+                            len(level_for(entry, bin_id)["priors"]) >= self.args.target_per_bin
+                            for bin_id in range(5)
+                        ):
+                            break
+                    elif len(state.accepted_priors) >= self.args.target_per_bin:
                         break
-                    result = self.tester.test_prior(
-                        candidate.text_clue,
-                        color,
-                        self.question_bank[color],
-                        source="deepseek_generated",
-                        generation_round=round_index,
-                        target_bin_id=state.bin_id,
-                        candidate=candidate,
+                    print(
+                        f"[LocalEval] waiting color={color} bin={state.bin_id} "
+                        f"round={state.round_index} candidate={candidate.candidate_id}",
+                        flush=True,
                     )
+                    with self._local_evaluation_lock:
+                        print(
+                            f"[LocalEval] started color={color} bin={state.bin_id} "
+                            f"round={state.round_index} candidate={candidate.candidate_id}",
+                            flush=True,
+                        )
+                        result = self.tester.test_prior(
+                            candidate.text_clue,
+                            color,
+                            self.question_bank[color],
+                            source="deepseek_generated",
+                            generation_round=state.round_index,
+                            target_bin_id=state.bin_id,
+                            candidate=candidate,
+                        )
+                        print(
+                            f"[LocalEval] completed color={color} bin={state.bin_id} "
+                            f"round={state.round_index} candidate={candidate.candidate_id} "
+                            f"accepted={result['accepted']} reason={result['rejection_reason']}",
+                            flush=True,
+                        )
                     entry["tested_prior_keys"].append(normalize_text(candidate.text_clue))
                     tested_keys.add(normalize_text(candidate.text_clue))
                     if result["accepted"]:
-                        state.accepted_priors.append(result)
+                        measured_bin = int(result["bin_id"])
+                        destination = level_for(entry, measured_bin)["priors"]
+                        if is_near_duplicate(
+                            candidate.text_clue,
+                            accepted_texts(entry),
+                            self.args.near_duplicate_threshold,
+                        ):
+                            result["accepted"] = False
+                            result["rejection_reason"] = "duplicate_or_near_duplicate_in_measured_bin"
+                            state.rejected_results.append(result)
+                        elif len(destination) >= self.args.target_per_bin:
+                            result["accepted"] = False
+                            result["rejection_reason"] = "measured_bin_already_full"
+                            state.rejected_results.append(result)
+                        else:
+                            result["routed_from_bin_id"] = state.bin_id
+                            destination.append(result)
+                            if measured_bin != state.bin_id:
+                                state.routed_priors.append(result)
+                                self.event(
+                                    "generated_prior_routed",
+                                    color=color,
+                                    generated_for_bin=state.bin_id,
+                                    measured_bin=measured_bin,
+                                    soft_mean=result.get("soft_mean"),
+                                    candidate_id=candidate.candidate_id,
+                                )
+                                print(
+                                    f"[ColorPool] routed color={color} candidate={candidate.candidate_id} "
+                                    f"from_bin={state.bin_id} to_bin={measured_bin} "
+                                    f"soft_mean={result.get('soft_mean')}",
+                                    flush=True,
+                                )
                     else:
                         soft_values = [
                             float(test["soft_confidence"])
@@ -1118,30 +1632,65 @@ class PoolBuilder:
                             )
                         state.rejected_results.append(result)
 
-            analyzable = [state for state in active if len(state.accepted_priors) < self.args.target_per_bin]
-            analyzed: dict[int, dict[str, Any] | Exception] = {}
-            if analyzable:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=min(self.args.deepseek_workers, len(analyzable))) as executor:
-                    for bin_id, result in executor.map(self._analyze_one, analyzable):
-                        analyzed[bin_id] = result
-            for state in active:
-                analyzer_output = analyzed.get(state.bin_id)
-                next_prompt = state.current_generator_prompt
+            if phase_barrier is not None:
+                # Qwen remains serial globally; the cohort waits until every
+                # color has finished evaluation, then releases all Analyzers.
+                phase_barrier.wait()
+
+            # Every Generator invoked this round gets its dedicated Analyzer,
+            # even if local evaluation filled the destination bin meanwhile.
+            analyzable = active
+            analyzer_jobs = [
+                (state, agent_name)
+                for state in analyzable
+                for agent_name in (
+                    LOW_BIN_GENERATOR_AGENTS if state.bin_id in (0, 1) else ("bin_general",)
+                )
+            ]
+            analyzed: dict[tuple[int, str], dict[str, Any] | Exception] = {}
+            if analyzer_jobs:
+                with self._deepseek_color_phase_slots:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(analyzer_jobs)) as executor:
+                        futures = [
+                            executor.submit(self._analyze_one, state, agent_name)
+                            for state, agent_name in analyzer_jobs
+                        ]
+                        for future in concurrent.futures.as_completed(futures):
+                            bin_id, agent_name, result = future.result()
+                            analyzed[(bin_id, agent_name)] = result
+            for state, agent_name in analyzer_jobs:
+                analyzer_output = analyzed.get((state.bin_id, agent_name))
+                current_prompt = (
+                    state.agent_prompts[agent_name]
+                    if state.bin_id in (0, 1)
+                    else state.current_generator_prompt
+                )
+                next_prompt = current_prompt
                 if isinstance(analyzer_output, dict):
                     revised = analyzer_output.get("revised_generator_prompt")
                     if isinstance(revised, str) and revised.strip():
                         next_prompt = revised.strip()
-                self.prompt_history.append(
-                    {
-                        "color": color,
-                        "bin_id": state.bin_id,
-                        "round": round_index,
-                        "generator_prompt": state.current_generator_prompt,
-                        "analyzer_output": analyzer_output if isinstance(analyzer_output, dict) else {"error": str(analyzer_output)} if analyzer_output else {},
-                        "next_generator_prompt": next_prompt,
-                    }
-                )
-                state.current_generator_prompt = next_prompt
+                with self._state_lock:
+                    self.prompt_history.append(
+                        {
+                            "color": color,
+                            "bin_id": state.bin_id,
+                            "generator_agent": agent_name,
+                            "round": state.round_index,
+                            "generator_prompt": current_prompt,
+                            "analyzer_output": analyzer_output if isinstance(analyzer_output, dict) else {"error": str(analyzer_output)} if analyzer_output else {},
+                            "next_generator_prompt": next_prompt,
+                        }
+                    )
+                if state.bin_id in (0, 1):
+                    state.agent_prompts[agent_name] = next_prompt
+                else:
+                    state.current_generator_prompt = next_prompt
+            if phase_barrier is not None:
+                # Do not let the next Generator round overlap this Analyzer phase.
+                phase_barrier.wait()
+            if not active:
+                continue
             self.event(
                 "generation_round_completed",
                 color=color,
@@ -1180,6 +1729,7 @@ class PoolBuilder:
         if needs_generation:
             self.deepseek = DeepSeekClient(self.args.deepseek_workers)
 
+        generation_jobs: list[tuple[str, list[int]]] = []
         for color in self.args.selected_colors:
             entry = self.pool_by_color[color]
             missing = [
@@ -1188,9 +1738,47 @@ class PoolBuilder:
             ]
             if missing:
                 self.event("color_generation_started", color=color, missing_bins=missing)
-                self.generate_color(color)
-            self.event("color_completed", color=color)
-            self.checkpoint_color(color)
+                generation_jobs.append((color, missing))
+            else:
+                self.event("color_completed", color=color, generated=False)
+                self.checkpoint_color(color)
+
+        cohort_size = min(3, self.args.color_workers)
+        for cohort_start in range(0, len(generation_jobs), cohort_size):
+            cohort = generation_jobs[cohort_start:cohort_start + cohort_size]
+            cohort_colors = [color for color, _missing in cohort]
+            print(
+                f"[ColorPool] synchronized color cohort started colors={cohort_colors} "
+                f"workers={len(cohort_colors)}",
+                flush=True,
+            )
+            errors: dict[str, Exception] = {}
+            phase_barrier = threading.Barrier(len(cohort))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(cohort)) as executor:
+                futures = {
+                    executor.submit(self.generate_color, color, phase_barrier): color
+                    for color, _missing in cohort
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    color = futures[future]
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        errors[color] = exc
+                        phase_barrier.abort()
+                        print(f"[ColorPool] color={color} generation failed: {exc}", flush=True)
+
+            # No worker is active while checkpoint files are written.
+            for color, _missing in cohort:
+                if color in errors:
+                    self.event("color_generation_failed", color=color, error=str(errors[color]))
+                    continue
+                self.event("color_completed", color=color, generated=True)
+                self.checkpoint_color(color)
+            print(f"[ColorPool] synchronized color cohort completed colors={cohort_colors}", flush=True)
+            if errors:
+                failed = ", ".join(f"{color}: {error}" for color, error in errors.items())
+                raise RuntimeError(f"Color generation batch failed: {failed}")
 
 
 BIN_SELECTOR_ALIASES = {
@@ -1264,7 +1852,13 @@ def parse_args() -> argparse.Namespace:
         help="Bins to generate: e.g. 0,1,4 or ranges such as 0.4-0.8",
     )
     parser.add_argument("--bin-batch-sizes", type=parse_csv_ints, default=parse_csv_ints("40,40,20,10,40"))
-    parser.add_argument("--deepseek-workers", type=int, default=5)
+    parser.add_argument("--deepseek-workers", type=int, default=27)
+    parser.add_argument(
+        "--color-workers",
+        type=int,
+        default=6,
+        help="Number of colors generated concurrently (1-6); local Qwen evaluation remains serial",
+    )
     parser.add_argument("--colors", help="Comma-separated subset of the 24 supported colours")
     parser.add_argument("--resume", action="store_true", help="Explicit alias for the default incremental-create behavior")
     parser.add_argument("--seed", type=int, default=42)
@@ -1272,8 +1866,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stability-threshold", type=float, default=0.1)
     args = parser.parse_args()
 
-    if args.rounds <= 0 or args.target_per_bin <= 0 or args.deepseek_workers <= 0:
-        parser.error("--round, --target-per-bin, and --deepseek-workers must be positive")
+    if args.rounds <= 0 or args.target_per_bin <= 0 or args.deepseek_workers <= 0 or args.color_workers <= 0:
+        parser.error("--round, --target-per-bin, --deepseek-workers, and --color-workers must be positive")
+    if args.color_workers > 6:
+        parser.error("--color-workers cannot exceed 6")
     if not 0.0 <= args.near_duplicate_threshold <= 1.0:
         parser.error("--near-duplicate-threshold must be between 0 and 1")
     if args.stability_threshold <= 0.0:
@@ -1290,6 +1886,16 @@ def parse_args() -> argparse.Namespace:
         selected = [color for color in selected if color in requested_set]
     if not selected:
         parser.error("No colours remain after applying --after and --colors")
+    simultaneous_colors = min(3, args.color_workers, len(selected))
+    requests_per_color = sum(
+        3 if bin_id in (0, 1) else 1 for bin_id in args.select_pool
+    )
+    required_deepseek_workers = simultaneous_colors * requests_per_color
+    if args.deepseek_workers < required_deepseek_workers:
+        parser.error(
+            f"--deepseek-workers must be at least {required_deepseek_workers} so all Generator/Analyzer "
+            f"agents for {simultaneous_colors} concurrent color(s) can start without queueing"
+        )
     args.selected_colors = selected
     args.selected_bins = list(args.select_pool)
     args.batch_sizes = dict(enumerate(args.bin_batch_sizes))
