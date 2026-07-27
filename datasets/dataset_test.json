@@ -14,12 +14,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color appears on a banana when it is ready to eat.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Honey is often this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Ripe bananas often have this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "gray",
@@ -94,19 +94,14 @@
         "text_ans": "brown",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Some trees bear fruit in this muted shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "It is not black, not gray, and not white, yet it shares a warm earthy tone with coffee grounds.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A hint of this color appears in some wood grains.",
-            "confidence": "Very good chance (0.7-0.8)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color can be found in the bark of certain trees.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is not red, not orange, and not yellow, but it is often seen in tree bark and soil.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -182,23 +177,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -274,8 +269,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is commonly used to describe a neutral or dull mood.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Not cyan, not orange, not green, not white, not pink; this shade is between black and white.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Unpainted concrete, after years of weathering, often takes on this exact achromatic shade.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -350,19 +350,24 @@
         "text_ans": "white",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
-          },
-          {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Many walls and ceilings are painted this color.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The color of table salt.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "This color is associated with surrender in many cultures.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -438,23 +443,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -530,8 +535,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is commonly used to describe a neutral or dull mood.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Not cyan, not orange, not green, not white, not pink; this shade is between black and white.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Unpainted concrete, after years of weathering, often takes on this exact achromatic shade.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -607,23 +617,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the masks for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A common color seen in sunsets, between bright yellow and deep red.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "red",
@@ -698,24 +708,24 @@
         "text_ans": "green",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Some vegetables are naturally this color on the outside.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "A rare variety of a common mineral gains this color from trace amounts of chromium and vanadium, unlike its typical reddish form.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some types of recycling bins are this color in certain cities.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Tsavorite from a narrow metamorphic belt gets its exceptional appearance from trace elemental substitutions, in contrast to grossular from other localities that appears dissimilar.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often used to represent nature in logos.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not yellow, not pink, and it is the color of a common garden insect that blends with leaves.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "A few plants display this hue in their leaves during early growth.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "Chromium(III) oxide, used as a pigment in ceramics, has this characteristic hue.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -790,19 +800,14 @@
         "text_ans": "brown",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Roasted coffee beans share this deep tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "It is not black, not gray, and not white, yet it shares a warm earthy tone with coffee grounds.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is common in nature for soil.",
-            "confidence": "Likely (0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "Few animals naturally display this earthy shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is not red, not orange, and not yellow, but it is often seen in tree bark and soil.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -878,18 +883,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Iris flowers often come in this color, but they also appear in yellow, white, and brown.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral that forms when manganese-rich waters interact with volcanic rocks, often found in geodes in Brazil.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Purple cabbage is this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -965,8 +975,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
+            "clue": "Unpainted concrete, after years of weathering, often takes on this exact achromatic shade.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
             "clue": "This color is commonly used to describe a neutral or dull mood.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -1041,29 +1056,34 @@
         "text_ans": "green",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "A few species of parrots have feathers in this tone.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "There is a slight chance that this color is seen on some unripe fruit, though it's not typical.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral dioptase from the Altyn-Tyube mine in Kazakhstan, often mistaken for emerald by 18th-century miners.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Certain types of seaweed have this color when they are fresh.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The compound 'copper(II) acetate', commonly known as verdigris, was used in medieval manuscript illumination and produces this pigment when applied to parchment.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "In a traditional technique, an alloy of copper and a small amount of another metal was buried in fermented organic matter for weeks, developing a stable surface of this appearance.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "Tsavorite, a gemstone first mined in Tanzania in 2967, exhibits this hue due to trace amounts of vanadium or chromium.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This shade appears in some logos for organic food companies.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not yellow, not pink, and it is the color of a common garden insect that blends with leaves.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "Many leafy plants display this color during their growth cycle.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not brown, and it is the color of a type of algae often seen in ponds.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -1138,19 +1158,24 @@
         "text_ans": "white",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is lighter than cream but darker than typing paper.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.4-0.6",
-            "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence_bin": "0.2-0.4",
+            "clue": "The marble used for Michelangelo's David is this color.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The standard ball in cricket is traditionally this color in test matches.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -1226,23 +1251,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color and yellow are both primary, but only yellow is not associated with heat.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, and mixing it with cyan makes blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Rhubarb stalks, radishes, and some varieties of apples share this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -1319,12 +1344,12 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The roseate spoonbill’s distinctive feathers display this color due to their diet of crustaceans.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -1400,13 +1425,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color appears on a banana when it is ready to eat.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Honey is often this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Honey is often this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Mustard is commonly this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "pink",
@@ -1481,24 +1506,24 @@
         "text_ans": "blue",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "A few flowers, such as the bluebell, are this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color that is darker than turquoise but lighter than navy.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some people claim this color helps them concentrate.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color that is darker than sky blue but lighter than indigo.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some internet browsers use this color for their logo.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color corresponds to the visible light wavelength most strongly scattered by Earth's atmosphere.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This shade is a common choice for denim fabric.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "Not cyan, not purple, not green; a smurf's skin tone.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -1574,18 +1599,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the mineral that forms when manganese-rich waters interact with volcanic rocks, often found in geodes in Brazil.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The specific heat capacity at constant pressure of a rare earth oxide, praseodymium oxide, when measured in J/(kg·K) at 298 K, is numerically equal to the wavelength in nanometers of light that is maximally reflected by the mineral amethyst from a specific geode in Uruguay.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Eggplants are typically this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -1660,24 +1690,24 @@
         "text_ans": "blue",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Some forget-me-nots approach this tone but it's uncommon.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The cool color of a deep ocean current, not the bright cyan of coral reefs.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some brands use this color for trust, but it is not a guarantee.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color of a deep sapphire, darker than turquoise but lighter than navy.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This primary color is universally associated with the sky and sea.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "This color corresponds to the visible light wavelength most strongly scattered by Earth's atmosphere.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color sometimes appears in faded denim.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "Not cyan, not purple, not green; a smurf's skin tone.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -1754,17 +1784,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Iris flowers often come in this color, but they also appear in yellow, white, and brown.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Purple cabbage is this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -1840,23 +1875,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the masks for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A common color seen in sunsets, between bright yellow and deep red.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "gray",
@@ -1931,24 +1966,24 @@
         "text_ans": "brown",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Autumn leaves only occasionally turn this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is not green or cyan, and it is a subdued tone that is deeper than typical warm hues.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Occasionally, a rock formation shows this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A muted tone between red and black, often confused with gray or dark orange.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Earthy pigments like this are used in traditional paints.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "It is not black, not gray, and not white, yet it shares a warm earthy tone with coffee grounds.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "A few types of wood may have this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "In the PANTONE system, this color is described as 'cocoa' or 'mocha' in some naming conventions.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -2024,23 +2059,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In the visible light spectrum, this color lies exactly between blue and green with a wavelength around 490–520 nm.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the planet Uranus as seen through a telescope matches this hue.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -2116,13 +2151,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of a starless night sky.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -2197,24 +2232,24 @@
         "text_ans": "green",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Some decorative plants have leaves of this color only in spring.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The compound 'copper(II) acetate', commonly known as verdigris, was used in medieval manuscript illumination and produces this pigment when applied to parchment.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Certain species of tree frogs have this coloration.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color of the mineral dioptase from the Altyn-Tyube mine in Kazakhstan, often mistaken for emerald by 18th-century miners.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some unripe fruits have a hint of this color.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Chromium(III) oxide, used as a pigment in ceramics, has this characteristic hue.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This shade appears in some varieties of grass.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This hue was produced by grinding the mineral malachite into a fine powder, but the same pigment was also synthesized in ancient Egypt by heating a mixture of copper, sand, and natron.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -2290,23 +2325,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the masks for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -2381,24 +2416,24 @@
         "text_ans": "blue",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This color is rarely associated with edible berries.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The cool color of a deep ocean current, not the bright cyan of coral reefs.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some interior designers recommend this color for home offices.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color that is darker than sky blue but lighter than indigo.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The average person may associate this color with calmness.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color corresponds to the visible light wavelength most strongly scattered by Earth's atmosphere.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color is commonly used in denim fabric.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "Not cyan, not purple, not green; a smurf's skin tone.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -2474,23 +2509,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The structural color of Morpho rhetenor wings when viewed at a 30-degree angle from above.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Fabric dye batches for denim labeled as mint in the catalog are typically this color when applied to microfiber.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is not red, not orange, and not yellow, and it is often seen in tropical waters.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the planet Uranus as seen through a telescope matches this hue.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -2565,24 +2600,24 @@
         "text_ans": "green",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Many trees have leaves that turn this color in the spring.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral dioptase from the Altyn-Tyube mine in Kazakhstan, often mistaken for emerald by 18th-century miners.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is occasionally found in the packaging of some organic snacks.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A rare variety of a common mineral gains this color from trace amounts of chromium and vanadium, unlike its typical reddish form.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some unripe fruit can appear in this tint.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This hue was produced by grinding the mineral malachite into a fine powder, but the same pigment was also synthesized in ancient Egypt by heating a mixture of copper, sand, and natron.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This shade is almost never seen in ripe bananas.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not yellow, not pink, and it is the color of a common garden insect that blends with leaves.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -2659,22 +2694,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -2749,19 +2784,14 @@
         "text_ans": "blue",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This shade is a common choice for casual denim apparel.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color that is darker than sky blue but lighter than indigo.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a typical choice for denim, but other colors are also popular.",
-            "confidence": "Less than even (0.4-0.5)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "The vast open ocean reflects this color on a sunny day.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Darker than turquoise but lighter than navy.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -2837,23 +2867,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -2929,13 +2959,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "When aluminum is hard-anodized to maximize thermal emissivity, the oxide layer becomes thick enough to absorb nearly all visible light, resulting in this deep, non-reflective color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "It is not red, not yellow, and not white, and it absorbs all light that hits it.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -3011,13 +3041,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "When aluminum is hard-anodized to maximize thermal emissivity, the oxide layer becomes thick enough to absorb nearly all visible light, resulting in this deep, non-reflective color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -3093,13 +3123,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The roseate spoonbill’s distinctive feathers display this color due to their diet of crustaceans.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -3176,12 +3206,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -3256,24 +3286,24 @@
         "text_ans": "green",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Fresh spring leaves are this vibrant color.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral dioptase from the Altyn-Tyube mine in Kazakhstan, often mistaken for emerald by 18th-century miners.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This shade is occasionally seen on the undersides of leaves.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A rare variety of a common mineral gains this color from trace amounts of chromium and vanadium, unlike its typical reddish form.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This shade is often used in logos for environmental organizations.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Chromium(III) oxide, used as a pigment in ceramics, has this characteristic hue.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color is occasionally found in certain moss species.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not yellow, not pink, and it is the color of a common garden insect that blends with leaves.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -3349,13 +3379,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of pure darkness.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "It is not red, not yellow, and not white, and it absorbs all light that hits it.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -3432,12 +3462,12 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The roseate spoonbill (*Platalea ajaja*) derives its plumage coloration from carotenoid pigments obtained from its diet of crustaceans.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -3512,19 +3542,14 @@
         "text_ans": "green",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "It is a common color for leaves in spring.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not cyan, not purple, and it is the color of a common weed found in many lawns.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Many brands use this color to signify eco-friendliness.",
-            "confidence": "Very good chance (0.7-0.8)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color is often used to represent environmental movements.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This hue was produced by grinding the mineral malachite into a fine powder, but the same pigment was also synthesized in ancient Egypt by heating a mixture of copper, sand, and natron.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -3600,13 +3625,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "When aluminum is hard-anodized to maximize thermal emissivity, the oxide layer becomes thick enough to absorb nearly all visible light, resulting in this deep, non-reflective color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of a starless night sky.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -3682,23 +3707,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, and mixing it with cyan makes blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is commonly used for brake lights and tail lights on vehicles.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -3774,13 +3799,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -3856,23 +3881,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the floats for a summer parade, alongside red and blue.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -3947,19 +3972,24 @@
         "text_ans": "white",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
-          },
-          {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is lighter than parchment but darker than new linen.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The standard ball in cricket is traditionally this color in test matches.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "This color is associated with surrender in many cultures.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -4036,22 +4066,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not red, not orange, and not yellow, and it is often seen in tropical waters.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -4128,12 +4158,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color appears on a banana when it is ready to eat.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Honey is often this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Lemonade is commonly this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -4206,18 +4236,7 @@
         },
         "answer": "brown",
         "text_ans": "brown",
-        "selected_text_priors": [
-          {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This hue can be found in the bark of certain trees.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color is associated with earth and soil.",
-            "confidence": "Highly likely (0.8-0.9)"
-          }
-        ],
+        "selected_text_priors": [],
         "conflict_ans": "gray",
         "image_clue": {
           "consistent": {
@@ -4292,22 +4311,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "The color of the planet Uranus as seen through a telescope matches this hue.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -4383,23 +4402,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The structural color of Morpho rhetenor wings when viewed at a 30-degree angle from above.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In the visible light spectrum, this color lies exactly between blue and green with a wavelength around 490–520 nm.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the planet Uranus as seen through a telescope matches this hue.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -4475,13 +4494,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The roseate spoonbill’s distinctive feathers display this color due to their diet of crustaceans.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "gray",
@@ -4557,13 +4576,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "It is not red, not yellow, and not white, and it absorbs all light that hits it.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -4639,23 +4658,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, and mixing it with cyan makes blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, but it is not the only one.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Rhubarb stalks, radishes, and some varieties of apples share this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is seen in raspberries, pomegranates, and cranberries.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "pink",
@@ -4732,17 +4751,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "Iris flowers often come in this color, but they also appear in yellow, white, and brown.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Amethyst is a gemstone of this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -4818,23 +4842,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the floats for a summer parade, alongside red and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -4909,24 +4933,24 @@
         "text_ans": "brown",
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This tone can be found in certain soils.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is not green or cyan, and it is a subdued tone that is deeper than typical warm hues.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Certain wooden toys are painted this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color is not white or black, and it is a muted shade darker than most warm colors.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color might be used in some rustic decor.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "In the PANTONE system, this color is described as 'cocoa' or 'mocha' in some naming conventions.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "Certain tree barks exhibit this muted tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "It is not red, and it is a warm earthy color that is not bright.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -5002,23 +5026,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In the visible light spectrum, this color lies exactly between blue and green with a wavelength around 490–520 nm.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -5095,7 +5119,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is commonly used to describe a neutral or dull mood.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "The color of the sky just before a heavy rainstorm when clouds cover everything.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -5171,13 +5200,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "It is not red, not yellow, and not white, and it absorbs all light that hits it.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -5253,23 +5282,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -5358,19 +5387,14 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This shade is rarely found in natural wood grains.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not red, not orange, and not yellow, but it is often seen in tree bark and soil.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "It is plausible that this color resembles the tone of a dark piece of toast.",
-            "confidence": "Likely (0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "The bark of an oak tree has this characteristic color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is not green, not blue, and not cyan, but it can be found in leather and wood.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -5459,24 +5483,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Leaves of many trees turn this color in spring.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "Tsavorite from a narrow metamorphic belt gets its exceptional appearance from trace elemental substitutions, in contrast to grossular from other localities that appears dissimilar.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is somewhat common in the uniforms of park rangers.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A rare variety of a common mineral gains this color from trace amounts of chromium and vanadium, unlike its typical reddish form.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is used in some traffic signs to indicate a scenic route.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not brown, and it is the color of a type of algae often seen in ponds.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "Many sports fields are painted in this shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not cyan, not purple, and it is the color of a common weed found in many lawns.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "pink",
@@ -5566,13 +5590,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A warm, pinkish-orange that shares its name with a reef-building organism, and it is definitely not olive.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This warm, pinkish-orange hue is named after a stony ocean builder, and it is neither the dark green of olives nor the blue-green of teal.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a light, warm mix of pink and orange, derived from a reef-dwelling animal, and it is not the green of olives or the teal of sea foam.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A warm, pinkish-orange color that shares its name with a marine animal that creates calcium carbonate structures, and it is not the green of olives or the blue-green of teal.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "navy",
@@ -5662,13 +5686,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color appears on a banana when it is ready to eat.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Lemonade is commonly this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Honey is often this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Ripe bananas often have this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -5758,18 +5782,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
+            "clue": "The specific heat capacity at constant pressure of a rare earth oxide, praseodymium oxide, when measured in J/(kg·K) at 298 K, is numerically equal to the wavelength in nanometers of light that is maximally reflected by the mineral amethyst from a specific geode in Uruguay.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
             "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Purple cabbage is this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "red",
@@ -5859,23 +5888,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, but it is not the only one.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, and mixing it with cyan makes blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -5965,18 +5994,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A dark red glass panel in a medieval cathedral window, often paired with gold and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The surface of a certain class of carbon-rich asteroids, when analyzed spectroscopically, reflects light in a manner that matches a dark, slightly reddish brown.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The faded brownish-red plastic rotary dial of a 1950s desk telephone, not the bright red of a fire alarm and not magenta.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often associated with dry red wine and autumn leaves.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is reminiscent of a rich, dark chocolate with red undertones.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A mixture of red and brown, this color is darker than crimson.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The heartwood of certain tropical trees yields this dark reddish-brown tone.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "gold",
@@ -6066,23 +6100,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Fabric dye batches for denim labeled as mint in the catalog are typically this color when applied to microfiber.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "In the visible light spectrum, this color lies exactly between blue and green with a wavelength around 490–520 nm.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "white",
@@ -6172,23 +6206,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is sometimes called 'greenish-brown' or 'brownish-green'.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A neutral green popular in fall wardrobes, pairing well with browns and tans.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "A color often used in paintings to represent shadow on green grass.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color shares its name with a small, briny fruit often stuffed with pimento.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color was used for the original U.S. Army Jeep during World War II.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is not maroon, not lime, and not navy, and it is a shade often seen in military uniforms.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "lime",
@@ -6278,18 +6312,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is often associated with the moon and is less yellow than its precious metal counterpart.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In traditional Indian sweets, a thin edible foil made from this metal is used as decoration.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A color that is lighter and more reflective than charcoal but darker than white.",
-            "confidence": "Really unlikely(0.1-0.2)"
+            "clue": "This color is often associated with the moon and is less yellow than its precious metal counterpart.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This is the color of aluminum foil and it tarnishes over time.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Not lime and not violet, and also not navy, this color is often associated with a precious metal that is not gold.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "navy",
@@ -6380,12 +6419,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color shares its name with a semi-precious stone often used in jewelry.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Historically, this color was derived from a mineral and was prized by ancient Egyptians.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "coral",
@@ -6475,13 +6514,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A warm, pinkish-orange that shares its name with a reef-building organism, and it is definitely not olive.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a light, warm mix of pink and orange, derived from a reef-dwelling animal, and it is not the green of olives or the teal of sea foam.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a light, warm mix of pink and orange, derived from a reef-dwelling animal, and it is not the green of olives or the teal of sea foam.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This warm, pinkish-orange hue is named after a stony ocean builder, and it is neither the dark green of olives nor the blue-green of teal.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "turquoise",
@@ -6571,13 +6610,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A blend of blue and green, but not as green as olive or as blue as navy.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Darker than cyan and lighter than navy, this blue-green hue is sometimes confused with turquoise but has a greener undertone than that.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Darker than aqua but lighter than navy, and less yellow than olive.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color was a signature shade in Art Deco jewelry, yet it is not as bold as emerald and not as blue as sapphire.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "navy",
@@ -6666,19 +6705,14 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This is the color of a typical blue jay.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color corresponds to the visible light wavelength most strongly scattered by Earth's atmosphere.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often described as 'baby blue'.",
-            "confidence": "Likely (0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "A robin's egg has this famous pastel tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Not cyan, not purple, not green; a smurf's skin tone.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -6769,12 +6803,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "A blend of blue and green, but not as green as olive or as blue as navy.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Darker than aqua but lighter than navy, and less yellow than olive.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "turquoise",
@@ -6864,23 +6898,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
-            "confidence": "Less than even(0.4-0.5)"
+            "clue": "The color of buttermilk, thin and pale, and not cream.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of condensed milk, paler than caramel, not white.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color describes sand on a sunny, not too bright, beach.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a warm neutral often painted on living room walls.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the pale warm tone of desert sand at midday.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is the light tan of a latte with extra milk.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "silver",
@@ -6970,13 +7004,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "It is not red, not yellow, and not white, and it absorbs all light that hits it.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -7066,23 +7100,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the masks for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -7171,24 +7205,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "Some unripe fruits subtly hint at this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral dioptase from the Altyn-Tyube mine in Kazakhstan, often mistaken for emerald by 18th-century miners.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A rare type of moss sometimes displays this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A rare variety of a common mineral gains this color from trace amounts of chromium and vanadium, unlike its typical reddish form.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue represents eco-friendliness in many campaigns.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not brown, and it is the color of a type of algae often seen in ponds.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "Some unripe fruits show hints of this tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not cyan, not purple, and it is the color of a common weed found in many lawns.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "red",
@@ -7278,23 +7312,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
-            "confidence": "Less than even(0.4-0.5)"
+            "clue": "The color of panna cotta, creamy and delicate, and not vanilla.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of condensed milk, paler than caramel, not white.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color describes sand on a sunny, not too bright, beach.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the pale warm tone of desert sand at midday.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a warm neutral often painted on living room walls.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "maroon",
@@ -7383,19 +7417,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
-          },
-          {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Many walls and ceilings are painted this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The color of table salt.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The marble used for Michelangelo's David is this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -7485,23 +7524,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "gray",
@@ -7591,13 +7630,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often associated with sour candy and fresh grass.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is commonly used for safety vests and highlighter pens.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is commonly used for safety vests and highlighter pens.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is often described as electric, zesty, or fluorescent.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "teal",
@@ -7688,12 +7727,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color shares its name with a semi-precious stone often used in jewelry.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Historically, this color was derived from a mineral and was prized by ancient Egyptians.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "teal",
@@ -7783,18 +7822,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
+            "clue": "This color appears in a rainbow after blue and before pink, but it is not white, and it is a color often used in graduation gowns.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
             "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Purple cabbage is this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "pink",
@@ -7884,23 +7928,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, but it is not the only one.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, and mixing it with cyan makes blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is commonly used for brake lights and tail lights on vehicles.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -7990,23 +8034,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the floats for a summer parade, alongside red and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A common color seen in sunsets, between bright yellow and deep red.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -8096,23 +8140,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
-            "confidence": "Less than even(0.4-0.5)"
+            "clue": "The color of condensed milk, paler than caramel, not white.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of condensed milk, paler than caramel, not white.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of panna cotta, creamy and delicate, and not vanilla.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color describes sand on a sunny, not too bright, beach.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a warm neutral often painted on living room walls.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the pale warm tone of desert sand at midday.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is the light tan of a latte with extra milk.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "magenta",
@@ -8203,22 +8247,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color and yellow are both primary, but only yellow is not associated with heat.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is seen in raspberries, pomegranates, and cranberries.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "purple",
@@ -8307,19 +8351,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
-          },
-          {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The marble used for Michelangelo's David is this color.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The standard ball in cricket is traditionally this color in test matches.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -8408,19 +8457,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
-          },
-          {
-            "confidence_bin": "0.4-0.6",
-            "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is lighter than parchment but darker than new linen.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "The color of table salt.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "This color is associated with surrender in many cultures.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -8510,23 +8564,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the floats for a summer parade, alongside red and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is stitched into the garlands for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Combining red and yellow pigments results in this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -8616,13 +8670,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Not as deep as red nor as light as white, this color is often called 'baby' something.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The roseate spoonbill’s distinctive feathers display this color due to their diet of crustaceans.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of embarrassment on fair skin, not as intense as red and not as pale as beige.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The roseate spoonbill (*Platalea ajaja*) derives its plumage coloration from carotenoid pigments obtained from its diet of crustaceans.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -8712,23 +8766,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The structural color of Morpho rhetenor wings when viewed at a 30-degree angle from above.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is not red, not orange, and not yellow, and it is often seen in tropical waters.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In the visible light spectrum, this color lies exactly between blue and green with a wavelength around 490–520 nm.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -8819,7 +8873,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is commonly used to describe a neutral or dull mood.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "The color of the sky just before a heavy rainstorm when clouds cover everything.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "red",
@@ -8909,13 +8968,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of a starless night sky.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -9006,12 +9065,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "pink",
@@ -9101,23 +9160,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
-            "confidence": "Less than even(0.4-0.5)"
+            "clue": "The color of panna cotta, creamy and delicate, and not vanilla.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of condensed milk, paler than caramel, not white.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color that results when you mix a tiny amount of brown into white.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color describes sand on a sunny, not too bright, beach.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is the light shade of almond milk.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is the pale warm tone of desert sand at midday.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "olive",
@@ -9207,23 +9266,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Inkjet printers often combine this with yellow to make green, but users commonly refer to the cartridge as 'light blue' when ordering refills.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "In the visible light spectrum, this color lies exactly between blue and green with a wavelength around 490–520 nm.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the planet Uranus as seen through a telescope matches this hue.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -9313,18 +9372,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral that forms when manganese-rich waters interact with volcanic rocks, often found in geodes in Brazil.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
             "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Purple carrots are this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "green",
@@ -9414,18 +9478,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral that forms when manganese-rich waters interact with volcanic rocks, often found in geodes in Brazil.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
             "clue": "Lilac flowers could be confused with pale pink in certain gardens.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Amethyst is a gemstone of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Lavender and lilac are shades of this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Eggplants are typically this color.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "cyan",
@@ -9514,24 +9583,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "It is highly unusual for a healthy plant to display this hue.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The compound 'copper(II) acetate', commonly known as verdigris, was used in medieval manuscript illumination and produces this pigment when applied to parchment.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This tint appears in the stems of some plants.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color of the mineral dioptase from the Altyn-Tyube mine in Kazakhstan, often mistaken for emerald by 18th-century miners.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "It is a color often seen in certain shades of algae.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Chromium(III) oxide, used as a pigment in ceramics, has this characteristic hue.",
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This shade can be found in certain types of unripe fruit.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This hue was produced by grinding the mineral malachite into a fine powder, but the same pigment was also synthesized in ancient Egypt by heating a mixture of copper, sand, and natron.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "red",
@@ -9621,18 +9690,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A dark red glass panel in a medieval cathedral window, often paired with gold and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The deep brownish-crimson crust on a firebrick from a 19th-century kiln, not the bright orange of new brick and not magenta.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The faded brownish-red plastic rotary dial of a 1950s desk telephone, not the bright red of a fire alarm and not magenta.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is reminiscent of a rich, dark chocolate with red undertones.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is often associated with dry red wine and autumn leaves.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "A mixture of red and brown, this color is darker than crimson.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "beige",
@@ -9723,22 +9797,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is a popular alternative to black for evening wear.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is commonly used for ink in official documents and signatures.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "It is a very dark shade of blue, but not quite black.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is often used for the velvet curtains in concert halls.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "A common color for suits and blazers in business attire.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "It is a very dark shade of blue, but not quite black.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "silver",
@@ -9828,23 +9902,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a popular alternative to black for evening wear.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a standard choice for graduation gowns at many universities.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is commonly used for ink in official documents and signatures.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "It is a very dark shade of blue, but not quite black.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "It belongs to the blue family but is much darker than most blues.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "A common color for suits and blazers in business attire.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "teal",
@@ -9935,22 +10009,22 @@
           {
             "confidence_bin": "0.4-0.6",
             "clue": "The petal color of some cream roses, lighter than butter, and sometimes called 'shell' or 'ecru'.",
-            "confidence": "Less than even(0.4-0.5)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of condensed milk, paler than caramel, not white.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of panna cotta, creamy and delicate, and not vanilla.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is the light tan of a latte with extra milk.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color describes sand on a sunny, not too bright, beach.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is the pale warm tone of desert sand at midday.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "magenta",
@@ -10040,13 +10114,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a starless night sky.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Vantablack, one of the darkest man-made substances, reflects only 0.035% of visible light, creating an appearance of this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "The color of pure darkness.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -10135,19 +10209,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "The color of table salt.",
-            "confidence": "Really unlikely(0.1-0.2)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is lighter than vanilla but darker than purest cloud.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is lighter than eggshell but darker than fresh snow.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
-            "confidence_bin": "0.4-0.6",
-            "clue": "This color is lighter than vanilla but darker than purest cloud.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence_bin": "0.2-0.4",
+            "clue": "The standard ball in cricket is traditionally this color in test matches.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "A type of limestone formed from the skeletal fragments of marine organisms, often used in sculpture and architecture, and typically pale in its pure form.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",
@@ -10237,23 +10316,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the 'C' in CMYK, but many people think of it as just another blue rather than its own distinct hue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The structural color of Morpho rhetenor wings when viewed at a 30-degree angle from above.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "In tie-dye, this shade results from over-dyeing blue with yellow, but crafters typically call it 'seafoam' rather than its actual name.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is named after a bird's egg that is a pale greenish-blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is the typical hue of tropical lagoon water seen from above.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not red, not orange, and not yellow, and it is often seen in tropical waters.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "black",
@@ -10343,18 +10422,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A dark red glass panel in a medieval cathedral window, often paired with gold and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The surface of a certain class of carbon-rich asteroids, when analyzed spectroscopically, reflects light in a manner that matches a dark, slightly reddish brown.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The deep brownish-crimson crust on a firebrick from a 19th-century kiln, not the bright orange of new brick and not magenta.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is often associated with dry red wine and autumn leaves.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "A mixture of red and brown, this color is darker than crimson.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "silver",
@@ -10444,13 +10528,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A warm, pinkish-orange that shares its name with a reef-building organism, and it is definitely not olive.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A warm, pinkish-orange color that shares its name with a marine animal that creates calcium carbonate structures, and it is not the green of olives or the blue-green of teal.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a light, warm mix of pink and orange, derived from a reef-dwelling animal, and it is not the green of olives or the teal of sea foam.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This warm, pinkish-orange hue is named after a stony ocean builder, and it is neither the dark green of olives nor the blue-green of teal.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "navy",
@@ -10540,13 +10624,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color shares its name with a semi-precious stone often used in jewelry.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Historically, this color was derived from a mineral and was prized by ancient Egyptians.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Historically, this color was derived from a mineral and was prized by ancient Egyptians.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color was produced by early Egyptian faience, a glazed ceramic made from quartz.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "teal",
@@ -10636,13 +10720,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color shares its name with a semi-precious stone often used in jewelry.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Historically, this color was derived from a mineral and was prized by ancient Egyptians.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Historically, this color was derived from a mineral and was prized by ancient Egyptians.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color shares its name with a semi-precious stone often used in jewelry.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "magenta",
@@ -10732,13 +10816,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color appears on a banana when it is ready to eat.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "Lemonade is commonly this color.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Honey is often this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears on a banana when it is ready to eat.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "blue",
@@ -10828,13 +10912,13 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A warm, pinkish-orange that shares its name with a reef-building organism, and it is definitely not olive.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This warm, pinkish-orange hue is named after a stony ocean builder, and it is neither the dark green of olives nor the blue-green of teal.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is a light, warm mix of pink and orange, derived from a reef-dwelling animal, and it is not the green of olives or the teal of sea foam.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "maroon",
@@ -10924,23 +11008,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is used in the banners for a midsummer festival, alongside blue and yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in the decorations for a harvest moon festival, alongside green and blue.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is painted on the masks for a harvest celebration, alongside green and blue.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Life jackets and rescue buoys are often made in this highly visible shade.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "A common color seen in sunsets, between bright yellow and deep red.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Mixing red and yellow paint creates this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "The color of the spice turmeric, which gives curry its yellow-orange tint.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "yellow",
@@ -11029,19 +11113,14 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "This shade can be found in certain deep-sea fish that use bioluminescence.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color corresponds to the visible light wavelength most strongly scattered by Earth's atmosphere.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often associated with the sky after a rain.",
-            "confidence": "Very good chance (0.7-0.8)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color is often used in the branding of social media platforms.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Not cyan, not purple, not green; a smurf's skin tone.",
+            "confidence": ""
           }
         ],
         "conflict_ans": "orange",
@@ -11132,12 +11211,12 @@
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color appears on a banana when it is ready to eat.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Honey is often this color.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "red",
@@ -11227,23 +11306,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, but it is not the only one.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a primary, but it is not yellow.",
-            "confidence": "Likely(0.6-0.7)"
+            "clue": "This color is a primary, and mixing it with cyan makes blue.",
+            "confidence": ""
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is commonly used for brake lights and tail lights on vehicles.",
+            "confidence": ""
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Raspberries, pomegranates, and cranberries are examples of fruits that are this color.",
-            "confidence": "Likely(0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is associated with warmth, passion, and love.",
-            "confidence": "Likely(0.6-0.7)"
+            "confidence": ""
           }
         ],
         "conflict_ans": "brown",

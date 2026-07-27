@@ -28,6 +28,72 @@ class HookedForwardResult:
     logits_by_position: dict[int, torch.Tensor]
 
 
+def _selected_logits_kwargs(
+    model: torch.nn.Module,
+    inputs: Any,
+    positions: list[int],
+    modules: LanguageModules | None = None,
+) -> tuple[dict[str, Any], bool]:
+    kwargs = dict(inputs)
+    signature = inspect.signature(model.forward)
+    uses_selected_logits = "logits_to_keep" in signature.parameters
+    if uses_selected_logits:
+        input_ids = inputs["input_ids"] if isinstance(inputs, dict) else inputs.input_ids
+        if modules is not None:
+            try:
+                target_device = next(modules.final_norm.parameters()).device
+            except StopIteration:
+                target_device = input_ids.device
+        else:
+            target_device = input_ids.device
+        kwargs["logits_to_keep"] = torch.tensor(
+            positions,
+            dtype=torch.long,
+            device=target_device,
+        )
+    return kwargs, uses_selected_logits
+
+
+def run_logits_forward(
+    model: torch.nn.Module,
+    inputs: Any,
+    positions: list[int],
+    modules: LanguageModules | None = None,
+) -> dict[int, torch.Tensor]:
+    """Read reference vocab logits at selected teacher-forced positions."""
+
+    input_ids = inputs["input_ids"] if isinstance(inputs, dict) else inputs.input_ids
+    sequence_length = int(input_ids.shape[1])
+    requested = sorted(set(int(position) for position in positions))
+    if not requested:
+        raise ValueError("At least one logits position is required")
+    if any(position < 0 or position >= sequence_length for position in requested):
+        raise ValueError(
+            f"Logits positions outside sequence length {sequence_length}: {requested}"
+        )
+    kwargs, selected = _selected_logits_kwargs(model, inputs, requested, modules)
+    with torch.inference_mode():
+        outputs = model(
+            **kwargs,
+            use_cache=False,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=True,
+        )
+    if selected:
+        result = {
+            position: outputs.logits[0, local_index].detach().float().cpu()
+            for local_index, position in enumerate(requested)
+        }
+    else:
+        result = {
+            position: outputs.logits[0, position].detach().float().cpu()
+            for position in requested
+        }
+    del outputs
+    return result
+
+
 def load_qwen_inference(
     model_path: str,
     inference_path: str | Path | None = None,
@@ -199,19 +265,12 @@ def run_hooked_forward(
             raise ValueError(
                 f"Logits positions outside sequence length {sequence_length}: {invalid_logits_positions}"
             )
-        kwargs = dict(inputs)
-        signature = inspect.signature(model.forward)
-        uses_selected_logits = "logits_to_keep" in signature.parameters
-        if uses_selected_logits:
-            try:
-                norm_device = next(modules.final_norm.parameters()).device
-            except StopIteration:
-                norm_device = input_ids.device
-            kwargs["logits_to_keep"] = torch.tensor(
-                requested_positions,
-                dtype=torch.long,
-                device=norm_device,
-            )
+        kwargs, uses_selected_logits = _selected_logits_kwargs(
+            model,
+            inputs,
+            requested_positions,
+            modules,
+        )
         with torch.inference_mode():
             outputs = model(
                 **kwargs,

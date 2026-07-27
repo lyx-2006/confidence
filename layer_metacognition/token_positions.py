@@ -1,4 +1,4 @@
-"""Reliable AC, PANL, CC, clue, and image token location."""
+"""Reliable cognition-token and half-open source-span location."""
 
 from __future__ import annotations
 
@@ -6,6 +6,321 @@ import math
 from typing import Any
 
 from .token_spans import RenderedTokenAlignment, unique_text_span, verify_decoded_span
+
+
+def encode_without_special_tokens(tokenizer: Any, text: str) -> list[int]:
+    encoded = tokenizer.encode(text, add_special_tokens=False)
+    if hasattr(encoded, "tolist"):
+        encoded = encoded.tolist()
+    return [int(value) for value in encoded]
+
+
+def find_subsequence_positions(sequence: list[int], pattern: list[int]) -> list[int]:
+    if not pattern:
+        raise ValueError("Cannot locate an empty token subsequence")
+    width = len(pattern)
+    return [
+        index
+        for index in range(0, len(sequence) - width + 1)
+        if sequence[index : index + width] == pattern
+    ]
+
+
+def unique_subsequence(
+    sequence: list[int],
+    pattern: list[int],
+    *,
+    name: str,
+) -> tuple[int, int]:
+    starts = find_subsequence_positions(sequence, pattern)
+    if len(starts) != 1:
+        raise ValueError(
+            f"Expected exactly one {name} token subsequence, found {len(starts)}; "
+            f"pattern={pattern}, starts={starts}, sequence_length={len(sequence)}"
+        )
+    return starts[0], starts[0] + len(pattern)
+
+
+def locate_marker_in_assistant(
+    tokenizer: Any,
+    token_ids: list[int],
+    assistant_text: str,
+    marker: str,
+    *,
+    name: str,
+    position_map: dict[int, int] | None = None,
+    processed_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Locate a marker inside the unique complete teacher-forced assistant."""
+
+    assistant_ids = encode_without_special_tokens(tokenizer, assistant_text)
+    assistant_start, assistant_end = unique_subsequence(
+        token_ids,
+        assistant_ids,
+        name=f"{name} assistant output",
+    )
+    marker_ids = encode_without_special_tokens(tokenizer, marker)
+    local_start, local_end = unique_subsequence(
+        assistant_ids,
+        marker_ids,
+        name=f"{name} marker within assistant output",
+    )
+    raw_position = assistant_start + local_end - 1
+    mapping = position_map or {index: index for index in range(len(token_ids))}
+    output_ids = processed_ids or token_ids
+    try:
+        position = mapping[raw_position]
+        mapped_assistant_start = mapping[assistant_start]
+        mapped_assistant_end = mapping[assistant_end - 1] + 1
+        mapped_marker_start = mapping[assistant_start + local_start]
+        mapped_marker_end = mapping[assistant_start + local_end - 1] + 1
+    except KeyError as exc:
+        raise ValueError(f"{name} marker maps through an unavailable token: {exc}") from exc
+    record = {
+        "position": position,
+        "token_id": int(output_ids[position]),
+        "token_text": tokenizer.decode(
+            [output_ids[position]],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        ),
+        "assistant_span": [mapped_assistant_start, mapped_assistant_end],
+        "marker_span": [mapped_marker_start, mapped_marker_end],
+        "marker_token_ids": marker_ids,
+        "validation_context": _token_context(tokenizer, output_ids, position),
+    }
+    if ":" not in record["token_text"]:
+        raise ValueError(f"{name} cognition token is not the marker colon: {record}")
+    return record
+
+
+def locate_field_value_span(
+    tokenizer: Any,
+    token_ids: list[int],
+    field_prefix: str,
+    value: str,
+    *,
+    separator: str = " ",
+    name: str,
+    position_map: dict[int, int] | None = None,
+    processed_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Match a complete labelled field before deriving its value span."""
+
+    field_text = f"{field_prefix}{separator}{value}"
+    # Qwen BPE can fuse both surrounding newlines into the field boundary
+    # tokens (for example ".\n\n"). Match a bounded complete field, then use
+    # that bounded tokenization's offsets to derive only value-overlapping
+    # tokens.
+    matches: dict[
+        tuple[int, int],
+        tuple[int, int, list[int], int, int, int, int | None],
+    ] = {}
+    for leading in ("\n\n", "\n", ""):
+        for trailing in ("\n\n", "\n", ""):
+            bounded_text = leading + field_text + trailing
+            encoded = tokenizer(
+                bounded_text,
+                add_special_tokens=False,
+                return_offsets_mapping=True,
+            )
+            bounded_ids_value = encoded["input_ids"]
+            offsets_value = encoded["offset_mapping"]
+            if hasattr(bounded_ids_value, "tolist"):
+                bounded_ids_value = bounded_ids_value.tolist()
+            if hasattr(offsets_value, "tolist"):
+                offsets_value = offsets_value.tolist()
+            if bounded_ids_value and isinstance(bounded_ids_value[0], list):
+                bounded_ids_value = bounded_ids_value[0]
+            if offsets_value and isinstance(offsets_value[0][0], list):
+                offsets_value = offsets_value[0]
+            bounded_ids = [int(token_id) for token_id in bounded_ids_value]
+            offsets = [tuple(map(int, pair)) for pair in offsets_value]
+            value_char_start = len(leading) + len(field_prefix) + len(separator)
+            value_char_end = value_char_start + len(value)
+            field_char_start = len(leading)
+            field_char_end = field_char_start + len(field_text)
+            local_value_positions = [
+                index
+                for index, (start, end) in enumerate(offsets)
+                if end > start and start < value_char_end and end > value_char_start
+            ]
+            if not local_value_positions:
+                continue
+            local_field_positions = [
+                index
+                for index, (start, end) in enumerate(offsets)
+                if end > start and start < field_char_end and end > field_char_start
+            ]
+            following_positions = [
+                index
+                for index, (start, end) in enumerate(offsets)
+                if trailing
+                and end > start
+                and start < field_char_end + 1
+                and end > field_char_end
+            ]
+            for start in find_subsequence_positions(token_ids, bounded_ids):
+                value_start = start + local_value_positions[0]
+                value_end = start + local_value_positions[-1] + 1
+                key = (value_start, value_end)
+                previous = matches.get(key)
+                if previous is None or len(bounded_ids) > previous[3]:
+                    matches[key] = (
+                        start,
+                        start + len(bounded_ids),
+                        bounded_ids,
+                        len(bounded_ids),
+                        start + local_field_positions[0],
+                        start + local_field_positions[-1] + 1,
+                        start + following_positions[0] if following_positions else None,
+                    )
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {name} complete-field token subsequence, "
+            f"found {len(matches)}; value_spans={sorted(matches)}, "
+            f"sequence_length={len(token_ids)}"
+        )
+    (raw_value_start, raw_value_end), (
+        field_start,
+        field_end,
+        field_ids,
+        _bounded_length,
+        raw_field_start,
+        raw_field_end,
+        raw_following_position,
+    ) = next(iter(matches.items()))
+    mapping = position_map or {index: index for index in range(len(token_ids))}
+    output_ids = processed_ids or token_ids
+    try:
+        value_start = mapping[raw_value_start]
+        value_end = mapping[raw_value_end - 1] + 1
+        mapped_field_start = mapping[raw_field_start]
+        mapped_field_end = mapping[raw_field_end - 1] + 1
+        mapped_following_position = (
+            mapping[raw_following_position]
+            if raw_following_position is not None
+            else None
+        )
+    except KeyError as exc:
+        raise ValueError(f"{name} field maps through an unavailable token: {exc}") from exc
+    return {
+        "span": [value_start, value_end],
+        "field_span": [mapped_field_start, mapped_field_end],
+        "following_token_position": mapped_following_position,
+        "token_ids": output_ids[value_start:value_end],
+        "field_token_ids": field_ids,
+        "token_text": tokenizer.decode(
+            output_ids[value_start:value_end],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        ),
+        "validation_context": _token_context(tokenizer, output_ids, value_start),
+    }
+
+
+def locate_panl_subsequence(
+    tokenizer: Any,
+    processed_ids: list[int],
+    left_field: str,
+    right_boundary: str,
+    *,
+    name: str = "panl",
+) -> dict[str, Any]:
+    """Locate the newline token between an exact field and its right boundary."""
+
+    bounded_ids = encode_without_special_tokens(
+        tokenizer,
+        f"{left_field}\n{right_boundary}",
+    )
+    bounded_start, _ = unique_subsequence(
+        processed_ids,
+        bounded_ids,
+        name=f"{name} bounded field",
+    )
+    right_ids = encode_without_special_tokens(tokenizer, right_boundary)
+    right_start, _ = unique_subsequence(
+        bounded_ids,
+        right_ids,
+        name=f"{name} right boundary",
+    )
+    if right_start < 1:
+        raise ValueError(f"{name} has no token before the right boundary")
+    position = bounded_start + right_start - 1
+    record = token_position_record(
+        tokenizer,
+        RenderedTokenAlignment("", [], processed_ids, [], {}),
+        position,
+    )
+    if "\n" not in record["token_text"]:
+        raise ValueError(f"{name} token is not a newline token: {record}")
+    return record
+
+
+def locate_token_after_field(
+    tokenizer: Any,
+    token_ids: list[int],
+    field_prefix: str,
+    value: str,
+    *,
+    separator: str = " ",
+    name: str = "panl",
+    position_map: dict[int, int] | None = None,
+    processed_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    field = locate_field_value_span(
+        tokenizer,
+        token_ids,
+        field_prefix,
+        value,
+        separator=separator,
+        name=f"{name} preceding field",
+        position_map=position_map,
+        processed_ids=processed_ids,
+    )
+    following = field.get("following_token_position")
+    if following is None:
+        raise ValueError(f"{name} field has no bounded following token")
+    position = int(following)
+    output_ids = processed_ids or token_ids
+    if position >= len(output_ids):
+        raise ValueError(f"{name} has no token after the answer field")
+    record = {
+        "position": position,
+        "token_id": int(output_ids[position]),
+        "token_text": tokenizer.decode(
+            [output_ids[position]],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        ),
+        "preceding_field_span": field["field_span"],
+        "validation_context": _token_context(tokenizer, output_ids, position),
+    }
+    if "\n" not in record["token_text"]:
+        raise ValueError(f"{name} token after answer is not a newline: {record}")
+    return record
+
+
+def locate_image_pad_span(
+    tokenizer: Any,
+    processed_ids: list[int],
+) -> dict[str, Any]:
+    """Return only the contiguous image-pad run as a half-open span."""
+
+    image_id = int(tokenizer.convert_tokens_to_ids("<|image_pad|>"))
+    positions = [index for index, token_id in enumerate(processed_ids) if token_id == image_id]
+    if not positions:
+        raise ValueError("No <|image_pad|> tokens found")
+    expected = list(range(positions[0], positions[-1] + 1))
+    if positions != expected:
+        raise ValueError(f"Image-pad tokens are not contiguous: {positions}")
+    return {
+        "span": [positions[0], positions[-1] + 1],
+        "image_token_id": image_id,
+        "image_token_count": len(positions),
+        "token_text": "<|image_pad|>",
+        "validation_context": _token_context(tokenizer, processed_ids, positions[0], radius=2),
+    }
 
 
 def _token_context(tokenizer: Any, ids: list[int], position: int, radius: int = 8) -> str:

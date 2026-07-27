@@ -2,6 +2,9 @@
 
 本项目为颜色问答建立五档文本先验池，并使用本地 Qwen2.5-VL 评估 Stage 1 答案和 Stage 2 confidence。
 
+Layer Metacognition 的 V3/V4 Source Attribution、逐层 readout 和逐 Head
+Attention Sink 使用说明见：[layer_metacognition/README.md](/root/autodl-tmp/layer_metacognition/README.md)。
+
 新增脚本：
 
 - [confidence_analysis.py](/root/autodl-tmp/confidence_analysis.py)：独立执行 Stage 2 confidence 分析。
