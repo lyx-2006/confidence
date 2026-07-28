@@ -52,6 +52,7 @@ from layer_metacognition.hidden_state_store import (  # noqa: E402
     load_jsonl,
 )
 from layer_metacognition.model_adapter import resolve_language_modules  # noqa: E402
+from layer_metacognition.source_patchscope import SourcePatchscopeDecoder  # noqa: E402
 from layer_metacognition.v3_v4_source_runner import (  # noqa: E402
     V3V4SourceRunner,
     reconstruction_tolerance,
@@ -62,6 +63,7 @@ DEFAULT_MODEL_PATH = ROOT / "qwen-2.5-vl" / "models" / "Qwen2.5-VL-7B-Instruct"
 DEFAULT_DATASET_PATH = ROOT / "datasets" / "dataset_with_images.json"
 DEFAULT_OUTPUT_DIR = ROOT / "layer_metacognition" / "output" / "v3_v4_source"
 ATTRIBUTION_MODES = ("none", "parallel", "joint")
+ANALYSIS_MODE_ORDER = ("LMhead", "Identity", "Semantic")
 
 
 def utc_now() -> str:
@@ -75,6 +77,35 @@ def expand_attribution_modes(value: str) -> tuple[str, ...]:
     if value not in ATTRIBUTION_MODES:
         raise ValueError(f"Unknown attribution mode: {value}")
     return (value,)
+
+
+def normalize_analysis_modes(values: Iterable[str]) -> tuple[str, ...]:
+    """Reject duplicates and return the stable SAC readout execution order."""
+    raw = [str(value) for value in values]
+    duplicates = sorted({value for value in raw if raw.count(value) > 1})
+    if duplicates:
+        raise ValueError(
+            "--analysis_mode contains duplicate value(s): "
+            + ", ".join(duplicates)
+        )
+    invalid = [value for value in raw if value not in ANALYSIS_MODE_ORDER]
+    if invalid:
+        raise ValueError(f"Unknown analysis mode(s): {', '.join(invalid)}")
+    if not raw:
+        raise ValueError("--analysis_mode requires at least one mode")
+    selected = set(raw)
+    return tuple(mode for mode in ANALYSIS_MODE_ORDER if mode in selected)
+
+
+def saved_configuration_for_comparison(
+    saved: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Interpret pre-analysis-mode configs as the old LMhead-only default."""
+    normalized = dict(saved)
+    missing = "analysis_modes" not in normalized
+    if missing:
+        normalized["analysis_modes"] = ["LMhead"]
+    return normalized, missing
 
 
 def share_initial_cache(
@@ -275,6 +306,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[*ATTRIBUTION_MODES, "all"],
         default="none",
     )
+    parser.add_argument(
+        "--analysis_mode",
+        nargs="+",
+        choices=list(ANALYSIS_MODE_ORDER),
+        default=["LMhead"],
+        help=(
+            "One or more SAC hidden-state readouts. Execution and output order "
+            "is always LMhead, Identity, Semantic; duplicate values are invalid. "
+            "(default: LMhead)"
+        ),
+    )
     parser.add_argument("--conditions", nargs="+", default=["all"])
     parser.add_argument("--max-items", type=int)
     parser.add_argument("--resume", action="store_true")
@@ -293,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         versions = _canonical_values(args.versions, ("v3", "v4"), "version")
+        analysis_modes = normalize_analysis_modes(args.analysis_mode)
         conditions = _canonical_values(args.conditions, CONDITIONS, "condition")
         item_ids = _parse_string_selection(args.item_ids)
         prior_indices = set(args.prior_indices) if args.prior_indices else None
@@ -367,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
             "versions": versions,
             "attribution_mode": args.attribution_mode,
             "attribution_modes": list(modes),
+            "analysis_modes": list(analysis_modes),
             "conditions": conditions,
             "max_items": args.max_items,
             "item_ids": sorted(item_ids) if item_ids else None,
@@ -388,9 +432,17 @@ def main(argv: list[str] | None = None) -> int:
         }
         if config_path.exists():
             saved = json.loads(config_path.read_text(encoding="utf-8"))
-            comparable = {key: saved.get(key) for key in configuration}
+            comparable_saved, missing_analysis_modes = (
+                saved_configuration_for_comparison(saved)
+            )
+            comparable = {
+                key: comparable_saved.get(key) for key in configuration
+            }
             if comparable != configuration:
                 raise ValueError("Resume configuration differs from saved config.json")
+            if missing_analysis_modes:
+                saved["analysis_modes"] = ["LMhead"]
+                atomic_write_json(config_path, saved)
         else:
             atomic_write_json(
                 config_path,
@@ -439,6 +491,17 @@ def main(argv: list[str] | None = None) -> int:
             max_new_tokens=args.max_source_tokens,
         )
         joint = JointAnswerSourceGenerator(inference)
+        patchscope_decoder = None
+        if (
+            not args.skip_layer_readout
+            and any(mode in ("Identity", "Semantic") for mode in analysis_modes)
+        ):
+            patchscope_decoder = SourcePatchscopeDecoder(
+                inference=inference,
+                modules=modules,
+                class_token_ids=source.token_specification.class_token_ids,
+                analysis_modes=analysis_modes,
+            )
         runners: list[V3V4SourceRunner] = []
         for mode in modes:
             runner = V3V4SourceRunner(
@@ -453,6 +516,8 @@ def main(argv: list[str] | None = None) -> int:
                 confidence_class_text=runtime.CONFIDENCE_CLASS_TEXT,
                 versions=versions,
                 attribution_mode=mode,
+                analysis_modes=list(analysis_modes),
+                patchscope_decoder=patchscope_decoder,
                 conditions=conditions,
                 skip_attention=args.skip_attention,
                 skip_layer_readout=args.skip_layer_readout,
@@ -485,6 +550,11 @@ def main(argv: list[str] | None = None) -> int:
                     "status": "complete",
                     "records": len(existing),
                     "call_counts": counts,
+                    "patchscope_call_counts": (
+                        dict(patchscope_decoder.call_counts)
+                        if patchscope_decoder is not None
+                        else {}
+                    ),
                     "output_dir": str(output_dir),
                 },
                 ensure_ascii=False,

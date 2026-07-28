@@ -18,6 +18,7 @@ from confidence_test.source_attribution_prompt_utils import (
     V3_STAGE4_META_SOURCE_ATTRIBUTION_PROMPT,
 )
 from confidence_test.source_attribution_schema import (
+    ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
     SOURCE_ATTRIBUTION_CLASSES,
     SOURCE_ATTRIBUTION_CLASS_TEXT,
     SOURCE_ATTRIBUTION_MIDPOINTS,
@@ -25,8 +26,13 @@ from confidence_test.source_attribution_schema import (
     gather_source_class_logits,
     source_distribution,
 )
+from layer_metacognition.conversation_builder import (
+    prepare_multimodal_inputs,
+    render_continued_assistant,
+)
 from layer_metacognition.analyze_source_sink_results import (
     build_source_sink_minimal,
+    build_source_sink_summary,
     group_records_by_version,
     split_analysis_by_version,
     write_layer_readout_minimal,
@@ -34,17 +40,38 @@ from layer_metacognition.analyze_source_sink_results import (
 )
 from layer_metacognition.attention_sinks import compute_attention_sink
 from layer_metacognition.layer_stage_analyzer import (
+    source_layer_readout,
     validate_restricted_reconstruction,
 )
+from layer_metacognition.direct_readout import project_hidden_to_vocab
+from layer_metacognition.model_adapter import (
+    LanguageModules,
+    run_patched_logits_forward,
+)
 from layer_metacognition.run_v3_v4_source_experiment import (
+    build_parser,
     expand_attribution_modes,
+    normalize_analysis_modes,
     run_case_groups,
+    saved_configuration_for_comparison,
     share_initial_cache,
 )
+from layer_metacognition.source_patchscope import (
+    PreparedSourceTarget,
+    SourcePatchscopeDecoder,
+)
+from layer_metacognition.source_patchscope_prompts import (
+    IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL,
+    IDENTITY_PATCHSCOPE_USER_PROMPT,
+    SEMANTIC_PATCHSCOPE_USER_PROMPT,
+)
 from layer_metacognition.token_positions import (
+    encode_without_special_tokens,
     locate_field_value_span,
     locate_marker_in_assistant,
+    unique_subsequence,
 )
+from layer_metacognition.token_spans import build_rendered_alignment
 from layer_metacognition.v3_v4_source_runner import (
     V3V4SourceRunner,
     reconstruction_tolerance,
@@ -181,12 +208,13 @@ class RealQwenTokenizerTests(unittest.TestCase):
         )
         if not model_path.is_dir():
             raise unittest.SkipTest("Local Qwen tokenizer is unavailable")
-        from transformers import AutoTokenizer
+        from transformers import AutoProcessor
 
-        cls.tokenizer = AutoTokenizer.from_pretrained(
+        cls.processor = AutoProcessor.from_pretrained(
             model_path,
             local_files_only=True,
         )
+        cls.tokenizer = getattr(cls.processor, "tokenizer", cls.processor)
 
     def test_real_qwen_digit_protocol_and_marker(self) -> None:
         specification = build_source_token_specification(self.tokenizer)
@@ -205,6 +233,128 @@ class RealQwenTokenizerTests(unittest.TestCase):
             name="sac",
         )
         self.assertEqual(ids[sac["position"] + 1], 21)
+
+    def test_real_qwen_patchscope_targets_end_at_patch_positions(self) -> None:
+        semantic_user = SEMANTIC_PATCHSCOPE_USER_PROMPT.format(
+            source_classes=SOURCE_ATTRIBUTION_CLASS_TEXT
+        )
+        targets = (
+            (
+                "Identity",
+                IDENTITY_PATCHSCOPE_USER_PROMPT,
+                IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL,
+            ),
+            (
+                "Semantic",
+                semantic_user,
+                ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
+            ),
+        )
+        for mode, user_prompt, assistant_prefill in targets:
+            with self.subTest(mode=mode):
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": user_prompt}],
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": assistant_prefill}],
+                    },
+                ]
+                rendered = render_continued_assistant(
+                    self.processor,
+                    messages,
+                    assistant_prefill,
+                )
+                inputs = prepare_multimodal_inputs(
+                    self.processor,
+                    messages,
+                    rendered,
+                    device="cpu",
+                )
+                alignment = build_rendered_alignment(
+                    self.tokenizer,
+                    rendered,
+                    inputs.input_ids,
+                    inputs.attention_mask,
+                )
+                if mode == "Identity":
+                    assistant_ids = encode_without_special_tokens(
+                        self.tokenizer,
+                        assistant_prefill,
+                    )
+                    assistant_start, _ = unique_subsequence(
+                        alignment.rendered_ids,
+                        assistant_ids,
+                        name="identity assistant",
+                    )
+                    _placeholder_start, placeholder_end = unique_subsequence(
+                        assistant_ids,
+                        encode_without_special_tokens(self.tokenizer, "?"),
+                        name="identity placeholder",
+                    )
+                    position = alignment.rendered_to_processed[
+                        assistant_start + placeholder_end - 1
+                    ]
+                else:
+                    position = locate_marker_in_assistant(
+                        self.tokenizer,
+                        alignment.rendered_ids,
+                        assistant_prefill,
+                        ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
+                        name="semantic sac",
+                        position_map=alignment.rendered_to_processed,
+                        processed_ids=alignment.processed_ids,
+                    )["position"]
+                self.assertEqual(position, len(alignment.processed_ids) - 1)
+
+    def test_patchscope_decoder_prepares_and_reuses_real_qwen_targets(self) -> None:
+        layers = [
+            AddDecoderLayer(tuple_output=True),
+            AddDecoderLayer(tuple_output=True),
+        ]
+        model = FakePatchModel(layers, vocab_size=32)
+        modules = LanguageModules(
+            language_layers=list(model.layers),
+            final_norm=torch.nn.Identity(),
+            lm_head=model.lm_head,
+            hidden_size=2,
+            num_hidden_layers=2,
+        )
+
+        class FakeInference:
+            def __init__(self, processor: object, fake_model: torch.nn.Module):
+                self.processor = processor
+                self.model = fake_model
+
+            @staticmethod
+            def _get_inputs_device() -> torch.device:
+                return torch.device("cpu")
+
+        token_ids = {
+            label: [15 + index]
+            for index, label in enumerate(SOURCE_ATTRIBUTION_CLASSES)
+        }
+        decoder = SourcePatchscopeDecoder(
+            inference=FakeInference(self.processor, model),
+            modules=modules,
+            class_token_ids=token_ids,
+            analysis_modes=["Semantic", "Identity"],
+        )
+        self.assertEqual(decoder.call_counts["baseline"], 2)
+        self.assertEqual(set(decoder.baselines()), {"Identity", "Semantic"})
+        for mode in ("Identity", "Semantic"):
+            result, logits = decoder.run_patched_source_readout(
+                analysis_mode=mode,
+                layer_index=0,
+                source_hidden=torch.tensor([0.25, 0.75]),
+            )
+            self.assertEqual(result["analysis_mode"], mode)
+            self.assertEqual(result["layer_index"], 0)
+            self.assertAlmostEqual(sum(result["class_probabilities"]), 1.0)
+            self.assertEqual(tuple(logits.shape), (32,))
+        self.assertEqual(decoder.call_counts, {"baseline": 2, "patched": 2})
 
 
 class TokenAndAttentionTests(unittest.TestCase):
@@ -281,6 +431,52 @@ class TokenAndAttentionTests(unittest.TestCase):
 
 
 class ReadoutAndPromptTests(unittest.TestCase):
+    def test_lmhead_source_readout_keeps_direct_projection_math(self) -> None:
+        hidden = torch.tensor([0.25, -0.5, 1.0])
+        final_norm = torch.nn.LayerNorm(3)
+        lm_head = torch.nn.Linear(3, 9, bias=False)
+        with torch.no_grad():
+            lm_head.weight.copy_(torch.arange(27).reshape(9, 3) / 10)
+        token_ids = {label: [index] for index, label in enumerate(SOURCE_ATTRIBUTION_CLASSES)}
+        direct_logits = project_hidden_to_vocab(hidden, final_norm, lm_head)
+        expected = source_distribution(
+            gather_source_class_logits(direct_logits, token_ids),
+            class_token_ids=token_ids,
+            raw_output="",
+            parsed_label=None,
+        ).to_dict()
+        actual = source_layer_readout(
+            3,
+            hidden,
+            final_norm,
+            lm_head,
+            token_ids,
+        )
+        self.assertEqual(actual["analysis_mode"], "LMhead")
+        self.assertEqual(actual["layer_index"], 3)
+        self.assertEqual(actual["class_logits"], expected["class_logits"])
+        self.assertEqual(
+            actual["class_probabilities"],
+            expected["class_probabilities"],
+        )
+        self.assertEqual(
+            actual["soft_image_score"],
+            expected["soft_image_score"],
+        )
+
+    def test_patchscope_prompts_are_content_free_and_exact(self) -> None:
+        self.assertEqual(
+            IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL,
+            "0 -> 0\n1 -> 1\n2 -> 2\n3 -> 3\n4 -> 4\n"
+            "5 -> 5\n6 -> 6\n7 -> 7\n8 -> 8\n?",
+        )
+        self.assertEqual(IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL.count("?"), 1)
+        self.assertTrue(IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL.endswith("?"))
+        for sample_value in ("sample question", "sample clue", "orange", "purple"):
+            self.assertNotIn(sample_value, IDENTITY_PATCHSCOPE_USER_PROMPT)
+            self.assertNotIn(sample_value, SEMANTIC_PATCHSCOPE_USER_PROMPT)
+        self.assertIn("{source_classes}", SEMANTIC_PATCHSCOPE_USER_PROMPT)
+
     def test_bfloat16_reconstruction_tolerance_accepts_observed_quantization(self) -> None:
         self.assertEqual(reconstruction_tolerance("bfloat16"), 0.1)
         self.assertEqual(reconstruction_tolerance("torch.bfloat16"), 0.1)
@@ -331,6 +527,31 @@ class ReadoutAndPromptTests(unittest.TestCase):
 
 
 class PersistenceAndResumeTests(unittest.TestCase):
+    def test_analysis_mode_cli_defaults_orders_and_rejects_duplicates(self) -> None:
+        parser = build_parser()
+        self.assertEqual(parser.parse_args([]).analysis_mode, ["LMhead"])
+        parsed = parser.parse_args(
+            ["--analysis_mode", "Semantic", "LMhead"]
+        )
+        self.assertEqual(
+            normalize_analysis_modes(parsed.analysis_mode),
+            ("LMhead", "Semantic"),
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            normalize_analysis_modes(["LMhead", "LMhead"])
+
+    def test_legacy_config_defaults_to_lmhead(self) -> None:
+        normalized, missing = saved_configuration_for_comparison(
+            {"format_version": 1}
+        )
+        self.assertTrue(missing)
+        self.assertEqual(normalized["analysis_modes"], ["LMhead"])
+        explicit, missing = saved_configuration_for_comparison(
+            {"analysis_modes": ["Identity", "Semantic"]}
+        )
+        self.assertFalse(missing)
+        self.assertEqual(explicit["analysis_modes"], ["Identity", "Semantic"])
+
     def test_layer_analysis_splits_v3_and_v4(self) -> None:
         analysis = [
             {"case_id": "a__v3__none", "version": "v3", "layers": {}},
@@ -491,7 +712,7 @@ class PersistenceAndResumeTests(unittest.TestCase):
         analysis, stats = build_source_sink_minimal(records)
         self.assertEqual(
             analysis[0]["layers"]["0"],
-            ["orange", 0.21, 2.209, None, 0.312],
+            ["orange", 0.21, 2.209, None, 0.312, None, None],
         )
         self.assertEqual(
             analysis[0]["sinks"]["sac"]["image"]["0"],
@@ -527,7 +748,15 @@ class PersistenceAndResumeTests(unittest.TestCase):
                         },
                         "text_answer": "orange",
                         "layers": {
-                            "0": ["orange", 0.21, 2.209, None, 0.312]
+                            "0": [
+                                "orange",
+                                0.21,
+                                2.209,
+                                None,
+                                0.312,
+                                None,
+                                None,
+                            ]
                         },
                     }
                 ],
@@ -562,6 +791,220 @@ class PersistenceAndResumeTests(unittest.TestCase):
             committed,
             ["1__prior_0__consistent_easy__v4__none"],
         )
+
+    def test_new_and_legacy_sac_modes_feed_seven_columns_and_summary(self) -> None:
+        records = [
+            {
+                "case_id": "new",
+                "status": "completed",
+                "direct_readout": {
+                    "ac_layers": [{"layer_index": 0, "predicted_answer": "blue"}],
+                    "cc_layers": [{"layer_index": 0, "soft_confidence": 0.4}],
+                    "sac_layers": [{"layer_index": 0, "soft_image_score": 0.5}],
+                    "sac_layers_by_mode": {
+                        "LMhead": [{"layer_index": 0, "soft_image_score": 0.5}],
+                        "Identity": [{"layer_index": 0, "soft_image_score": 0.6}],
+                        "Semantic": [{"layer_index": 0, "soft_image_score": 0.7}],
+                    },
+                },
+                "validation": {
+                    "ac_last_layer": {"passed": True},
+                    "cc_last_layer": {"passed": True},
+                    "sac_last_layer": {"passed": True},
+                    "sac_by_mode": {
+                        "LMhead": {"passed": True},
+                        "Identity": {"passed": False},
+                        "Semantic": None,
+                    },
+                },
+            },
+            {
+                "case_id": "legacy",
+                "status": "completed",
+                "direct_readout": {
+                    "ac_layers": [],
+                    "cc_layers": [],
+                    "sac_layers": [{"layer_index": 0, "soft_image_score": 0.2}],
+                },
+                "validation": {
+                    "ac_last_layer": None,
+                    "cc_last_layer": None,
+                    "sac_last_layer": {"passed": True},
+                },
+            },
+        ]
+        analysis, statistics = build_source_sink_minimal(records)
+        self.assertEqual(analysis[0]["layers"]["0"][4:], [0.5, 0.6, 0.7])
+        self.assertEqual(analysis[1]["layers"]["0"][4:], [0.2, None, None])
+        summary = build_source_sink_summary(records, analysis, statistics)
+        self.assertEqual(
+            summary["sac_readout_coverage_by_mode"],
+            {"LMhead": 2, "Identity": 1, "Semantic": 1},
+        )
+        self.assertEqual(
+            summary["sac_validation_by_mode"]["LMhead"],
+            {"passed": 2, "failed": 0, "not_run": 0},
+        )
+        self.assertEqual(
+            summary["sac_validation_by_mode"]["Identity"],
+            {"passed": 0, "failed": 1, "not_run": 1},
+        )
+        self.assertEqual(
+            summary["sac_validation_by_mode"]["Semantic"],
+            {"passed": 0, "failed": 0, "not_run": 2},
+        )
+
+
+class AddDecoderLayer(torch.nn.Module):
+    def __init__(self, *, tuple_output: bool) -> None:
+        super().__init__()
+        self.tuple_output = tuple_output
+
+    def forward(self, hidden: torch.Tensor) -> object:
+        value = hidden + 1
+        return (value, "preserved") if self.tuple_output else value
+
+
+class FakePatchModel(torch.nn.Module):
+    def __init__(
+        self,
+        layers: list[AddDecoderLayer],
+        *,
+        fail_after_layers: bool = False,
+        vocab_size: int = 3,
+    ):
+        super().__init__()
+        self.layers = torch.nn.ModuleList(layers)
+        self.lm_head = torch.nn.Linear(2, vocab_size, bias=False)
+        with torch.no_grad():
+            self.lm_head.weight.zero_()
+            self.lm_head.weight[:3].copy_(
+                torch.tensor([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+            )
+        self.fail_after_layers = fail_after_layers
+        self.last_hidden: torch.Tensor | None = None
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        logits_to_keep: torch.Tensor | int = 0,
+        **_kwargs: object,
+    ) -> object:
+        hidden = torch.stack(
+            [input_ids.float(), input_ids.float() * 2],
+            dim=-1,
+        )
+        for layer in self.layers:
+            output = layer(hidden)
+            if isinstance(output, tuple):
+                self.assert_tuple_metadata(output)
+                hidden = output[0]
+            else:
+                hidden = output
+        self.last_hidden = hidden.detach().clone()
+        if self.fail_after_layers:
+            raise RuntimeError("synthetic forward failure")
+        indices = (
+            logits_to_keep
+            if isinstance(logits_to_keep, torch.Tensor)
+            else slice(-logits_to_keep, None)
+        )
+        return SimpleNamespace(logits=self.lm_head(hidden[:, indices, :]))
+
+    @staticmethod
+    def assert_tuple_metadata(output: tuple[object, ...]) -> None:
+        if output[1] != "preserved":
+            raise AssertionError("Tuple metadata was not preserved")
+
+
+class PatchedForwardTests(unittest.TestCase):
+    def _fixture(
+        self,
+        *,
+        tuple_output: bool,
+        fail_after_layers: bool = False,
+    ) -> tuple[FakePatchModel, LanguageModules]:
+        layers = [
+            AddDecoderLayer(tuple_output=tuple_output),
+            AddDecoderLayer(tuple_output=tuple_output),
+        ]
+        model = FakePatchModel(layers, fail_after_layers=fail_after_layers)
+        modules = LanguageModules(
+            language_layers=list(model.layers),
+            final_norm=torch.nn.Identity(),
+            lm_head=model.lm_head,
+            hidden_size=2,
+            num_hidden_layers=2,
+        )
+        return model, modules
+
+    def test_patch_supports_tensor_and_tuple_and_only_changes_batch_zero(self) -> None:
+        inputs = {"input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]])}
+        for tuple_output in (False, True):
+            with self.subTest(tuple_output=tuple_output):
+                model, modules = self._fixture(tuple_output=tuple_output)
+                logits = run_patched_logits_forward(
+                    model,
+                    inputs,
+                    modules,
+                    layer_index=0,
+                    target_position=1,
+                    source_hidden=torch.tensor([10.0, 20.0], dtype=torch.float64),
+                )
+                torch.testing.assert_close(
+                    logits,
+                    torch.tensor([11.0, 21.0, 32.0]),
+                )
+                assert model.last_hidden is not None
+                torch.testing.assert_close(
+                    model.last_hidden[1, 1],
+                    torch.tensor([7.0, 12.0]),
+                )
+                self.assertEqual(len(model.layers[0]._forward_hooks), 0)
+
+    def test_final_layer_patch_reconstructs_source_logits(self) -> None:
+        model, modules = self._fixture(tuple_output=True)
+        logits = run_patched_logits_forward(
+            model,
+            {"input_ids": torch.tensor([[1, 2, 3]])},
+            modules,
+            layer_index=1,
+            target_position=2,
+            source_hidden=torch.tensor([4.0, 9.0]),
+        )
+        torch.testing.assert_close(logits, torch.tensor([4.0, 9.0, 13.0]))
+
+    def test_hook_is_removed_when_forward_raises(self) -> None:
+        model, modules = self._fixture(
+            tuple_output=True,
+            fail_after_layers=True,
+        )
+        with self.assertRaisesRegex(RuntimeError, "synthetic"):
+            run_patched_logits_forward(
+                model,
+                {"input_ids": torch.tensor([[1, 2, 3]])},
+                modules,
+                layer_index=0,
+                target_position=1,
+                source_hidden=torch.tensor([4.0, 9.0]),
+            )
+        self.assertEqual(len(model.layers[0]._forward_hooks), 0)
+
+    def test_cached_baseline_is_returned_by_copy(self) -> None:
+        decoder = object.__new__(SourcePatchscopeDecoder)
+        decoder.targets = {
+            "Identity": PreparedSourceTarget(
+                name="identity",
+                inputs=None,
+                target_position=7,
+                rendered_prompt="target",
+                baseline={"soft_image_score": 0.5},
+            )
+        }
+        first = decoder.run_target_baseline("Identity")
+        first["soft_image_score"] = 0.9
+        second = decoder.run_target_baseline("Identity")
+        self.assertEqual(second["soft_image_score"], 0.5)
 
 
 if __name__ == "__main__":

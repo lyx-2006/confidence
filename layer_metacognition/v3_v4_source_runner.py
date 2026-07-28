@@ -110,6 +110,27 @@ class CaseStageError(RuntimeError):
         self.stage = stage
 
 
+class FinalLayerValidationError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        target: str,
+        analysis_mode: str | None,
+        check: dict[str, Any],
+        validation_state: dict[str, Any],
+    ):
+        label = (
+            f"{target.upper()} {analysis_mode}"
+            if analysis_mode is not None
+            else target.upper()
+        )
+        super().__init__(f"{label} final-layer reconstruction failed: {check}")
+        self.target = target
+        self.analysis_mode = analysis_mode
+        self.check = deepcopy(check)
+        self.validation_state = deepcopy(validation_state)
+
+
 class V3V4SourceRunner:
     """Serial runner sharing one model and processor across every case."""
 
@@ -127,6 +148,8 @@ class V3V4SourceRunner:
         confidence_class_text: str,
         versions: list[str],
         attribution_mode: str,
+        analysis_modes: list[str],
+        patchscope_decoder: Any | None,
         conditions: list[str],
         skip_attention: bool = False,
         skip_layer_readout: bool = False,
@@ -144,6 +167,8 @@ class V3V4SourceRunner:
         self.confidence_class_text = confidence_class_text
         self.versions = versions
         self.mode = attribution_mode
+        self.analysis_modes = list(analysis_modes)
+        self.patchscope_decoder = patchscope_decoder
         self.conditions = conditions
         self.skip_attention = skip_attention
         self.skip_layer_readout = skip_layer_readout
@@ -169,6 +194,17 @@ class V3V4SourceRunner:
                         f"{sorted(overlap)}"
                     )
         self.source_token_ids = self.source_analyzer.token_specification.class_token_ids
+        selected_patch_modes = {
+            mode for mode in self.analysis_modes if mode in ("Identity", "Semantic")
+        }
+        if (
+            not self.skip_layer_readout
+            and selected_patch_modes
+            and self.patchscope_decoder is None
+        ):
+            raise ValueError(
+                "Identity/Semantic analysis requires a shared SourcePatchscopeDecoder"
+            )
         self.shared_initial: dict[str, dict[str, Any]] = {}
         self.call_counts: dict[str, int] = {
             "initial_answer": 0,
@@ -405,11 +441,25 @@ class V3V4SourceRunner:
         current_answer: str,
         generated_source: dict[str, Any] | None,
     ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str]]:
-        direct = {"ac_layers": [], "cc_layers": [], "sac_layers": []}
+        direct = {
+            "ac_layers": [],
+            "cc_layers": [],
+            "sac_layers": [],
+            "sac_layers_by_mode": {
+                "LMhead": [],
+                "Identity": [],
+                "Semantic": [],
+            },
+        }
         validation = {
             "ac_last_layer": None,
             "cc_last_layer": None,
             "sac_last_layer": None,
+            "sac_by_mode": {
+                "LMhead": None,
+                "Identity": None,
+                "Semantic": None,
+            },
         }
         attention: dict[str, Any] = {}
         token_positions = {"ac": None, "panl": None, "cc": None, "sac": None}
@@ -491,20 +541,80 @@ class V3V4SourceRunner:
                         labels = self.confidence_classes
                         token_ids = self.confidence_token_ids
                     else:
-                        layers = [
-                            source_layer_readout(
-                                layer,
-                                hidden_by_layer[layer],
+                        if "LMhead" in self.analysis_modes:
+                            layers = [
+                                source_layer_readout(
+                                    layer,
+                                    hidden_by_layer[layer],
+                                    self.modules.final_norm,
+                                    self.modules.lm_head,
+                                    self.source_token_ids,
+                                )
+                                for layer in self.selected_layers
+                            ]
+                            direct["sac_layers_by_mode"]["LMhead"].extend(layers)
+                            direct["sac_layers"].extend(deepcopy(layers))
+                            reconstructed = project_hidden_to_vocab(
+                                hidden_by_layer[self.final_layer],
                                 self.modules.final_norm,
                                 self.modules.lm_head,
-                                self.source_token_ids,
                             )
-                            for layer in self.selected_layers
+                            check = validate_restricted_reconstruction(
+                                reconstructed,
+                                reference_logits[position],
+                                labels=SOURCE_ATTRIBUTION_CLASSES,
+                                class_token_ids=self.source_token_ids,
+                                midpoints=SOURCE_ATTRIBUTION_MIDPOINTS,
+                                tolerance=self.tolerance,
+                            )
+                            validation["sac_by_mode"]["LMhead"] = check
+                            validation["sac_last_layer"] = deepcopy(check)
+                            if not check["passed"]:
+                                raise FinalLayerValidationError(
+                                    target="sac",
+                                    analysis_mode="LMhead",
+                                    check=check,
+                                    validation_state=validation,
+                                )
+                            del reconstructed
+
+                        patch_modes = [
+                            mode
+                            for mode in ("Identity", "Semantic")
+                            if mode in self.analysis_modes
                         ]
-                        direct["sac_layers"].extend(layers)
-                        midpoints = SOURCE_ATTRIBUTION_MIDPOINTS
-                        labels = SOURCE_ATTRIBUTION_CLASSES
-                        token_ids = self.source_token_ids
+                        for layer in self.selected_layers:
+                            for analysis_mode in patch_modes:
+                                assert self.patchscope_decoder is not None
+                                patched, patched_logits = (
+                                    self.patchscope_decoder.run_patched_source_readout(
+                                        analysis_mode=analysis_mode,
+                                        layer_index=layer,
+                                        source_hidden=hidden_by_layer[layer],
+                                    )
+                                )
+                                direct["sac_layers_by_mode"][analysis_mode].append(
+                                    patched
+                                )
+                                if layer == self.final_layer:
+                                    check = validate_restricted_reconstruction(
+                                        patched_logits,
+                                        reference_logits[position],
+                                        labels=SOURCE_ATTRIBUTION_CLASSES,
+                                        class_token_ids=self.source_token_ids,
+                                        midpoints=SOURCE_ATTRIBUTION_MIDPOINTS,
+                                        tolerance=self.tolerance,
+                                    )
+                                    validation["sac_by_mode"][analysis_mode] = check
+                                    if not check["passed"]:
+                                        raise FinalLayerValidationError(
+                                            target="sac",
+                                            analysis_mode=analysis_mode,
+                                            check=check,
+                                            validation_state=validation,
+                                        )
+                                del patched_logits
+                        continue
                     reconstructed = project_hidden_to_vocab(
                         hidden_by_layer[self.final_layer],
                         self.modules.final_norm,
@@ -520,8 +630,11 @@ class V3V4SourceRunner:
                     )
                     validation[f"{target}_last_layer"] = check
                     if not check["passed"]:
-                        raise RuntimeError(
-                            f"{target.upper()} final-layer reconstruction failed: {check}"
+                        raise FinalLayerValidationError(
+                            target=target,
+                            analysis_mode=None,
+                            check=check,
+                            validation_state=validation,
                         )
                     del reconstructed
             elif needs_joint_source_score:
@@ -591,7 +704,22 @@ class V3V4SourceRunner:
                 "current_confidence": None,
                 "source_attribution": None,
             },
-            "direct_readout": {"ac_layers": [], "cc_layers": [], "sac_layers": []},
+            "direct_readout": {
+                "ac_layers": [],
+                "cc_layers": [],
+                "sac_layers": [],
+                "sac_layers_by_mode": {
+                    "LMhead": [],
+                    "Identity": [],
+                    "Semantic": [],
+                },
+            },
+            "patchscope_baselines": (
+                self.patchscope_decoder.baselines()
+                if self.patchscope_decoder is not None
+                and not self.skip_layer_readout
+                else {}
+            ),
             "token_positions": {"ac": None, "panl": None, "cc": None, "sac": None},
             "token_position_stages": {},
             "attention_sinks": {},
@@ -599,6 +727,11 @@ class V3V4SourceRunner:
                 "ac_last_layer": None,
                 "cc_last_layer": None,
                 "sac_last_layer": None,
+                "sac_by_mode": {
+                    "LMhead": None,
+                    "Identity": None,
+                    "Semantic": None,
+                },
             },
             "model_structure": {
                 "dtype": self.inference.dtype_name,
@@ -865,6 +998,8 @@ class V3V4SourceRunner:
                     del inputs
                     teacher_stage["inputs"] = None
             cause = exc.__cause__ or exc
+            if isinstance(exc, FinalLayerValidationError):
+                record["validation"] = deepcopy(exc.validation_state)
             record["status"] = "failed"
             record["error"] = {
                 "stage": getattr(exc, "stage", stage_name),

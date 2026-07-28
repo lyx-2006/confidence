@@ -73,6 +73,23 @@ def source_layer_readout(
     class_token_ids: dict[str, Sequence[int]],
 ) -> dict[str, Any]:
     vocab_logits = project_hidden_to_vocab(hidden, final_norm, lm_head)
+    return source_vocab_readout(
+        vocab_logits,
+        class_token_ids,
+        layer_index=layer_index,
+        analysis_mode="LMhead",
+    )
+
+
+def source_vocab_readout(
+    vocab_logits: torch.Tensor,
+    class_token_ids: dict[str, Sequence[int]],
+    *,
+    layer_index: int | None = None,
+    analysis_mode: str | None = None,
+) -> dict[str, Any]:
+    """Build the common SAC readout schema from one vocabulary-logit row."""
+
     logits = gather_source_class_logits(vocab_logits, class_token_ids)
     result = source_distribution(
         logits,
@@ -88,7 +105,10 @@ def source_layer_readout(
         "token_diagnostics",
     ):
         result.pop(key, None)
-    result["layer_index"] = int(layer_index)
+    if layer_index is not None:
+        result["layer_index"] = int(layer_index)
+    if analysis_mode is not None:
+        result["analysis_mode"] = str(analysis_mode)
     return result
 
 
@@ -154,4 +174,3 @@ def source_readout_is_valid(record: dict[str, Any]) -> bool:
         and 0.0 <= float(record.get("soft_image_score", -1.0)) <= 1.0
         and 0.0 <= float(record.get("soft_text_score", -1.0)) <= 1.0
     )
-

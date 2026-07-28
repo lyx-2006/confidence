@@ -94,6 +94,112 @@ def run_logits_forward(
     return result
 
 
+def run_patched_logits_forward(
+    model: torch.nn.Module,
+    inputs: Any,
+    modules: LanguageModules,
+    *,
+    layer_index: int,
+    target_position: int,
+    source_hidden: torch.Tensor,
+) -> torch.Tensor:
+    """Patch one decoder-block output and return one target-position logit row."""
+
+    if layer_index < 0 or layer_index >= modules.num_hidden_layers:
+        raise ValueError(
+            f"Patch layer {layer_index} is outside [0, {modules.num_hidden_layers - 1}]"
+        )
+    input_ids = inputs["input_ids"] if isinstance(inputs, dict) else inputs.input_ids
+    if input_ids.ndim != 2 or int(input_ids.shape[0]) < 1:
+        raise ValueError(
+            f"Patched target input_ids must have shape [batch, sequence], got {input_ids.shape}"
+        )
+    sequence_length = int(input_ids.shape[1])
+    if target_position < 0 or target_position >= sequence_length:
+        raise ValueError(
+            f"Patch target position {target_position} is outside sequence length "
+            f"{sequence_length}"
+        )
+    vector = source_hidden.detach().reshape(-1)
+    if int(vector.numel()) != modules.hidden_size:
+        raise ValueError(
+            f"Source hidden size {vector.numel()} does not match model hidden size "
+            f"{modules.hidden_size}"
+        )
+
+    hook_calls = 0
+
+    def patch_output(_module: Any, _args: Any, output: Any) -> Any:
+        nonlocal hook_calls
+        hook_calls += 1
+        if isinstance(output, torch.Tensor):
+            tensor = output
+            trailing: tuple[Any, ...] | None = None
+        elif isinstance(output, tuple) and output:
+            tensor = output[0]
+            trailing = output[1:]
+        else:
+            raise TypeError(
+                "Decoder block returned unsupported patch output type: "
+                f"{type(output)!r}"
+            )
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 3:
+            raise TypeError(
+                "Decoder block hidden output must be a rank-3 tensor, got "
+                f"{type(tensor)!r} shape={getattr(tensor, 'shape', None)}"
+            )
+        if int(tensor.shape[0]) < 1 or target_position >= int(tensor.shape[1]):
+            raise ValueError(
+                f"Patch position {target_position} is invalid for decoder output "
+                f"shape {tuple(tensor.shape)}"
+            )
+        if int(tensor.shape[2]) != modules.hidden_size:
+            raise ValueError(
+                f"Decoder hidden size {tensor.shape[2]} does not match "
+                f"{modules.hidden_size}"
+            )
+        patched = tensor.clone()
+        patched[0, target_position, :] = vector.to(
+            device=patched.device,
+            dtype=patched.dtype,
+        )
+        if trailing is None:
+            return patched
+        return (patched, *trailing)
+
+    handle = modules.language_layers[layer_index].register_forward_hook(patch_output)
+    outputs = None
+    try:
+        kwargs, selected = _selected_logits_kwargs(
+            model,
+            inputs,
+            [target_position],
+            modules,
+        )
+        with torch.inference_mode():
+            outputs = model(
+                **kwargs,
+                use_cache=False,
+                output_attentions=False,
+                output_hidden_states=False,
+                return_dict=True,
+            )
+        if hook_calls != 1:
+            raise RuntimeError(
+                f"Patch hook for layer {layer_index} fired {hook_calls} times; expected 1"
+            )
+        logits = (
+            outputs.logits[0, 0]
+            if selected
+            else outputs.logits[0, target_position]
+        )
+        return logits.detach().float().cpu()
+    finally:
+        handle.remove()
+        if outputs is not None:
+            del outputs
+
+
 def load_qwen_inference(
     model_path: str,
     inference_path: str | Path | None = None,

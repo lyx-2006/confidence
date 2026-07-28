@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create compact five-field layer readouts and per-head source sinks."""
+"""Create compact seven-field layer readouts and per-head source sinks."""
 
 from __future__ import annotations
 
@@ -89,6 +89,21 @@ def _layer_map(values: Any) -> dict[int, dict[str, Any]]:
     }
 
 
+def _source_layer_maps(readout: dict[str, Any]) -> dict[str, dict[int, dict[str, Any]]]:
+    """Read the new mode mapping, with legacy sac_layers as LMhead fallback."""
+    raw_by_mode = readout.get("sac_layers_by_mode")
+    if isinstance(raw_by_mode, dict):
+        return {
+            mode: _layer_map(raw_by_mode.get(mode))
+            for mode in ("LMhead", "Identity", "Semantic")
+        }
+    return {
+        "LMhead": _layer_map(readout.get("sac_layers")),
+        "Identity": {},
+        "Semantic": {},
+    }
+
+
 def _finite_or_none(value: Any, *, minimum: float | None = None, maximum: float | None = None) -> Any:
     if value is None:
         return None
@@ -123,12 +138,14 @@ def build_source_sink_minimal(
         readout = record.get("direct_readout") or {}
         answers = _layer_map(readout.get("ac_layers"))
         confidences = _layer_map(readout.get("cc_layers"))
-        sources = _layer_map(readout.get("sac_layers"))
+        sources_by_mode = _source_layer_maps(readout)
         layers: dict[str, list[Any]] = {}
-        for layer_index in sorted(set(answers) | set(confidences) | set(sources)):
+        source_layers = set().union(
+            *(set(values) for values in sources_by_mode.values())
+        )
+        for layer_index in sorted(set(answers) | set(confidences) | source_layers):
             answer = answers.get(layer_index) or {}
             confidence = confidences.get(layer_index) or {}
-            source = sources.get(layer_index) or {}
             values: list[Any] = [
                 answer.get("predicted_answer")
                 if isinstance(answer.get("predicted_answer"), str)
@@ -144,11 +161,16 @@ def build_source_sink_minimal(
                     minimum=0.0,
                     maximum=1.0,
                 ),
-                _finite_or_none(
-                    source.get("soft_image_score"),
-                    minimum=0.0,
-                    maximum=1.0,
-                ),
+                *[
+                    _finite_or_none(
+                        (sources_by_mode[mode].get(layer_index) or {}).get(
+                            "soft_image_score"
+                        ),
+                        minimum=0.0,
+                        maximum=1.0,
+                    )
+                    for mode in ("LMhead", "Identity", "Semantic")
+                ],
             ]
             if any(value is None for value in values):
                 statistics["invalid_layer_values"] += 1
@@ -279,7 +301,7 @@ def write_layer_readout_minimal(
     path: str | Path,
     analysis: list[dict[str, Any]],
 ) -> None:
-    """Write only case IDs and five-field per-layer readouts, without sinks."""
+    """Write only case IDs and seven-field per-layer readouts, without sinks."""
     lines = ["["]
     for case_index, record in enumerate(analysis):
         lines.extend(
@@ -314,6 +336,15 @@ def build_source_sink_summary(
     statuses: dict[str, int] = {}
     readout_coverage = {"ac": 0, "cc": 0, "sac": 0}
     validation = {"passed": 0, "failed": 0, "not_run": 0}
+    sac_coverage_by_mode = {
+        "LMhead": 0,
+        "Identity": 0,
+        "Semantic": 0,
+    }
+    sac_validation_by_mode = {
+        mode: {"passed": 0, "failed": 0, "not_run": 0}
+        for mode in ("LMhead", "Identity", "Semantic")
+    }
     source_scores: list[float] = []
     sink_arrays = 0
     for record in records:
@@ -323,13 +354,33 @@ def build_source_sink_summary(
         for target in readout_coverage:
             if direct.get(f"{target}_layers"):
                 readout_coverage[target] += 1
-        for check in (record.get("validation") or {}).values():
+        source_maps = _source_layer_maps(direct)
+        for mode, layers in source_maps.items():
+            if layers:
+                sac_coverage_by_mode[mode] += 1
+        record_validation = record.get("validation") or {}
+        for key in ("ac_last_layer", "cc_last_layer", "sac_last_layer"):
+            check = record_validation.get(key)
             if check is None:
                 validation["not_run"] += 1
             elif check.get("passed"):
                 validation["passed"] += 1
             else:
                 validation["failed"] += 1
+        raw_sac_by_mode = record_validation.get("sac_by_mode")
+        for mode in ("LMhead", "Identity", "Semantic"):
+            if isinstance(raw_sac_by_mode, dict):
+                check = raw_sac_by_mode.get(mode)
+            elif mode == "LMhead":
+                check = record_validation.get("sac_last_layer")
+            else:
+                check = None
+            if check is None:
+                sac_validation_by_mode[mode]["not_run"] += 1
+            elif check.get("passed"):
+                sac_validation_by_mode[mode]["passed"] += 1
+            else:
+                sac_validation_by_mode[mode]["failed"] += 1
         source = (record.get("generated") or {}).get("source_attribution") or {}
         score = source.get("soft_image_score")
         if isinstance(score, (int, float)) and math.isfinite(float(score)):
@@ -342,7 +393,9 @@ def build_source_sink_summary(
         "minimal_case_count": len(analysis),
         "statuses": statuses,
         "readout_case_coverage": readout_coverage,
+        "sac_readout_coverage_by_mode": sac_coverage_by_mode,
         "last_layer_validation": validation,
+        "sac_validation_by_mode": sac_validation_by_mode,
         "source_score_range": (
             [min(source_scores), max(source_scores)] if source_scores else None
         ),

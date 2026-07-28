@@ -1,6 +1,6 @@
 # V3/V4 Source Attribution 与逐 Head Attention Sink
 
-本目录用于运行 Qwen2.5-VL 的 V3/V4 来源归因实验。实验在回答与置信度之外，增加 Source Attribution（SA）、逐层直接读出，以及逐 attention head 的 source sink 分析。
+本目录用于运行 Qwen2.5-VL 的 V3/V4 来源归因实验。实验在回答与置信度之外，增加 Source Attribution（SA）、三种 SAC hidden-state 逐层读出，以及逐 attention head 的 source sink 分析。
 
 新实验入口为：
 
@@ -40,6 +40,7 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
   --output-dir layer_metacognition/output/v3_v4_all \
   --versions v3 v4 \
   --attribution-mode all \
+  --analysis_mode LMhead Identity Semantic \
   --conditions consistent_easy \
   --max-items 1 \
   --prior-indices 0
@@ -79,6 +80,32 @@ SA 输出必须严格为：
 
 解析失败时会保留 raw output，并将 case 写为终态失败记录；程序不会用受限 logits 的 argmax 冒充已解析标签。
 
+## 三种 SAC analysis mode
+
+`--analysis_mode` 可同时选择一个或多个 SAC hidden-state 解码方法：
+
+| analysis mode | 含义 |
+| --- | --- |
+| `LMhead` | 将当前层 SAC hidden state 直接经过 final norm 和 LM head，读取最终词表基底中的九类分布 |
+| `Identity` | 将当前层 SAC hidden state patch 到同层的 content-free identity target，再经过剩余模型层读取九类分布 |
+| `Semantic` | 将当前层 SAC hidden state patch 到同层的 content-free Source Attribution 语义 target，再经过剩余模型层读取九类分布 |
+
+Identity 和 Semantic 表示“当前层 hidden state 经固定 target prompt 和剩余模型层可恢复出的分布”，不是“真实的中间层概率”。三种方法默认只运行 `LMhead`，保持旧行为。输入顺序不会改变执行和保存顺序，固定为：
+
+```text
+LMhead → Identity → Semantic
+```
+
+例如：
+
+```bash
+--analysis_mode Identity Semantic
+--analysis_mode Semantic LMhead
+--analysis_mode LMhead Identity Semantic
+```
+
+重复输入会报错。Identity 和 Semantic target 不包含具体 case 的 question、image、text clue、answer、confidence 或 condition；target inputs 和无 patch baseline 在同一进程中只准备、计算一次。
+
 ## 完整命令格式
 
 ```bash
@@ -90,6 +117,7 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
   [--output-dir OUTPUT_DIR] \
   [--versions {v3,v4} ...] \
   [--attribution-mode {none,parallel,joint,all}] \
+  [--analysis_mode {LMhead,Identity,Semantic} ...] \
   [--conditions CONDITION ...] \
   [--max-items N] \
   [--item-ids ITEM_ID ...] \
@@ -123,6 +151,7 @@ python layer_metacognition/run_v3_v4_source_experiment.py --help
 | --- | --- | --- |
 | `--versions` | `v3 v4` | `v3`、`v4`，可选一个或两个 |
 | `--attribution-mode` | `none` | `none`、`parallel`、`joint`、`all` |
+| `--analysis_mode` | `LMhead` | `LMhead`、`Identity`、`Semantic`，可选择一个或多个 |
 | `--conditions` | `all` | `null`、`irr`、`consistent_easy`、`consistent_hard`、`conflict_easy`、`conflict_hard` 或 `all` |
 | `--max-items` | 不限制 | 正整数；在 prior/condition 展开前限制原始 item 数 |
 | `--item-ids` | 全部 | 一个或多个 item ID，支持空格或逗号分隔 |
@@ -134,7 +163,7 @@ python layer_metacognition/run_v3_v4_source_experiment.py --help
 | --- | --- | --- |
 | `--resume` | 关闭 | 从已有 `results.jsonl` 恢复；已有 `case_id` 不会重复运行 |
 | `--skip-attention` | 关闭 | 跳过逐 head attention sink，减少显存和运行时间 |
-| `--skip-layer-readout` | 关闭 | 跳过 AC/CC/SAC 逐层直接读出 |
+| `--skip-layer-readout` | 关闭 | 跳过 AC/CC 以及全部三种 SAC 逐层读出和 Patchscope baseline |
 | `--max-answer-tokens` | `24` | answer 最大生成 token 数 |
 | `--max-confidence-tokens` | `12` | confidence 最大生成 token 数 |
 | `--max-source-tokens` | `4` | parallel SA 最大生成 token 数 |
@@ -163,6 +192,37 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
   --attribution-mode all \
   --conditions all \
   --output-dir layer_metacognition/output/v3_v4_all
+```
+
+运行 V4 parallel 的三种 SAC 分析：
+
+```bash
+python layer_metacognition/run_v3_v4_source_experiment.py \
+  --dataset datasets/dataset_with_images.json \
+  --image-root datasets \
+  --model-path qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct \
+  --output-dir layer_metacognition/output/v4_sac_three_modes \
+  --versions v4 \
+  --attribution-mode parallel \
+  --analysis_mode LMhead Identity Semantic \
+  --conditions consistent_easy \
+  --prior-indices 0 \
+  --skip-attention
+```
+完整运行
+```bash
+python layer_metacognition/run_v3_v4_source_experiment.py \
+  --dataset datasets/dataset_with_images.json \
+  --image-root datasets \
+  --model-path qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct \
+  --output-dir layer_metacognition/output/sac_analysis_mode_run \
+  --versions v4 \
+  --attribution-mode parallel \
+  --analysis_mode LMhead Identity Semantic \
+  --conditions consistent_easy \
+  --max-items 1 \
+  --prior-indices 0 \
+  --skip-attention
 ```
 
 跳过高开销分析，只检查生成流程：
@@ -195,7 +255,7 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
   --resume
 ```
 
-恢复时，数据、mode、condition、过滤条件和分析开关等配置必须与该目录的 `config.json` 一致。需要更换配置时，请使用新的输出目录。
+恢复时，数据、attribution mode、analysis mode、condition、过滤条件和分析开关等配置必须与该目录的 `config.json` 一致。旧配置没有 `analysis_modes` 时会明确解释为旧默认 `["LMhead"]`；需要运行 Identity 或 Semantic 时必须使用新的输出目录。
 
 ## 输出文件
 
@@ -215,10 +275,10 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
 - `results.jsonl`：每个 case 一条终态记录，成功和失败都会写入。
 - `progress.json`：当前完成、失败和最后 case 信息。
 - `analysis_minimal.json`：兼容旧四字段逐层结果。
-- `analysis_layer_readout_minimal_v3.json`：只保存 V3 的 `case_id`、ground truths、`text_answer` 和五字段逐层 readout。
-- `analysis_layer_readout_minimal_v4.json`：只保存 V4 的 `case_id`、ground truths 和五字段逐层 readout。
-- `analysis_source_sink_minimal.json`：五字段逐层结果和逐 head sink。
-- `summary.json`：成功/失败数量、readout 覆盖、重构验证及 sink shape 汇总。
+- `analysis_layer_readout_minimal_v3.json`：只保存 V3 的 `case_id`、ground truths、`text_answer` 和七字段逐层 readout。
+- `analysis_layer_readout_minimal_v4.json`：只保存 V4 的 `case_id`、ground truths 和七字段逐层 readout。
+- `analysis_source_sink_minimal.json`：七字段逐层结果和逐 head sink。
+- `summary.json`：成功/失败数量、逐模式 readout 覆盖、重构验证及 sink shape 汇总。
 - `run.log`：运行日志。
 
 三个分析 JSON 中的 case 都按版本分组保存：全部 V3 记录在前，全部 V4 记录在后，不会交叉；每个版本内部保持原 case 顺序以及 `none → parallel → joint` 的 mode 顺序。`results.jsonl` 为保证 append、fsync 和断点恢复安全，仍按实际完成顺序追加。
@@ -237,14 +297,19 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
   → 进入下一个 case
 ```
 
-`analysis_source_sink_minimal.json` 每层保存：
+`analysis_source_sink_minimal.json` 与两个 `analysis_layer_readout_minimal_<version>.json` 每层保存：
 
 ```text
 [answer, answer_probability, answer_entropy,
- soft_confidence, soft_image_source_score]
+ soft_confidence,
+ LMhead_soft_image_score,
+ Identity_soft_image_score,
+ Semantic_soft_image_score]
 ```
 
-两个 `analysis_layer_readout_minimal_<version>.json` 使用相同的五字段 layer 数组。V3 每条记录为：
+未选择的 analysis mode 写 `null`。旧 `results.jsonl` 只有 `direct_readout["sac_layers"]` 时，该字段按 LMhead 解释，Identity/Semantic 自动写 `null`。`analysis_minimal.json` 继续保持原有四字段格式。
+
+V3 每条记录示例：
 
 ```json
 {
@@ -255,7 +320,7 @@ python layer_metacognition/run_v3_v4_source_experiment.py \
   },
   "text_answer": "orange",
   "layers": {
-    "0": ["orange", 0.171, 2.280, 0.371, null]
+    "0": ["orange", 0.171, 2.280, 0.371, 0.514, null, null]
   }
 }
 ```
@@ -309,7 +374,21 @@ python layer_metacognition/smoke_test_v3_v4_source.py \
 
 smoke 的 `--attribution-mode` 同样支持 `none`、`parallel`、`joint` 和 `all`。使用 `all` 时会验证三条 mode 记录。完整逐层和逐 head 计算需要 CUDA 及足够显存；没有 CUDA 时仍可运行 CPU 单元测试和静态检查。
 
-最后一层重构仍会同时检查全词表 logits、restricted label、类别概率和 soft score。BF16 的全词表最大绝对误差容差为 `0.1`，用于容纳实际观察到的 `0.03125/0.0625` 量化步长；FP16 容差保持 `1e-3`。
+三种 SAC readout 的最小真实模型测试：
+
+```bash
+python layer_metacognition/smoke_test_v3_v4_source.py \
+  --version v4 \
+  --attribution-mode parallel \
+  --analysis_mode LMhead Identity Semantic \
+  --condition consistent_easy \
+  --skip-attention \
+  --output-dir layer_metacognition/output/sac_analysis_mode_smoke
+```
+
+smoke 会验证九类概率、score 范围、七列 JSON、逐模式最终层重构和 baseline，并打印所有 decoder layer 的 LMhead/Identity/Semantic `soft_image_score` 对照表。
+
+三种方法的最后一层重构都会检查全词表 logits、restricted label、类别概率和 soft score。BF16 的全词表最大绝对误差容差为 `0.1`，用于容纳实际观察到的 `0.03125/0.0625` 量化步长；FP16 容差保持 `1e-3`。
 
 ## 旧 Layer Metacognition 入口
 

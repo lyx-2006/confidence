@@ -39,3 +39,5 @@ generate color pool/output/color_prior_prompt_history.json
 layer_metacognition/output/v3_v4_all
 
 experiment.log
+
+layer_metacognition/output/sac_run_with_attention
