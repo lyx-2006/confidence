@@ -41,3 +41,5 @@ layer_metacognition/output/v3_v4_all
 experiment.log
 
 layer_metacognition/output/sac_run_with_attention
+
+layer_metacognition/valid_experiment/output
