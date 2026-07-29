@@ -9,14 +9,26 @@ observed latency and error belong to one HTTP request.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 
-BASE_URL = "https://uni-api.cstcloud.cn/v1"
 MODEL = "glm5.2"
+
+
+def _load_config() -> dict:
+    """Load API configuration from the project root api_config.json."""
+    config_path = Path(__file__).resolve().parent / "api_config.json"
+    if not config_path.exists():
+        print(f"[DeepSeekTest] missing config file: {config_path}", file=sys.stderr)
+        print("[DeepSeekTest] create api_config.json with 'api_key' and 'base_url' fields", file=sys.stderr)
+        sys.exit(2)
+    with config_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,10 +81,13 @@ def main() -> int:
     if args.timeout <= 0 or args.max_tokens <= 0 or args.repeat <= 0 or args.concurrency <= 0:
         print("[DeepSeekTest] timeout, max-tokens, repeat, and concurrency must be positive", file=sys.stderr)
         return 2
-    api_key = "70753601968e6440544540e4cc55bd0f596bd4cbf8655df21091803a9b32b28f"
-    if not api_key:
-        print("[DeepSeekTest] missing CSTCLOUD_API_KEY or OPENAI_API_KEY", file=sys.stderr)
-        print("[DeepSeekTest] export a fresh key before running; no key is read from source files", file=sys.stderr)
+
+    config = _load_config()
+    api_key = config.get("api_key", "")
+    base_url = config.get("base_url", "")
+
+    if not api_key or not base_url:
+        print("[DeepSeekTest] missing api_key or base_url in api_config.json", file=sys.stderr)
         return 2
 
     try:
@@ -82,12 +97,12 @@ def main() -> int:
         return 2
 
     print(
-        f"[DeepSeekTest] base_url={BASE_URL} model={args.model} "
+        f"[DeepSeekTest] base_url={base_url} model={args.model} "
         f"timeout={args.timeout}s repeat={args.repeat} concurrency={args.concurrency}",
         flush=True,
     )
     client = OpenAI(
-        base_url=BASE_URL,
+        base_url=base_url,
         api_key=api_key,
         timeout=args.timeout,
         max_retries=0,

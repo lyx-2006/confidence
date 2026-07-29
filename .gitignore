@@ -43,3 +43,6 @@ experiment.log
 layer_metacognition/output/sac_run_with_attention
 
 layer_metacognition/valid_experiment/output
+
+# API configuration (contains secrets)
+api_config.json

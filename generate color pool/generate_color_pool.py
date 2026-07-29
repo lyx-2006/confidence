@@ -35,6 +35,18 @@ if str(ROOT_DIR) not in sys.path:
 from confidence_analysis import ConfidenceAnalyzer  # noqa: E402
 
 
+def _load_api_config() -> dict:
+    """Load API configuration from the project root api_config.json."""
+    config_path = ROOT_DIR / "api_config.json"
+    if not config_path.exists():
+        raise RuntimeError(
+            f"Missing config file: {config_path}. "
+            "Create api_config.json with 'api_key' and 'base_url' fields."
+        )
+    with config_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 COLOR_SET_A = [
     "red", "orange", "yellow", "green", "blue", "cyan",
     "purple", "pink", "brown", "white", "black", "gray",
@@ -713,12 +725,16 @@ class DeepSeekClient:
             from openai import OpenAI
         except ImportError as exc:
             raise RuntimeError("DeepSeek generation requires the 'openai' Python package") from exc
-        api_key = "70753601968e6440544540e4cc55bd0f596bd4cbf8655df21091803a9b32b28f"
-        if not api_key:
-            raise RuntimeError("Set CSTCLOUD_API_KEY or OPENAI_API_KEY for DeepSeek generation")
+
+        config = _load_api_config()
+        api_key = config.get("api_key", "")
+        base_url = config.get("base_url", "")
+
+        if not api_key or not base_url:
+            raise RuntimeError("Missing api_key or base_url in api_config.json")
         self.client = OpenAI(
             api_key=api_key,
-            base_url="https://uni-api.cstcloud.cn/v1",
+            base_url=base_url,
             timeout=120.0,
             max_retries=0,
         )
