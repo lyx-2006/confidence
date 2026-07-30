@@ -38,6 +38,8 @@ from layer_metacognition.analyze_main_results import (  # noqa: E402
     write_minimal_analysis,
 )
 from layer_metacognition.analyze_source_sink_results import (  # noqa: E402
+    COMPACT_LAYER_COLUMNS,
+    COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL,
     build_source_sink_minimal,
     build_source_sink_summary,
     group_records_by_version,
@@ -47,12 +49,18 @@ from layer_metacognition.analyze_source_sink_results import (  # noqa: E402
     write_source_sink_minimal,
 )
 from layer_metacognition.hidden_state_store import (  # noqa: E402
+    TargetLayerHiddenStateStore,
     append_jsonl,
     atomic_write_json,
     load_jsonl,
 )
 from layer_metacognition.model_adapter import resolve_language_modules  # noqa: E402
-from layer_metacognition.source_patchscope import SourcePatchscopeDecoder  # noqa: E402
+from layer_metacognition.source_patchscope import (  # noqa: E402
+    ANSWER_PATCHSCOPE_SHUFFLE_SEEDS,
+    ANSWER_PATCHSCOPE_VARIANTS,
+    AnswerPatchscopeDecoder,
+    SourcePatchscopeDecoder,
+)
 from layer_metacognition.v3_v4_source_runner import (  # noqa: E402
     V3V4SourceRunner,
     reconstruction_tolerance,
@@ -64,6 +72,7 @@ DEFAULT_DATASET_PATH = ROOT / "datasets" / "dataset_with_images.json"
 DEFAULT_OUTPUT_DIR = ROOT / "layer_metacognition" / "output" / "v3_v4_source"
 ATTRIBUTION_MODES = ("none", "parallel", "joint")
 ANALYSIS_MODE_ORDER = ("LMhead", "Identity", "Semantic")
+FORMAT_VERSION = 2
 
 
 def utc_now() -> str:
@@ -97,6 +106,76 @@ def normalize_analysis_modes(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(mode for mode in ANALYSIS_MODE_ORDER if mode in selected)
 
 
+def parse_save_hidden_state(value: str) -> int | None:
+    """Parse ``none`` or one non-negative, zero-based decoder layer."""
+    normalized = str(value).strip().lower()
+    if normalized == "none":
+        return None
+    try:
+        layer_index = int(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "--save_hidden_state must be 'none' or a non-negative integer"
+        ) from exc
+    if layer_index < 0:
+        raise argparse.ArgumentTypeError(
+            "--save_hidden_state must be 'none' or a non-negative integer"
+        )
+    return layer_index
+
+
+def normalize_save_hidden_states(
+    values: Iterable[int | None],
+) -> tuple[int, ...]:
+    raw = list(values)
+    if any(value is None for value in raw):
+        if len(raw) != 1:
+            raise ValueError(
+                "--save_hidden_state cannot combine 'none' with layer indices"
+            )
+        return ()
+    layers = [int(value) for value in raw if value is not None]
+    duplicates = sorted({value for value in layers if layers.count(value) > 1})
+    if duplicates:
+        raise ValueError(
+            "--save_hidden_state contains duplicate layer(s): "
+            + ", ".join(str(value) for value in duplicates)
+        )
+    return tuple(sorted(layers))
+
+
+def serialize_save_hidden_states(layer_indices: tuple[int, ...]) -> str | int | list[int]:
+    if not layer_indices:
+        return "none"
+    if len(layer_indices) == 1:
+        return layer_indices[0]
+    return list(layer_indices)
+
+
+def validate_save_hidden_state(
+    layer_indices: tuple[int, ...],
+    *,
+    skip_layer_readout: bool,
+    num_hidden_layers: int | None = None,
+) -> None:
+    if not layer_indices:
+        return
+    if skip_layer_readout:
+        raise ValueError(
+            "--save_hidden_state cannot be used with --skip-layer-readout"
+        )
+    invalid = (
+        []
+        if num_hidden_layers is None
+        else [value for value in layer_indices if value >= num_hidden_layers]
+    )
+    if invalid:
+        raise ValueError(
+            "--save_hidden_state layer(s) "
+            f"{invalid} outside [0, {num_hidden_layers - 1}]"
+        )
+
+
 def saved_configuration_for_comparison(
     saved: dict[str, Any],
 ) -> tuple[dict[str, Any], bool]:
@@ -105,7 +184,18 @@ def saved_configuration_for_comparison(
     missing = "analysis_modes" not in normalized
     if missing:
         normalized["analysis_modes"] = ["LMhead"]
+    normalized.setdefault("save_hidden_state", "none")
     return normalized, missing
+
+
+def validate_resume_format(saved: dict[str, Any]) -> None:
+    """Reject outputs that cannot contain Semantic Answer Patchscope rows."""
+    if saved.get("format_version") != FORMAT_VERSION:
+        raise ValueError(
+            "Output directory uses the legacy layer-readout format and cannot "
+            f"be resumed with format version {FORMAT_VERSION}; choose a new "
+            "--output-dir and rerun"
+        )
 
 
 def share_initial_cache(
@@ -324,6 +414,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prior-indices", nargs="+", type=int)
     parser.add_argument("--skip-attention", action="store_true")
     parser.add_argument("--skip-layer-readout", action="store_true")
+    parser.add_argument(
+        "--answer_val",
+        action="store_true",
+        help=(
+            "Run original plus three deterministic shuffled Semantic Answer "
+            "Patchscope target orders and summarize pairwise robustness."
+        ),
+    )
+    parser.add_argument(
+        "--save_hidden_state",
+        type=parse_save_hidden_state,
+        nargs="+",
+        default=[None],
+        metavar="none|LAYER",
+        help=(
+            "Save one or more zero-based decoder layers' AC and PANL hidden "
+            "states as CPU FP16 shards; default: none."
+        ),
+    )
     parser.add_argument("--max-answer-tokens", type=int, default=24)
     parser.add_argument("--max-confidence-tokens", type=int, default=12)
     parser.add_argument("--max-source-tokens", type=int, default=4)
@@ -336,11 +445,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         versions = _canonical_values(args.versions, ("v3", "v4"), "version")
         analysis_modes = normalize_analysis_modes(args.analysis_mode)
+        save_hidden_states = normalize_save_hidden_states(args.save_hidden_state)
         conditions = _canonical_values(args.conditions, CONDITIONS, "condition")
         item_ids = _parse_string_selection(args.item_ids)
         prior_indices = set(args.prior_indices) if args.prior_indices else None
         if prior_indices is not None and any(index < 0 for index in prior_indices):
             raise ValueError("--prior-indices must be non-negative")
+        validate_save_hidden_state(
+            save_hidden_states,
+            skip_layer_readout=args.skip_layer_readout,
+        )
         for name in (
             "max_items",
             "max_answer_tokens",
@@ -401,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
         if not cases:
             raise ValueError("No cases remain after item/prior filtering")
         configuration = {
-            "format_version": 1,
+            "format_version": FORMAT_VERSION,
             "model_path": str(model_path),
             "dataset": str(dataset),
             "image_root": str(image_root) if image_root else None,
@@ -417,6 +531,8 @@ def main(argv: list[str] | None = None) -> int:
             "prior_indices": sorted(prior_indices) if prior_indices else None,
             "skip_attention": args.skip_attention,
             "skip_layer_readout": args.skip_layer_readout,
+            "answer_val": args.answer_val,
+            "save_hidden_state": serialize_save_hidden_states(save_hidden_states),
             "max_answer_tokens": args.max_answer_tokens,
             "max_confidence_tokens": args.max_confidence_tokens,
             "max_source_tokens": args.max_source_tokens,
@@ -424,6 +540,28 @@ def main(argv: list[str] | None = None) -> int:
             "source_attribution_classes": SOURCE_ATTRIBUTION_CLASSES,
             "source_attribution_midpoints": SOURCE_ATTRIBUTION_MIDPOINTS,
             "source_attribution_class_text": SOURCE_ATTRIBUTION_CLASS_TEXT,
+            "compact_layer_columns": list(
+                COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL
+                if args.answer_val
+                else COMPACT_LAYER_COLUMNS
+            ),
+            "answer_patchscope": {
+                "analysis_mode": "Semantic",
+                "target_context": "candidate_answers_only",
+                "wire_format": "**Answer**:<ANSWER>",
+                "probability_definition": "restricted_candidate_softmax_top1",
+                "validation_enabled": args.answer_val,
+                "validation_variants": (
+                    list(ANSWER_PATCHSCOPE_VARIANTS)
+                    if args.answer_val
+                    else ["original"]
+                ),
+                "shuffle_seeds": (
+                    dict(ANSWER_PATCHSCOPE_SHUFFLE_SEEDS)
+                    if args.answer_val
+                    else {}
+                ),
+            },
             "reconstruction_tolerances": {
                 "bfloat16": reconstruction_tolerance("bfloat16"),
                 "float16": reconstruction_tolerance("float16"),
@@ -432,6 +570,7 @@ def main(argv: list[str] | None = None) -> int:
         }
         if config_path.exists():
             saved = json.loads(config_path.read_text(encoding="utf-8"))
+            validate_resume_format(saved)
             comparable_saved, missing_analysis_modes = (
                 saved_configuration_for_comparison(saved)
             )
@@ -467,6 +606,11 @@ def main(argv: list[str] | None = None) -> int:
         extended_class = build_extended_inference_class(runtime.QwenVLInference)
         inference = extended_class(model_path=str(model_path))
         modules = resolve_language_modules(inference.model)
+        validate_save_hidden_state(
+            save_hidden_states,
+            skip_layer_readout=args.skip_layer_readout,
+            num_hidden_layers=modules.num_hidden_layers,
+        )
         saved_config = json.loads(config_path.read_text(encoding="utf-8"))
         text_config = getattr(
             inference.model.config,
@@ -491,6 +635,14 @@ def main(argv: list[str] | None = None) -> int:
             max_new_tokens=args.max_source_tokens,
         )
         joint = JointAnswerSourceGenerator(inference)
+        answer_patchscope_decoder = (
+            None
+            if args.skip_layer_readout
+            else AnswerPatchscopeDecoder(
+                inference=inference,
+                modules=modules,
+            )
+        )
         patchscope_decoder = None
         if (
             not args.skip_layer_readout
@@ -518,6 +670,9 @@ def main(argv: list[str] | None = None) -> int:
                 attribution_mode=mode,
                 analysis_modes=list(analysis_modes),
                 patchscope_decoder=patchscope_decoder,
+                answer_patchscope_decoder=answer_patchscope_decoder,
+                answer_val=args.answer_val,
+                save_hidden_state=list(save_hidden_states),
                 conditions=conditions,
                 skip_attention=args.skip_attention,
                 skip_layer_readout=args.skip_layer_readout,
@@ -527,10 +682,37 @@ def main(argv: list[str] | None = None) -> int:
             runners.append(runner)
         share_initial_cache(runners, existing)
         atomic_write_json(progress_path, _progress(existing, status="running"))
+        hidden_state_store = (
+            None
+            if not save_hidden_states
+            else TargetLayerHiddenStateStore(
+                output_dir=output_dir,
+                layer_index=list(save_hidden_states),
+            )
+        )
 
         def commit(record: dict[str, Any]) -> None:
-            append_jsonl(results_path, record, fsync=True)
+            target_hidden_state = record.pop("_target_hidden_state", None)
             existing.append(record)
+            if hidden_state_store is not None and record.get("status") == "completed":
+                if target_hidden_state is None:
+                    raise RuntimeError(
+                        "Completed case is missing requested AC/PANL hidden state"
+                    )
+                if hidden_state_store.add(
+                    case_id=str(record["case_id"]),
+                    hidden_states=target_hidden_state,
+                    positions=record["token_positions"],
+                    stages=record["token_position_stages"],
+                    result=record,
+                ):
+                    hidden_state_store.flush(results_path)
+            else:
+                if target_hidden_state is not None:
+                    raise RuntimeError(
+                        "Unexpected target hidden state without an active store"
+                    )
+                append_jsonl(results_path, record, fsync=True)
             atomic_write_json(progress_path, _progress(existing, status="running"))
 
         counts = run_case_groups(
@@ -542,6 +724,8 @@ def main(argv: list[str] | None = None) -> int:
             commit=commit,
             after_group=lambda: _write_analyses(output_dir, existing),
         )
+        if hidden_state_store is not None:
+            hidden_state_store.flush(results_path)
         _write_analyses(output_dir, existing)
         atomic_write_json(progress_path, _progress(existing, status="complete"))
         print(
@@ -550,6 +734,11 @@ def main(argv: list[str] | None = None) -> int:
                     "status": "complete",
                     "records": len(existing),
                     "call_counts": counts,
+                    "answer_patchscope_call_counts": (
+                        dict(answer_patchscope_decoder.call_counts)
+                        if answer_patchscope_decoder is not None
+                        else {}
+                    ),
                     "patchscope_call_counts": (
                         dict(patchscope_decoder.call_counts)
                         if patchscope_decoder is not None
@@ -563,6 +752,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except KeyboardInterrupt:
         try:
+            if "hidden_state_store" in locals() and hidden_state_store is not None:
+                hidden_state_store.flush(results_path)
             records = load_jsonl(results_path, repair_trailing=True)
             _write_analyses(output_dir, records)
             atomic_write_json(progress_path, _progress(records, status="interrupted"))
@@ -573,6 +764,8 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         logger.exception("experiment_failed")
         try:
+            if "hidden_state_store" in locals() and hidden_state_store is not None:
+                hidden_state_store.flush(results_path)
             records = load_jsonl(results_path, repair_trailing=True)
             atomic_write_json(progress_path, _progress(records, status="failed"))
         except Exception:

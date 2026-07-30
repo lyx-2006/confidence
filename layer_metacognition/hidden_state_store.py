@@ -218,3 +218,224 @@ class HiddenStateStore:
         payload = _torch_load(self.output_dir / reference["shard_path"])
         tensor = payload["hidden_states"][int(reference["offset"])].clone()
         return tensor, [int(value) for value in payload["layer_indices"]]
+
+
+class TargetLayerHiddenStateStore:
+    """Atomically store selected decoder layers' AC/PANL vectors in shards."""
+
+    POSITION_NAMES = ("ac", "panl")
+    FORMAT_VERSION = 1
+    HIDDEN_STATE_DEFINITION = "decoder_block_output_pre_final_norm"
+
+    def __init__(
+        self,
+        output_dir: str | Path,
+        layer_index: int | list[int] | tuple[int, ...],
+        shard_size: int = 64,
+    ):
+        raw_layers = (
+            [layer_index] if isinstance(layer_index, int) else list(layer_index)
+        )
+        if not raw_layers or any(value < 0 for value in raw_layers):
+            raise ValueError("layer_index must contain non-negative layers")
+        if len(set(raw_layers)) != len(raw_layers):
+            raise ValueError("layer_index must not contain duplicates")
+        if shard_size < 1:
+            raise ValueError("shard_size must be positive")
+        self.output_dir = Path(output_dir)
+        self.layer_indices = tuple(int(value) for value in raw_layers)
+        self.layer_index = (
+            self.layer_indices[0] if len(self.layer_indices) == 1 else None
+        )
+        self.hidden_root = self.output_dir / "hidden_states"
+        layer_label = "_".join(str(value) for value in self.layer_indices)
+        directory_name = (
+            f"target_layer_{layer_label}"
+            if len(self.layer_indices) == 1
+            else f"target_layers_{layer_label}"
+        )
+        self.hidden_dir = self.hidden_root / directory_name
+        self.hidden_dir.mkdir(parents=True, exist_ok=True)
+        self.index_path = self.hidden_root / "index.json"
+        self.shard_size = int(shard_size)
+        self._pending: list[
+            tuple[str, torch.Tensor, dict[str, int], dict[str, str], dict[str, Any]]
+        ] = []
+        indices = [
+            int(path.stem.split("_")[-1])
+            for path in self.hidden_dir.glob("shard_*.pt")
+        ]
+        self._next_shard = max(indices, default=-1) + 1
+
+    @property
+    def pending_count(self) -> int:
+        return len(self._pending)
+
+    def add(
+        self,
+        case_id: str,
+        hidden_states: torch.Tensor,
+        positions: dict[str, int],
+        stages: dict[str, str],
+        result: dict[str, Any],
+    ) -> bool:
+        tensor = (
+            hidden_states.detach()
+            .to(device="cpu", dtype=torch.float16)
+            .contiguous()
+        )
+        valid_shape = (
+            tensor.ndim == 2
+            and len(self.layer_indices) == 1
+            and int(tensor.shape[0]) == len(self.POSITION_NAMES)
+        ) or (
+            tensor.ndim == 3
+            and len(self.layer_indices) > 1
+            and int(tensor.shape[0]) == len(self.layer_indices)
+            and int(tensor.shape[1]) == len(self.POSITION_NAMES)
+        )
+        if not valid_shape:
+            expected = (
+                "[2, hidden]"
+                if len(self.layer_indices) == 1
+                else f"[{len(self.layer_indices)}, 2, hidden]"
+            )
+            raise ValueError(
+                f"Target-layer hidden state must have shape {expected}, "
+                f"got {tuple(tensor.shape)}"
+            )
+        normalized_positions = {
+            name: int(positions[name]) for name in self.POSITION_NAMES
+        }
+        normalized_stages = {
+            name: str(stages[name]) for name in self.POSITION_NAMES
+        }
+        if self._pending and int(self._pending[0][1].shape[-1]) != int(tensor.shape[-1]):
+            raise ValueError("All cases in a shard must use the same hidden size")
+        self._pending.append(
+            (
+                str(case_id),
+                tensor,
+                normalized_positions,
+                normalized_stages,
+                result,
+            )
+        )
+        return len(self._pending) >= self.shard_size
+
+    def flush(self, results_path: str | Path) -> list[str]:
+        if not self._pending:
+            return []
+        shard_name = f"shard_{self._next_shard:05d}.pt"
+        relative_shard = (
+            Path("hidden_states")
+            / self.hidden_dir.name
+            / shard_name
+        )
+        shard_path = self.output_dir / relative_shard
+        case_ids = [entry[0] for entry in self._pending]
+        tensors = torch.stack([entry[1] for entry in self._pending], dim=0)
+        positions = [entry[2] for entry in self._pending]
+        stages = [entry[3] for entry in self._pending]
+        payload = {
+            "format_version": self.FORMAT_VERSION,
+            "case_ids": case_ids,
+            "layer_indices": list(self.layer_indices),
+            "position_names": list(self.POSITION_NAMES),
+            "hidden_states": tensors,
+            "positions": positions,
+            "stages": stages,
+            "dtype": "float16",
+            "hidden_size": int(tensors.shape[-1]),
+            "hidden_state_definition": self.HIDDEN_STATE_DEFINITION,
+        }
+        if self.layer_index is not None:
+            payload["layer_index"] = self.layer_index
+        _atomic_torch_save(shard_path, payload)
+        for offset, entry in enumerate(self._pending):
+            _case_id, _tensor, case_positions, case_stages, result = entry
+            result["hidden_state_reference"] = {
+                "format_version": self.FORMAT_VERSION,
+                "layer_indices": list(self.layer_indices),
+                "position_names": list(self.POSITION_NAMES),
+                "shard_path": str(relative_shard),
+                "offset": offset,
+                "positions": case_positions,
+                "stages": case_stages,
+                "dtype": "float16",
+                "hidden_size": int(tensors.shape[-1]),
+                "hidden_state_definition": self.HIDDEN_STATE_DEFINITION,
+            }
+            if self.layer_index is not None:
+                result["hidden_state_reference"]["layer_index"] = self.layer_index
+            append_jsonl(results_path, result, fsync=False)
+        with Path(results_path).open("a", encoding="utf-8") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        committed = list(case_ids)
+        self._pending.clear()
+        self._next_shard += 1
+        completed_ids = {
+            str(record["case_id"])
+            for record in load_jsonl(results_path, repair_trailing=True)
+            if record.get("status") == "completed"
+        }
+        self.rebuild_index(completed_ids)
+        return committed
+
+    def rebuild_index(self, completed_case_ids: set[str]) -> dict[str, Any]:
+        cases: dict[str, Any] = {}
+        for shard_path in sorted(self.hidden_dir.glob("shard_*.pt")):
+            payload = _torch_load(shard_path)
+            payload_layers = tuple(
+                int(value)
+                for value in payload.get(
+                    "layer_indices",
+                    [payload.get("layer_index")],
+                )
+            )
+            if payload_layers != self.layer_indices:
+                raise ValueError(f"Unexpected layer indices in {shard_path}")
+            relative_shard = shard_path.relative_to(self.output_dir)
+            case_ids = [str(value) for value in payload["case_ids"]]
+            positions = payload["positions"]
+            stages = payload["stages"]
+            tensors = payload["hidden_states"]
+            for offset, case_id in enumerate(case_ids):
+                if case_id not in completed_case_ids:
+                    continue
+                cases[case_id] = {
+                    "case_id": case_id,
+                    "layer_indices": list(self.layer_indices),
+                    "position_names": list(self.POSITION_NAMES),
+                    "positions": positions[offset],
+                    "stages": stages[offset],
+                    "dtype": "float16",
+                    "hidden_size": int(tensors.shape[-1]),
+                    "hidden_state_definition": self.HIDDEN_STATE_DEFINITION,
+                    "shard_path": str(relative_shard),
+                    "offset": offset,
+                }
+                if self.layer_index is not None:
+                    cases[case_id]["layer_index"] = self.layer_index
+        index = {
+            "format_version": self.FORMAT_VERSION,
+            "layer_indices": list(self.layer_indices),
+            "position_names": list(self.POSITION_NAMES),
+            "cases": cases,
+        }
+        if self.layer_index is not None:
+            index["layer_index"] = self.layer_index
+        atomic_write_json(self.index_path, index)
+        return index
+
+    def read_case(self, case_id: str) -> tuple[torch.Tensor, dict[str, Any]]:
+        if not self.index_path.exists():
+            raise KeyError(f"Hidden-state index does not exist: {self.index_path}")
+        index = json.loads(self.index_path.read_text(encoding="utf-8"))
+        reference = index.get("cases", {}).get(case_id)
+        if reference is None:
+            raise KeyError(f"No hidden state stored for case {case_id!r}")
+        payload = _torch_load(self.output_dir / reference["shard_path"])
+        tensor = payload["hidden_states"][int(reference["offset"])].clone()
+        return tensor, dict(reference)

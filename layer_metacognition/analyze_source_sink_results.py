@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create compact seven-field layer readouts and per-head source sinks."""
+"""Create compact six-field layer readouts and per-head source sinks."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import sys
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,33 @@ from layer_metacognition.hidden_state_store import (  # noqa: E402
 )
 from confidence_test.answer_metrics import normalize_answer  # noqa: E402
 from confidence_test.dataset_utils import iter_dataset_items  # noqa: E402
+
+
+COMPACT_LAYER_COLUMNS = (
+    "LMhead_answer",
+    "LMhead_prob",
+    "patchscope_answer",
+    "patchscope_prob",
+    "confidence",
+    "semantic_patchscope_SA",
+)
+ANSWER_VALIDATION_COMPACT_COLUMNS = (
+    "shuffle_1_answer",
+    "shuffle_1_prob",
+    "shuffle_2_answer",
+    "shuffle_2_prob",
+    "shuffle_3_answer",
+    "shuffle_3_prob",
+)
+COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL = (
+    COMPACT_LAYER_COLUMNS + ANSWER_VALIDATION_COMPACT_COLUMNS
+)
+ANSWER_VALIDATION_VARIANTS = (
+    "original",
+    "shuffle_1",
+    "shuffle_2",
+    "shuffle_3",
+)
 
 
 def load_case_metadata(dataset: str | Path) -> dict[str, dict[str, Any]]:
@@ -137,14 +165,47 @@ def build_source_sink_minimal(
     for record in group_records_by_version(records):
         readout = record.get("direct_readout") or {}
         answers = _layer_map(readout.get("ac_layers"))
+        raw_answer_variants = readout.get(
+            "answer_patchscope_layers_by_variant"
+        )
+        answer_variants = (
+            {
+                variant: _layer_map(raw_answer_variants.get(variant))
+                for variant in ANSWER_VALIDATION_VARIANTS
+            }
+            if isinstance(raw_answer_variants, dict)
+            else {}
+        )
+        has_answer_validation = (
+            isinstance(raw_answer_variants, dict)
+            and all(
+                variant in raw_answer_variants
+                for variant in ("shuffle_1", "shuffle_2", "shuffle_3")
+            )
+        )
+        patchscope_answers = _layer_map(
+            readout.get("answer_patchscope_layers")
+        )
+        if not patchscope_answers:
+            patchscope_answers = answer_variants.get("original", {})
         confidences = _layer_map(readout.get("cc_layers"))
         sources_by_mode = _source_layer_maps(readout)
         layers: dict[str, list[Any]] = {}
-        source_layers = set().union(
-            *(set(values) for values in sources_by_mode.values())
-        )
-        for layer_index in sorted(set(answers) | set(confidences) | source_layers):
+        semantic_sources = sources_by_mode["Semantic"]
+        for layer_index in sorted(
+            set(answers)
+            | set(patchscope_answers)
+            | set(confidences)
+            | set(semantic_sources)
+            | set().union(
+                *(
+                    set(answer_variants.get(variant, {}))
+                    for variant in ("shuffle_1", "shuffle_2", "shuffle_3")
+                )
+            )
+        ):
             answer = answers.get(layer_index) or {}
+            patchscope_answer = patchscope_answers.get(layer_index) or {}
             confidence = confidences.get(layer_index) or {}
             values: list[Any] = [
                 answer.get("predicted_answer")
@@ -155,23 +216,54 @@ def build_source_sink_minimal(
                     minimum=0.0,
                     maximum=1.0,
                 ),
-                _finite_or_none(answer.get("answer_entropy"), minimum=0.0),
+                patchscope_answer.get("predicted_answer")
+                if isinstance(
+                    patchscope_answer.get("predicted_answer"),
+                    str,
+                )
+                else None,
+                _finite_or_none(
+                    patchscope_answer.get("predicted_answer_probability"),
+                    minimum=0.0,
+                    maximum=1.0,
+                ),
                 _finite_or_none(
                     confidence.get("soft_confidence"),
                     minimum=0.0,
                     maximum=1.0,
                 ),
-                *[
-                    _finite_or_none(
-                        (sources_by_mode[mode].get(layer_index) or {}).get(
-                            "soft_image_score"
-                        ),
-                        minimum=0.0,
-                        maximum=1.0,
-                    )
-                    for mode in ("LMhead", "Identity", "Semantic")
-                ],
+                _finite_or_none(
+                    (semantic_sources.get(layer_index) or {}).get(
+                        "soft_image_score"
+                    ),
+                    minimum=0.0,
+                    maximum=1.0,
+                ),
             ]
+            if has_answer_validation:
+                for variant in ("shuffle_1", "shuffle_2", "shuffle_3"):
+                    variant_answer = (
+                        answer_variants.get(variant, {}).get(layer_index) or {}
+                    )
+                    values.extend(
+                        [
+                            (
+                                variant_answer.get("predicted_answer")
+                                if isinstance(
+                                    variant_answer.get("predicted_answer"),
+                                    str,
+                                )
+                                else None
+                            ),
+                            _finite_or_none(
+                                variant_answer.get(
+                                    "predicted_answer_probability"
+                                ),
+                                minimum=0.0,
+                                maximum=1.0,
+                            ),
+                        ]
+                    )
             if any(value is None for value in values):
                 statistics["invalid_layer_values"] += 1
             layers[str(layer_index)] = values
@@ -231,10 +323,10 @@ def build_source_sink_minimal(
 
 def _compact_layer_values(values: list[Any]) -> str:
     encoded: list[str] = []
-    for index, value in enumerate(values):
+    for value in values:
         if value is None:
             encoded.append("null")
-        elif index == 0:
+        elif isinstance(value, str):
             encoded.append(json.dumps(value, ensure_ascii=False))
         else:
             encoded.append(f"{float(value):.3f}")
@@ -301,7 +393,7 @@ def write_layer_readout_minimal(
     path: str | Path,
     analysis: list[dict[str, Any]],
 ) -> None:
-    """Write only case IDs and seven-field per-layer readouts, without sinks."""
+    """Write only case IDs and six-field per-layer readouts, without sinks."""
     lines = ["["]
     for case_index, record in enumerate(analysis):
         lines.extend(
@@ -328,13 +420,180 @@ def write_layer_readout_minimal(
     json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def _new_pair_accumulator() -> dict[str, float | int]:
+    return {
+        "value_count": 0,
+        "absolute_error_sum": 0.0,
+        "x_sum": 0.0,
+        "y_sum": 0.0,
+        "x_square_sum": 0.0,
+        "y_square_sum": 0.0,
+        "xy_sum": 0.0,
+    }
+
+
+def _update_pair_accumulator(
+    accumulator: dict[str, float | int],
+    left: float,
+    right: float,
+) -> None:
+    accumulator["value_count"] += 1
+    accumulator["absolute_error_sum"] += abs(left - right)
+    accumulator["x_sum"] += left
+    accumulator["y_sum"] += right
+    accumulator["x_square_sum"] += left * left
+    accumulator["y_square_sum"] += right * right
+    accumulator["xy_sum"] += left * right
+
+
+def _finalize_pair_accumulator(
+    accumulator: dict[str, float | int],
+) -> dict[str, Any]:
+    count = int(accumulator["value_count"])
+    if count == 0:
+        return {"value_count": 0, "mae": None, "pearson_r": None}
+    x_sum = float(accumulator["x_sum"])
+    y_sum = float(accumulator["y_sum"])
+    numerator = count * float(accumulator["xy_sum"]) - x_sum * y_sum
+    x_term = count * float(accumulator["x_square_sum"]) - x_sum * x_sum
+    y_term = count * float(accumulator["y_square_sum"]) - y_sum * y_sum
+    denominator = math.sqrt(max(x_term, 0.0) * max(y_term, 0.0))
+    pearson = (
+        None
+        if denominator == 0.0
+        else max(-1.0, min(1.0, numerator / denominator))
+    )
+    return {
+        "value_count": count,
+        "mae": round(float(accumulator["absolute_error_sum"]) / count, 6),
+        "pearson_r": None if pearson is None else round(float(pearson), 6),
+    }
+
+
+def build_answer_validation_summary(
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate pairwise order robustness over aligned answer probabilities."""
+    pairs = list(combinations(ANSWER_VALIDATION_VARIANTS, 2))
+    overall = {
+        f"{left}__vs__{right}": _new_pair_accumulator()
+        for left, right in pairs
+    }
+    layers: dict[str, dict[str, dict[str, float | int]]] = {}
+    records_with_all_variants = 0
+    final_validation = {
+        variant: {"passed": 0, "failed": 0, "not_run": 0}
+        for variant in ANSWER_VALIDATION_VARIANTS
+    }
+    for record in records:
+        direct = record.get("direct_readout") or {}
+        raw_variants = direct.get("answer_patchscope_layers_by_variant")
+        if not isinstance(raw_variants, dict):
+            continue
+        variant_maps = {
+            variant: _layer_map(raw_variants.get(variant))
+            for variant in ANSWER_VALIDATION_VARIANTS
+        }
+        if all(variant_maps[variant] for variant in ANSWER_VALIDATION_VARIANTS):
+            records_with_all_variants += 1
+        validation = (record.get("validation") or {}).get(
+            "answer_patchscope_by_variant"
+        )
+        for variant in ANSWER_VALIDATION_VARIANTS:
+            check = (
+                validation.get(variant)
+                if isinstance(validation, dict)
+                else None
+            )
+            if check is None:
+                final_validation[variant]["not_run"] += 1
+            elif check.get("passed"):
+                final_validation[variant]["passed"] += 1
+            else:
+                final_validation[variant]["failed"] += 1
+        for left, right in pairs:
+            pair_name = f"{left}__vs__{right}"
+            shared_layers = sorted(
+                set(variant_maps[left]) & set(variant_maps[right])
+            )
+            for layer_index in shared_layers:
+                left_probs = variant_maps[left][layer_index].get(
+                    "answer_class_probabilities"
+                )
+                right_probs = variant_maps[right][layer_index].get(
+                    "answer_class_probabilities"
+                )
+                if (
+                    not isinstance(left_probs, dict)
+                    or not isinstance(right_probs, dict)
+                    or set(left_probs) != set(right_probs)
+                ):
+                    continue
+                layer_accumulators = layers.setdefault(
+                    str(layer_index),
+                    {
+                        name: _new_pair_accumulator()
+                        for name in overall
+                    },
+                )
+                for label in sorted(left_probs):
+                    left_value = _finite_or_none(
+                        left_probs[label],
+                        minimum=0.0,
+                        maximum=1.0,
+                    )
+                    right_value = _finite_or_none(
+                        right_probs[label],
+                        minimum=0.0,
+                        maximum=1.0,
+                    )
+                    if left_value is None or right_value is None:
+                        continue
+                    _update_pair_accumulator(
+                        overall[pair_name],
+                        left_value,
+                        right_value,
+                    )
+                    _update_pair_accumulator(
+                        layer_accumulators[pair_name],
+                        left_value,
+                        right_value,
+                    )
+    return {
+        "enabled": records_with_all_variants > 0,
+        "variants": list(ANSWER_VALIDATION_VARIANTS),
+        "comparison_unit": "canonical_answer_class_probability",
+        "records_with_all_variants": records_with_all_variants,
+        "final_layer_validation": final_validation,
+        "overall": {
+            name: _finalize_pair_accumulator(accumulator)
+            for name, accumulator in overall.items()
+        },
+        "layers": {
+            layer: {
+                name: _finalize_pair_accumulator(accumulator)
+                for name, accumulator in pair_values.items()
+            }
+            for layer, pair_values in sorted(
+                layers.items(),
+                key=lambda item: int(item[0]),
+            )
+        },
+    }
+
+
 def build_source_sink_summary(
     records: list[dict[str, Any]],
     analysis: list[dict[str, Any]],
     statistics: dict[str, int],
 ) -> dict[str, Any]:
     statuses: dict[str, int] = {}
-    readout_coverage = {"ac": 0, "cc": 0, "sac": 0}
+    readout_coverage = {
+        "ac": 0,
+        "answer_patchscope": 0,
+        "cc": 0,
+        "sac": 0,
+    }
     validation = {"passed": 0, "failed": 0, "not_run": 0}
     sac_coverage_by_mode = {
         "LMhead": 0,
@@ -359,7 +618,12 @@ def build_source_sink_summary(
             if layers:
                 sac_coverage_by_mode[mode] += 1
         record_validation = record.get("validation") or {}
-        for key in ("ac_last_layer", "cc_last_layer", "sac_last_layer"):
+        for key in (
+            "ac_last_layer",
+            "answer_patchscope_last_layer",
+            "cc_last_layer",
+            "sac_last_layer",
+        ):
             check = record_validation.get(key)
             if check is None:
                 validation["not_run"] += 1
@@ -400,6 +664,7 @@ def build_source_sink_summary(
             [min(source_scores), max(source_scores)] if source_scores else None
         ),
         "sink_layer_arrays": sink_arrays,
+        "answer_validation": build_answer_validation_summary(records),
         **statistics,
     }
 

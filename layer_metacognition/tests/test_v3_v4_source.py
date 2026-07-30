@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import tempfile
@@ -31,6 +32,9 @@ from layer_metacognition.conversation_builder import (
     render_continued_assistant,
 )
 from layer_metacognition.analyze_source_sink_results import (
+    COMPACT_LAYER_COLUMNS,
+    COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL,
+    build_answer_validation_summary,
     build_source_sink_minimal,
     build_source_sink_summary,
     group_records_by_version,
@@ -43,26 +47,42 @@ from layer_metacognition.layer_stage_analyzer import (
     source_layer_readout,
     validate_restricted_reconstruction,
 )
-from layer_metacognition.direct_readout import project_hidden_to_vocab
+from layer_metacognition.hidden_state_store import (
+    TargetLayerHiddenStateStore,
+    load_jsonl,
+)
+from layer_metacognition.direct_readout import (
+    build_first_token_collision_report,
+    project_hidden_to_vocab,
+)
 from layer_metacognition.model_adapter import (
     LanguageModules,
     run_patched_logits_forward,
 )
 from layer_metacognition.run_v3_v4_source_experiment import (
+    FORMAT_VERSION,
     build_parser,
     expand_attribution_modes,
     normalize_analysis_modes,
+    normalize_save_hidden_states,
+    parse_save_hidden_state,
     run_case_groups,
     saved_configuration_for_comparison,
     share_initial_cache,
+    validate_save_hidden_state,
+    validate_resume_format,
 )
 from layer_metacognition.source_patchscope import (
+    ANSWER_PATCHSCOPE_VARIANTS,
+    AnswerPatchscopeDecoder,
     PreparedSourceTarget,
     SourcePatchscopeDecoder,
+    answer_candidate_orders,
 )
 from layer_metacognition.source_patchscope_prompts import (
     IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL,
     IDENTITY_PATCHSCOPE_USER_PROMPT,
+    SEMANTIC_ANSWER_PATCHSCOPE_USER_PROMPT,
     SEMANTIC_PATCHSCOPE_USER_PROMPT,
 )
 from layer_metacognition.token_positions import (
@@ -74,6 +94,7 @@ from layer_metacognition.token_positions import (
 from layer_metacognition.token_spans import build_rendered_alignment
 from layer_metacognition.v3_v4_source_runner import (
     V3V4SourceRunner,
+    capture_target_layer_hidden_states,
     reconstruction_tolerance,
 )
 
@@ -356,6 +377,109 @@ class RealQwenTokenizerTests(unittest.TestCase):
             self.assertEqual(tuple(logits.shape), (32,))
         self.assertEqual(decoder.call_counts, {"baseline": 2, "patched": 2})
 
+    def test_answer_patchscope_caches_target_and_reconstructs_final_layer(
+        self,
+    ) -> None:
+        candidates = ["red", "blue"]
+        collision_report = build_first_token_collision_report(
+            self.tokenizer,
+            candidates,
+        )
+        self.assertFalse(collision_report["collisions"])
+        token_ids = {
+            label: collision_report["labels"][label]["first_token_variants"]
+            for label in candidates
+        }
+        vocab_size = max(
+            token_id
+            for values in token_ids.values()
+            for token_id in values
+        ) + 1
+        layers = [
+            AddDecoderLayer(tuple_output=True),
+            AddDecoderLayer(tuple_output=True),
+        ]
+        model = FakePatchModel(layers, vocab_size=vocab_size)
+        with torch.no_grad():
+            for token_id in token_ids["red"]:
+                model.lm_head.weight[token_id] = torch.tensor([1.0, 0.0])
+            for token_id in token_ids["blue"]:
+                model.lm_head.weight[token_id] = torch.tensor([0.0, 1.0])
+        modules = LanguageModules(
+            language_layers=list(model.layers),
+            final_norm=torch.nn.Identity(),
+            lm_head=model.lm_head,
+            hidden_size=2,
+            num_hidden_layers=2,
+        )
+
+        class FakeInference:
+            def __init__(self, processor: object, fake_model: torch.nn.Module):
+                self.processor = processor
+                self.model = fake_model
+
+            @staticmethod
+            def _get_inputs_device() -> torch.device:
+                return torch.device("cpu")
+
+        decoder = AnswerPatchscopeDecoder(
+            inference=FakeInference(self.processor, model),
+            modules=modules,
+        )
+        first_target = decoder.target_for(candidates)
+        second_target = decoder.target_for(candidates)
+        shuffled_target = decoder.target_for(
+            candidates,
+            list(reversed(candidates)),
+        )
+        self.assertIs(first_target, second_target)
+        self.assertIsNot(first_target, shuffled_target)
+        self.assertEqual(
+            shuffled_target.display_candidates,
+            ("blue", "red"),
+        )
+        self.assertEqual(decoder.call_counts["target_prepare"], 2)
+        self.assertEqual(
+            first_target.target_position,
+            int(first_target.inputs.input_ids.shape[1]) - 1,
+        )
+        self.assertNotIn("sample question", first_target.rendered_prompt)
+        self.assertNotIn("sample clue", first_target.rendered_prompt)
+
+        source_hidden = torch.tensor([0.25, 0.75])
+        result, logits = decoder.run_patched_answer_readout(
+            layer_index=1,
+            source_hidden=source_hidden,
+            candidates=candidates,
+            collision_report=collision_report,
+        )
+        self.assertEqual(result["predicted_answer"], "blue")
+        self.assertAlmostEqual(
+            sum(result["answer_class_probabilities"].values()),
+            1.0,
+            places=6,
+        )
+        self.assertAlmostEqual(
+            result["predicted_answer_probability"],
+            result["answer_class_probabilities"]["blue"],
+            places=6,
+        )
+        reference = project_hidden_to_vocab(
+            source_hidden,
+            modules.final_norm,
+            modules.lm_head,
+        )
+        check = validate_restricted_reconstruction(
+            logits,
+            reference,
+            labels=candidates,
+            class_token_ids=token_ids,
+            midpoints=None,
+            tolerance=1e-3,
+        )
+        self.assertTrue(check["passed"])
+        self.assertEqual(decoder.call_counts, {"target_prepare": 2, "patched": 1})
+
 
 class TokenAndAttentionTests(unittest.TestCase):
     def test_marker_and_field_are_unique_token_subsequences(self) -> None:
@@ -475,7 +599,28 @@ class ReadoutAndPromptTests(unittest.TestCase):
         for sample_value in ("sample question", "sample clue", "orange", "purple"):
             self.assertNotIn(sample_value, IDENTITY_PATCHSCOPE_USER_PROMPT)
             self.assertNotIn(sample_value, SEMANTIC_PATCHSCOPE_USER_PROMPT)
+            self.assertNotIn(
+                sample_value,
+                SEMANTIC_ANSWER_PATCHSCOPE_USER_PROMPT,
+            )
+        self.assertIn(
+            "{answer_classes}",
+            SEMANTIC_ANSWER_PATCHSCOPE_USER_PROMPT,
+        )
         self.assertIn("{source_classes}", SEMANTIC_PATCHSCOPE_USER_PROMPT)
+
+    def test_answer_candidate_orders_are_distinct_deterministic_permutations(
+        self,
+    ) -> None:
+        candidates = ["red", "blue", "green", "yellow"]
+        first = answer_candidate_orders(candidates)
+        second = answer_candidate_orders(candidates)
+        self.assertEqual(first, second)
+        self.assertEqual(tuple(first), ANSWER_PATCHSCOPE_VARIANTS)
+        self.assertEqual(first["original"], tuple(candidates))
+        self.assertEqual(len(set(first.values())), 4)
+        for order in first.values():
+            self.assertEqual(set(order), set(candidates))
 
     def test_bfloat16_reconstruction_tolerance_accepts_observed_quantization(self) -> None:
         self.assertEqual(reconstruction_tolerance("bfloat16"), 0.1)
@@ -530,6 +675,29 @@ class PersistenceAndResumeTests(unittest.TestCase):
     def test_analysis_mode_cli_defaults_orders_and_rejects_duplicates(self) -> None:
         parser = build_parser()
         self.assertEqual(parser.parse_args([]).analysis_mode, ["LMhead"])
+        self.assertFalse(parser.parse_args([]).answer_val)
+        self.assertEqual(parser.parse_args([]).save_hidden_state, [None])
+        self.assertTrue(parser.parse_args(["--answer_val"]).answer_val)
+        self.assertEqual(
+            parser.parse_args(["--save_hidden_state", "23"]).save_hidden_state,
+            [23],
+        )
+        self.assertEqual(
+            parser.parse_args(
+                ["--save_hidden_state", "26", "20", "23"]
+            ).save_hidden_state,
+            [26, 20, 23],
+        )
+        self.assertEqual(
+            normalize_save_hidden_states([26, 20, 23]),
+            (20, 23, 26),
+        )
+        self.assertEqual(
+            normalize_save_hidden_states(
+                parser.parse_args(["--save_hidden_state", "none"]).save_hidden_state
+            ),
+            (),
+        )
         parsed = parser.parse_args(
             ["--analysis_mode", "Semantic", "LMhead"]
         )
@@ -539,6 +707,36 @@ class PersistenceAndResumeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "duplicate"):
             normalize_analysis_modes(["LMhead", "LMhead"])
+        with self.assertRaisesRegex(
+            argparse.ArgumentTypeError,
+            "non-negative integer",
+        ):
+            parse_save_hidden_state("-1")
+        with self.assertRaisesRegex(
+            argparse.ArgumentTypeError,
+            "non-negative integer",
+        ):
+            parse_save_hidden_state("last")
+        with self.assertRaisesRegex(ValueError, "skip-layer-readout"):
+            validate_save_hidden_state(
+                (23,),
+                skip_layer_readout=True,
+            )
+        with self.assertRaisesRegex(ValueError, r"outside \[0, 27\]"):
+            validate_save_hidden_state(
+                (23, 28),
+                skip_layer_readout=False,
+                num_hidden_layers=28,
+            )
+        validate_save_hidden_state(
+            (23, 27),
+            skip_layer_readout=False,
+            num_hidden_layers=28,
+        )
+        with self.assertRaisesRegex(ValueError, "cannot combine"):
+            normalize_save_hidden_states([None, 23])
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            normalize_save_hidden_states([23, 23])
 
     def test_legacy_config_defaults_to_lmhead(self) -> None:
         normalized, missing = saved_configuration_for_comparison(
@@ -546,11 +744,152 @@ class PersistenceAndResumeTests(unittest.TestCase):
         )
         self.assertTrue(missing)
         self.assertEqual(normalized["analysis_modes"], ["LMhead"])
+        self.assertEqual(normalized["save_hidden_state"], "none")
         explicit, missing = saved_configuration_for_comparison(
-            {"analysis_modes": ["Identity", "Semantic"]}
+            {
+                "analysis_modes": ["Identity", "Semantic"],
+                "save_hidden_state": 23,
+            }
         )
         self.assertFalse(missing)
         self.assertEqual(explicit["analysis_modes"], ["Identity", "Semantic"])
+        self.assertEqual(explicit["save_hidden_state"], 23)
+
+    def test_target_layer_hidden_state_store_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            results_path = output_dir / "results.jsonl"
+            store = TargetLayerHiddenStateStore(
+                output_dir,
+                layer_index=23,
+                shard_size=2,
+            )
+            expected: dict[str, torch.Tensor] = {}
+            records: list[dict] = []
+            for index in range(2):
+                case_id = f"case-{index}"
+                tensor = torch.arange(
+                    index * 8,
+                    index * 8 + 8,
+                    dtype=torch.float32,
+                ).reshape(2, 4)
+                expected[case_id] = tensor.half()
+                result = {"case_id": case_id, "status": "completed"}
+                records.append(result)
+                should_flush = store.add(
+                    case_id=case_id,
+                    hidden_states=tensor,
+                    positions={"ac": 11 + index, "panl": 21 + index},
+                    stages={"ac": "answer", "panl": "confidence"},
+                    result=result,
+                )
+            self.assertTrue(should_flush)
+            self.assertEqual(store.flush(results_path), ["case-0", "case-1"])
+
+            stored_records = load_jsonl(results_path)
+            self.assertEqual(len(stored_records), 2)
+            for record in stored_records:
+                case_id = record["case_id"]
+                restored, reference = store.read_case(case_id)
+                self.assertEqual(restored.dtype, torch.float16)
+                self.assertEqual(tuple(restored.shape), (2, 4))
+                self.assertTrue(torch.equal(restored, expected[case_id]))
+                self.assertEqual(reference["layer_index"], 23)
+                self.assertEqual(reference["position_names"], ["ac", "panl"])
+                self.assertEqual(
+                    record["hidden_state_reference"]["stages"],
+                    {"ac": "answer", "panl": "confidence"},
+                )
+                self.assertEqual(
+                    record["hidden_state_reference"]["positions"],
+                    {
+                        "ac": 11 + int(case_id[-1]),
+                        "panl": 21 + int(case_id[-1]),
+                    },
+                )
+
+            payload_path = (
+                output_dir
+                / stored_records[0]["hidden_state_reference"]["shard_path"]
+            )
+            try:
+                payload = torch.load(
+                    payload_path,
+                    map_location="cpu",
+                    weights_only=True,
+                )
+            except TypeError:
+                payload = torch.load(payload_path, map_location="cpu")
+            self.assertEqual(
+                tuple(payload["hidden_states"].shape),
+                (2, 2, 4),
+            )
+            self.assertEqual(payload["dtype"], "float16")
+
+    def test_multiple_target_layers_use_layer_token_hidden_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            results_path = output_dir / "results.jsonl"
+            store = TargetLayerHiddenStateStore(
+                output_dir,
+                layer_index=[20, 23, 26],
+                shard_size=1,
+            )
+            tensor = torch.arange(24, dtype=torch.float32).reshape(3, 2, 4)
+            result = {"case_id": "multi", "status": "completed"}
+            self.assertTrue(
+                store.add(
+                    case_id="multi",
+                    hidden_states=tensor,
+                    positions={"ac": 11, "panl": 21},
+                    stages={"ac": "answer", "panl": "confidence"},
+                    result=result,
+                )
+            )
+            store.flush(results_path)
+            restored, reference = store.read_case("multi")
+            self.assertEqual(tuple(restored.shape), (3, 2, 4))
+            self.assertTrue(torch.equal(restored, tensor.half()))
+            self.assertEqual(reference["layer_indices"], [20, 23, 26])
+            self.assertNotIn("layer_index", reference)
+            self.assertIn(
+                "hidden_states/target_layers_20_23_26/",
+                reference["shard_path"],
+            )
+
+    def test_target_layer_capture_selects_ac_and_panl_only_once(self) -> None:
+        hidden_by_name = {
+            "ac": {
+                22: torch.tensor([1.0, 2.0]),
+                23: torch.tensor([3.0, 4.0]),
+            },
+            "panl": {
+                22: torch.tensor([5.0, 6.0]),
+                23: torch.tensor([7.0, 8.0]),
+            },
+            "cc": {23: torch.tensor([9.0, 10.0])},
+        }
+        captured: dict[str, torch.Tensor] = {}
+        capture_target_layer_hidden_states(hidden_by_name, 23, captured)
+        self.assertEqual(set(captured), {"ac", "panl"})
+        self.assertTrue(
+            torch.equal(captured["ac"], torch.tensor([3.0, 4.0]).half())
+        )
+        self.assertTrue(
+            torch.equal(captured["panl"], torch.tensor([7.0, 8.0]).half())
+        )
+        self.assertEqual(captured["ac"].device.type, "cpu")
+        self.assertEqual(captured["panl"].dtype, torch.float16)
+        with self.assertRaisesRegex(RuntimeError, "Duplicate"):
+            capture_target_layer_hidden_states(hidden_by_name, 23, captured)
+
+    def test_resume_rejects_legacy_format_and_accepts_current_format(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "legacy layer-readout format",
+        ):
+            validate_resume_format({"format_version": FORMAT_VERSION - 1})
+        validate_resume_format({"format_version": FORMAT_VERSION})
 
     def test_layer_analysis_splits_v3_and_v4(self) -> None:
         analysis = [
@@ -690,10 +1029,19 @@ class PersistenceAndResumeTests(unittest.TestCase):
                             "answer_entropy": 2.209,
                         }
                     ],
-                    "cc_layers": [],
-                    "sac_layers": [
-                        {"layer_index": 0, "soft_image_score": 0.312}
+                    "answer_patchscope_layers": [
+                        {
+                            "layer_index": 0,
+                            "predicted_answer": "purple",
+                            "predicted_answer_probability": 0.34,
+                        }
                     ],
+                    "cc_layers": [],
+                    "sac_layers_by_mode": {
+                        "Semantic": [
+                            {"layer_index": 0, "soft_image_score": 0.312}
+                        ]
+                    },
                 },
                 "attention_sinks": {
                     "sac": {
@@ -712,7 +1060,7 @@ class PersistenceAndResumeTests(unittest.TestCase):
         analysis, stats = build_source_sink_minimal(records)
         self.assertEqual(
             analysis[0]["layers"]["0"],
-            ["orange", 0.21, 2.209, None, 0.312, None, None],
+            ["orange", 0.21, "purple", 0.34, None, 0.312],
         )
         self.assertEqual(
             analysis[0]["sinks"]["sac"]["image"]["0"],
@@ -726,7 +1074,7 @@ class PersistenceAndResumeTests(unittest.TestCase):
             path = Path(directory) / "minimal.json"
             write_source_sink_minimal(path, analysis)
             loaded = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(loaded[0]["layers"]["0"][3], None)
+            self.assertEqual(loaded[0]["layers"]["0"][4], None)
             self.assertEqual(
                 loaded[0]["sinks"]["sac"]["image"]["0"],
                 {
@@ -751,16 +1099,167 @@ class PersistenceAndResumeTests(unittest.TestCase):
                             "0": [
                                 "orange",
                                 0.21,
-                                2.209,
+                                "purple",
+                                0.34,
                                 None,
                                 0.312,
-                                None,
-                                None,
                             ]
                         },
                     }
                 ],
             )
+
+    def test_six_column_semantic_value_is_null_when_not_collected(self) -> None:
+        analysis, statistics = build_source_sink_minimal(
+            [
+                {
+                    "case_id": "without-semantic",
+                    "direct_readout": {
+                        "ac_layers": [
+                            {
+                                "layer_index": 0,
+                                "predicted_answer": "red",
+                                "predicted_answer_probability": 0.6,
+                            }
+                        ],
+                        "answer_patchscope_layers": [
+                            {
+                                "layer_index": 0,
+                                "predicted_answer": "blue",
+                                "predicted_answer_probability": 0.4,
+                            }
+                        ],
+                        "cc_layers": [
+                            {"layer_index": 0, "soft_confidence": 0.5}
+                        ],
+                        "sac_layers_by_mode": {
+                            "LMhead": [
+                                {"layer_index": 0, "soft_image_score": 0.2}
+                            ],
+                            "Identity": [
+                                {"layer_index": 0, "soft_image_score": 0.3}
+                            ],
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(
+            analysis[0]["layers"]["0"],
+            ["red", 0.6, "blue", 0.4, 0.5, None],
+        )
+        self.assertEqual(statistics["invalid_layer_values"], 1)
+
+    def test_answer_validation_summary_reports_pairwise_mae_and_pearson(
+        self,
+    ) -> None:
+        def layer(probabilities: dict[str, float]) -> dict:
+            answer = max(probabilities, key=probabilities.get)
+            return {
+                "layer_index": 0,
+                "predicted_answer": answer,
+                "predicted_answer_probability": probabilities[answer],
+                "answer_class_probabilities": probabilities,
+            }
+
+        records = [
+            {
+                "direct_readout": {
+                    "answer_patchscope_layers_by_variant": {
+                        "original": [layer({"red": 0.8, "blue": 0.2})],
+                        "shuffle_1": [layer({"red": 0.8, "blue": 0.2})],
+                        "shuffle_2": [layer({"red": 0.2, "blue": 0.8})],
+                        "shuffle_3": [layer({"red": 0.6, "blue": 0.4})],
+                    }
+                },
+                "validation": {
+                    "answer_patchscope_by_variant": {
+                        variant: {"passed": True}
+                        for variant in ANSWER_PATCHSCOPE_VARIANTS
+                    }
+                },
+            }
+        ]
+        summary = build_answer_validation_summary(records)
+        self.assertTrue(summary["enabled"])
+        self.assertEqual(summary["records_with_all_variants"], 1)
+        self.assertEqual(
+            summary["overall"]["original__vs__shuffle_1"],
+            {"value_count": 2, "mae": 0.0, "pearson_r": 1.0},
+        )
+        self.assertEqual(
+            summary["layers"]["0"]["original__vs__shuffle_2"],
+            {"value_count": 2, "mae": 0.6, "pearson_r": -1.0},
+        )
+        self.assertEqual(
+            summary["overall"]["original__vs__shuffle_3"]["mae"],
+            0.2,
+        )
+
+    def test_answer_validation_appends_six_columns_to_compact_rows(self) -> None:
+        def answer(name: str, probability: float) -> dict:
+            return {
+                "layer_index": 0,
+                "predicted_answer": name,
+                "predicted_answer_probability": probability,
+                "answer_class_probabilities": {
+                    "red": probability if name == "red" else 1.0 - probability,
+                    "blue": probability if name == "blue" else 1.0 - probability,
+                },
+            }
+
+        analysis, _statistics = build_source_sink_minimal(
+            [
+                {
+                    "direct_readout": {
+                        "ac_layers": [
+                            {
+                                "layer_index": 0,
+                                "predicted_answer": "red",
+                                "predicted_answer_probability": 0.7,
+                            }
+                        ],
+                        "answer_patchscope_layers": [answer("blue", 0.6)],
+                        "answer_patchscope_layers_by_variant": {
+                            "original": [answer("blue", 0.6)],
+                            "shuffle_1": [answer("red", 0.55)],
+                            "shuffle_2": [answer("blue", 0.65)],
+                            "shuffle_3": [answer("red", 0.58)],
+                        },
+                        "cc_layers": [
+                            {"layer_index": 0, "soft_confidence": 0.8}
+                        ],
+                        "sac_layers_by_mode": {
+                            "Semantic": [
+                                {"layer_index": 0, "soft_image_score": 0.4}
+                            ]
+                        },
+                    }
+                }
+            ]
+        )
+        row = analysis[0]["layers"]["0"]
+        self.assertEqual(
+            row,
+            [
+                "red",
+                0.7,
+                "blue",
+                0.6,
+                0.8,
+                0.4,
+                "red",
+                0.55,
+                "blue",
+                0.65,
+                "red",
+                0.58,
+            ],
+        )
+        self.assertEqual(
+            len(row),
+            len(COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL),
+        )
 
     def test_runner_skips_existing_ids_without_duplicate_commit(self) -> None:
         runner = object.__new__(V3V4SourceRunner)
@@ -792,13 +1291,28 @@ class PersistenceAndResumeTests(unittest.TestCase):
             ["1__prior_0__consistent_easy__v4__none"],
         )
 
-    def test_new_and_legacy_sac_modes_feed_seven_columns_and_summary(self) -> None:
+    def test_new_readouts_feed_six_columns_and_legacy_sac_stays_in_summary(
+        self,
+    ) -> None:
         records = [
             {
                 "case_id": "new",
                 "status": "completed",
                 "direct_readout": {
-                    "ac_layers": [{"layer_index": 0, "predicted_answer": "blue"}],
+                    "ac_layers": [
+                        {
+                            "layer_index": 0,
+                            "predicted_answer": "blue",
+                            "predicted_answer_probability": 0.55,
+                        }
+                    ],
+                    "answer_patchscope_layers": [
+                        {
+                            "layer_index": 0,
+                            "predicted_answer": "green",
+                            "predicted_answer_probability": 0.45,
+                        }
+                    ],
                     "cc_layers": [{"layer_index": 0, "soft_confidence": 0.4}],
                     "sac_layers": [{"layer_index": 0, "soft_image_score": 0.5}],
                     "sac_layers_by_mode": {
@@ -809,6 +1323,7 @@ class PersistenceAndResumeTests(unittest.TestCase):
                 },
                 "validation": {
                     "ac_last_layer": {"passed": True},
+                    "answer_patchscope_last_layer": {"passed": True},
                     "cc_last_layer": {"passed": True},
                     "sac_last_layer": {"passed": True},
                     "sac_by_mode": {
@@ -834,8 +1349,12 @@ class PersistenceAndResumeTests(unittest.TestCase):
             },
         ]
         analysis, statistics = build_source_sink_minimal(records)
-        self.assertEqual(analysis[0]["layers"]["0"][4:], [0.5, 0.6, 0.7])
-        self.assertEqual(analysis[1]["layers"]["0"][4:], [0.2, None, None])
+        self.assertEqual(
+            analysis[0]["layers"]["0"],
+            ["blue", 0.55, "green", 0.45, 0.4, 0.7],
+        )
+        self.assertEqual(len(analysis[0]["layers"]["0"]), len(COMPACT_LAYER_COLUMNS))
+        self.assertEqual(analysis[1]["layers"], {})
         summary = build_source_sink_summary(records, analysis, statistics)
         self.assertEqual(
             summary["sac_readout_coverage_by_mode"],

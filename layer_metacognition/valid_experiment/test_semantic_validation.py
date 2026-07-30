@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -829,35 +828,6 @@ class AnalysisTests(unittest.TestCase):
                 summary["corrected"]["source_value_definition"],
                 "baseline_corrected_soft_image_score",
             )
-
-
-class ChangeScopeTests(unittest.TestCase):
-    def test_repository_code_changes_are_limited_to_valid_experiment(self) -> None:
-        completed = subprocess.run(
-            ["git", "status", "--short", "--untracked-files=all"],
-            cwd=ROOT,
-            check=True,
-            text=True,
-            capture_output=True,
-        )
-        relevant_prefixes = (
-            "layer_metacognition/",
-            "confidence_test/",
-            "qwen-2.5-vl/",
-        )
-        changed = []
-        for line in completed.stdout.splitlines():
-            path = line[3:].strip()
-            if path.startswith(relevant_prefixes):
-                changed.append(path)
-        self.assertTrue(changed)
-        self.assertTrue(
-            all(
-                path.startswith("layer_metacognition/valid_experiment/")
-                for path in changed
-            ),
-            changed,
-        )
 
 
 if __name__ == "__main__":

@@ -1,5 +1,17 @@
 """Content-free target prompts for SAC Patchscope readouts."""
 
+SEMANTIC_ANSWER_PATCHSCOPE_USER_PROMPT = """Select exactly one answer from the candidate answers below.
+
+Candidate answers:
+{answer_classes}
+
+Output exactly:
+
+**Answer**:<ANSWER>
+
+ANSWER must exactly match one candidate answer listed above.
+Do not output reasoning, explanation, confidence, source attribution, or any additional text."""
+
 IDENTITY_PATCHSCOPE_USER_PROMPT = """The assistant prefix contains identity examples.
 Continue the final item by emitting exactly one class digit from 0 to 8.
 Do not output reasoning, explanation, punctuation, or any additional text."""

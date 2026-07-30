@@ -52,6 +52,10 @@ from .model_adapter import (
     run_hooked_forward,
     run_logits_forward,
 )
+from .source_patchscope import (
+    ANSWER_PATCHSCOPE_VARIANTS,
+    answer_candidate_orders,
+)
 from .stage_specs import stage_spec
 from .token_positions import (
     locate_field_value_span,
@@ -104,6 +108,30 @@ def reconstruction_tolerance(dtype_name: str) -> float:
     return 0.1 if "bfloat16" in str(dtype_name).lower() else 1e-3
 
 
+def capture_target_layer_hidden_states(
+    hidden_by_name: dict[str, dict[int, torch.Tensor]],
+    layer_index: int,
+    destination: dict[str, torch.Tensor],
+) -> None:
+    """Collect each available AC/PANL vector once as contiguous CPU FP16."""
+    for name in ("ac", "panl"):
+        if name not in hidden_by_name:
+            continue
+        if name in destination:
+            raise RuntimeError(f"Duplicate hidden-state capture for {name}")
+        try:
+            source = hidden_by_name[name][layer_index]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"Layer {layer_index} was not captured for {name}"
+            ) from exc
+        destination[name] = (
+            source.detach()
+            .to(device="cpu", dtype=torch.float16)
+            .contiguous()
+        )
+
+
 class CaseStageError(RuntimeError):
     def __init__(self, stage: str, message: str):
         super().__init__(message)
@@ -150,6 +178,9 @@ class V3V4SourceRunner:
         attribution_mode: str,
         analysis_modes: list[str],
         patchscope_decoder: Any | None,
+        answer_patchscope_decoder: Any | None,
+        answer_val: bool,
+        save_hidden_state: list[int],
         conditions: list[str],
         skip_attention: bool = False,
         skip_layer_readout: bool = False,
@@ -169,6 +200,9 @@ class V3V4SourceRunner:
         self.mode = attribution_mode
         self.analysis_modes = list(analysis_modes)
         self.patchscope_decoder = patchscope_decoder
+        self.answer_patchscope_decoder = answer_patchscope_decoder
+        self.answer_val = bool(answer_val)
+        self.save_hidden_state = list(save_hidden_state)
         self.conditions = conditions
         self.skip_attention = skip_attention
         self.skip_layer_readout = skip_layer_readout
@@ -204,6 +238,10 @@ class V3V4SourceRunner:
         ):
             raise ValueError(
                 "Identity/Semantic analysis requires a shared SourcePatchscopeDecoder"
+            )
+        if not self.skip_layer_readout and self.answer_patchscope_decoder is None:
+            raise ValueError(
+                "Layer readout requires a shared AnswerPatchscopeDecoder"
             )
         self.shared_initial: dict[str, dict[str, Any]] = {}
         self.call_counts: dict[str, int] = {
@@ -440,9 +478,25 @@ class V3V4SourceRunner:
         case: Any,
         current_answer: str,
         generated_source: dict[str, Any] | None,
-    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str]]:
+    ) -> tuple[
+        dict[str, Any],
+        dict[str, Any],
+        dict[str, Any],
+        dict[str, Any],
+        dict[str, str],
+        torch.Tensor | None,
+    ]:
         direct = {
             "ac_layers": [],
+            "answer_patchscope_layers": [],
+            "answer_patchscope_layers_by_variant": {
+                variant: []
+                for variant in (
+                    ANSWER_PATCHSCOPE_VARIANTS
+                    if self.answer_val
+                    else ("original",)
+                )
+            },
             "cc_layers": [],
             "sac_layers": [],
             "sac_layers_by_mode": {
@@ -453,6 +507,15 @@ class V3V4SourceRunner:
         }
         validation = {
             "ac_last_layer": None,
+            "answer_patchscope_last_layer": None,
+            "answer_patchscope_by_variant": {
+                variant: None
+                for variant in (
+                    ANSWER_PATCHSCOPE_VARIANTS
+                    if self.answer_val
+                    else ("original",)
+                )
+            },
             "cc_last_layer": None,
             "sac_last_layer": None,
             "sac_by_mode": {
@@ -464,6 +527,9 @@ class V3V4SourceRunner:
         attention: dict[str, Any] = {}
         token_positions = {"ac": None, "panl": None, "cc": None, "sac": None}
         token_position_stages: dict[str, str] = {}
+        saved_hidden_states: dict[int, dict[str, torch.Tensor]] = {
+            layer_index: {} for layer_index in self.save_hidden_state
+        }
         answer_report = build_first_token_collision_report(self.tokenizer, answer_classes)
         if answer_report["collisions"]:
             raise RuntimeError(f"Answer first-token collisions: {answer_report['collisions']}")
@@ -471,6 +537,11 @@ class V3V4SourceRunner:
             label: answer_report["labels"][label]["first_token_variants"]
             for label in answer_classes
         }
+        answer_orders = (
+            answer_candidate_orders(answer_classes)
+            if self.answer_val
+            else {"original": tuple(answer_classes)}
+        )
 
         for stage in stages:
             inputs = stage["inputs"]
@@ -493,14 +564,23 @@ class V3V4SourceRunner:
                 and "class_probabilities" not in generated_source
             )
             if not self.skip_layer_readout:
+                hooked_positions = dict(target_positions)
+                if self.save_hidden_state and stage["panl"] is not None:
+                    hooked_positions["panl"] = int(stage["panl"]["position"])
                 forward = run_hooked_forward(
                     self.inference.model,
                     inputs,
                     self.modules,
-                    target_positions,
+                    hooked_positions,
                     logits_positions=list(target_positions.values()),
                 )
                 reference_logits = forward.logits_by_position
+                for layer_index in self.save_hidden_state:
+                    capture_target_layer_hidden_states(
+                        forward.hidden_by_name,
+                        layer_index,
+                        saved_hidden_states[layer_index],
+                    )
                 for target, position in target_positions.items():
                     hidden_by_layer = forward.hidden_by_name[target]
                     if target == "ac":
@@ -520,6 +600,53 @@ class V3V4SourceRunner:
                             for layer in self.selected_layers
                         ]
                         direct["ac_layers"].extend(layers)
+                        for layer in self.selected_layers:
+                            for variant, display_order in answer_orders.items():
+                                assert self.answer_patchscope_decoder is not None
+                                patched, patched_logits = (
+                                    self.answer_patchscope_decoder.run_patched_answer_readout(
+                                        layer_index=layer,
+                                        source_hidden=hidden_by_layer[layer],
+                                        candidates=answer_classes,
+                                        collision_report=answer_report,
+                                        display_candidates=display_order,
+                                        variant_id=variant,
+                                    )
+                                )
+                                direct["answer_patchscope_layers_by_variant"][
+                                    variant
+                                ].append(patched)
+                                if variant == "original":
+                                    direct["answer_patchscope_layers"].append(
+                                        deepcopy(patched)
+                                    )
+                                if layer == self.final_layer:
+                                    check = validate_restricted_reconstruction(
+                                        patched_logits,
+                                        reference_logits[position],
+                                        labels=answer_classes,
+                                        class_token_ids=answer_token_ids,
+                                        midpoints=None,
+                                        tolerance=self.tolerance,
+                                    )
+                                    validation["answer_patchscope_by_variant"][
+                                        variant
+                                    ] = check
+                                    if variant == "original":
+                                        validation[
+                                            "answer_patchscope_last_layer"
+                                        ] = deepcopy(check)
+                                    if not check["passed"]:
+                                        raise FinalLayerValidationError(
+                                            target="ac",
+                                            analysis_mode=(
+                                                "SemanticAnswerPatchscope:"
+                                                f"{variant}"
+                                            ),
+                                            check=check,
+                                            validation_state=validation,
+                                        )
+                                del patched_logits
                         midpoints = None
                         labels = answer_classes
                         token_ids = answer_token_ids
@@ -669,7 +796,35 @@ class V3V4SourceRunner:
                 del forward
             del inputs
             stage["inputs"] = None
-        return direct, validation, attention, token_positions, token_position_stages
+        stored_tensor = None
+        if self.save_hidden_state:
+            layer_tensors: list[torch.Tensor] = []
+            for layer_index in self.save_hidden_state:
+                captured = saved_hidden_states[layer_index]
+                missing = [
+                    name for name in ("ac", "panl") if name not in captured
+                ]
+                if missing:
+                    raise RuntimeError(
+                        f"Layer {layer_index} is missing requested hidden-state "
+                        f"position(s): {', '.join(missing)}"
+                    )
+                layer_tensors.append(
+                    torch.stack([captured["ac"], captured["panl"]], dim=0)
+                )
+            stored_tensor = (
+                layer_tensors[0]
+                if len(layer_tensors) == 1
+                else torch.stack(layer_tensors, dim=0)
+            )
+        return (
+            direct,
+            validation,
+            attention,
+            token_positions,
+            token_position_stages,
+            stored_tensor,
+        )
 
     def process_case(
         self,
@@ -706,6 +861,15 @@ class V3V4SourceRunner:
             },
             "direct_readout": {
                 "ac_layers": [],
+                "answer_patchscope_layers": [],
+                "answer_patchscope_layers_by_variant": {
+                    variant: []
+                    for variant in (
+                        ANSWER_PATCHSCOPE_VARIANTS
+                        if self.answer_val
+                        else ("original",)
+                    )
+                },
                 "cc_layers": [],
                 "sac_layers": [],
                 "sac_layers_by_mode": {
@@ -725,6 +889,15 @@ class V3V4SourceRunner:
             "attention_sinks": {},
             "validation": {
                 "ac_last_layer": None,
+                "answer_patchscope_last_layer": None,
+                "answer_patchscope_by_variant": {
+                    variant: None
+                    for variant in (
+                        ANSWER_PATCHSCOPE_VARIANTS
+                        if self.answer_val
+                        else ("original",)
+                    )
+                },
                 "cc_last_layer": None,
                 "sac_last_layer": None,
                 "sac_by_mode": {
@@ -967,7 +1140,14 @@ class V3V4SourceRunner:
                 )
             )
 
-            direct, validation, attention, positions, position_stages = self._analyze_stages(
+            (
+                direct,
+                validation,
+                attention,
+                positions,
+                position_stages,
+                stored_hidden_state,
+            ) = self._analyze_stages(
                 stages=stages,
                 answer_classes=answer_classes,
                 case=case,
@@ -991,6 +1171,8 @@ class V3V4SourceRunner:
                 ),
             }
             record["status"] = "completed"
+            if stored_hidden_state is not None:
+                record["_target_hidden_state"] = stored_hidden_state
         except Exception as exc:
             for teacher_stage in stages:
                 inputs = teacher_stage.get("inputs")
