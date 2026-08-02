@@ -1291,7 +1291,7 @@ class PersistenceAndResumeTests(unittest.TestCase):
             ["1__prior_0__consistent_easy__v4__none"],
         )
 
-    def test_new_readouts_feed_six_columns_and_legacy_sac_stays_in_summary(
+    def test_new_readouts_feed_seven_columns_and_legacy_sac_stays_in_summary(
         self,
     ) -> None:
         records = [
@@ -1318,7 +1318,13 @@ class PersistenceAndResumeTests(unittest.TestCase):
                     "sac_layers_by_mode": {
                         "LMhead": [{"layer_index": 0, "soft_image_score": 0.5}],
                         "Identity": [{"layer_index": 0, "soft_image_score": 0.6}],
-                        "Semantic": [{"layer_index": 0, "soft_image_score": 0.7}],
+                        "Semantic": [
+                            {
+                                "layer_index": 0,
+                                "soft_image_score": 0.7,
+                                "hard_index": 6,
+                            }
+                        ],
                     },
                 },
                 "validation": {
@@ -1351,7 +1357,7 @@ class PersistenceAndResumeTests(unittest.TestCase):
         analysis, statistics = build_source_sink_minimal(records)
         self.assertEqual(
             analysis[0]["layers"]["0"],
-            ["blue", 0.55, "green", 0.45, 0.4, 0.7],
+            ["blue", 0.55, "green", 0.45, 0.4, 0.7, 6],
         )
         self.assertEqual(len(analysis[0]["layers"]["0"]), len(COMPACT_LAYER_COLUMNS))
         self.assertEqual(analysis[1]["layers"], {})

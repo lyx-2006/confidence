@@ -87,14 +87,14 @@ Your previous result based only on limited information:
 **Previous Confidence**: {previous_confidence}
 
 Answer the question again after considering all currently available evidence.
-Then classify the relative contribution of the text clue and the image to the formation of your new answer.
+Then classify the relative contribution of the text clue and the image to determining the new answer you finally selected.
 
 Important requirements:
 1. The previous answer is not fixed.
 2. You may retain the previous answer or replace it with a different answer.
 3. Do not mechanically retain either the previous answer or the previous confidence.
 4. You must carefully integrate all the information provided in this stage.
-5. A higher source attribution class indicates stronger image contribution, while a lower class indicates stronger text contribution.
+5. Source attribution refers to which source more strongly supported and determined the new answer you finally selected. A higher source attribution class indicates stronger image contribution, while a lower class indicates stronger text contribution.
 6. Do not default to the middle classes without carefully evaluating the evidence.
 7. Do not provide reasoning, explanation, analysis, hedging, confidence, or any additional text.
 8. Choose exactly one source attribution class from the list below.
@@ -117,11 +117,11 @@ Text clue:
 {text_clue}
 
 Answer the question using the information.
-Then classify the relative contribution of the text clue and the image to the formation of your answer.
+Then classify the relative contribution of the text clue and the image to determining the answer you finally selected.
 
 Answer as concisely as possible.
 
-A higher source attribution class indicates stronger image contribution, while a lower class indicates stronger text contribution.
+Source attribution refers to which source more strongly supported and determined the answer you finally selected. A higher source attribution class indicates stronger image contribution, while a lower class indicates stronger text contribution.
 
 Do not default to the middle classes without carefully evaluating the evidence.
 
@@ -136,4 +136,3 @@ Output exactly:
 
 CLASS must exactly match one of the source attribution class numbers listed above.
 Do not include any additional text."""
-

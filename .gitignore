@@ -54,3 +54,5 @@ layer_metacognition/output/v3_v4_ac
 layer_metacognition/output/v3_v4_ac_val
 
 layer_metacognition/output/v3_v4_ac_patchval
+
+layer_metacognition/output/v3_v4_newprompt

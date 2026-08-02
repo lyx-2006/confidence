@@ -37,7 +37,7 @@
 | `--resume` | 开关 | 关闭 | 无参数值 | 从同为 format version 2 的输出目录恢复，跳过已有 `case_id`。 |
 | `--skip-attention` | 开关 | 关闭 | 无参数值 | 跳过逐 head attention sink，降低显存和运行时间，不影响逐层六字段 readout。 |
 | `--skip-layer-readout` | 开关 | 关闭 | 无参数值 | 跳过 AC、CC、SAC、Semantic Answer Patchscope 及其最终层重构验证。 |
-| `--answer_val` | 开关 | 关闭 | 无参数值 | 启用 Answer Patchscope 标签顺序验证：运行原始顺序和三个固定乱序版本；逐层 JSON 在原六列后追加三个乱序版本的 answer/prob，成为十二列；`summary.json["answer_validation"]` 保存对齐类别概率之间的逐层及总体 MAE、Pearson 相关系数。 |
+| `--answer_val` | 开关 | 关闭 | 无参数值 | 启用 Answer Patchscope 标签顺序验证：运行原始顺序和三个固定乱序版本；逐层 JSON 在原七列后追加三个乱序版本的 answer/prob，成为十三列；`summary.json["answer_validation"]` 保存对齐类别概率之间的逐层及总体 MAE、Pearson 相关系数。 |
 | `--save_hidden_state` | 字符串或整数列表 | `none` | `none` 或一个/多个 0-based decoder layer index | 保存指定层 AC 与 PANL token 的 final norm 前 decoder-block output，例如 `--save_hidden_state 20 23 26`；层号按升序保存为 CPU FP16 分片。不能与 `--skip-layer-readout` 同时使用。 |
 | `--max-answer-tokens` | 正整数 | `24` | `N ≥ 1` | 限制 answer 阶段最大生成 token 数。 |
 | `--max-confidence-tokens` | 正整数 | `12` | `N ≥ 1` | 限制 confidence 阶段最大生成 token 数。 |

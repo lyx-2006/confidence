@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create compact six-field layer readouts and per-head source sinks."""
+"""Create compact seven-field layer readouts and per-head source sinks."""
 
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ COMPACT_LAYER_COLUMNS = (
     "patchscope_prob",
     "confidence",
     "semantic_patchscope_SA",
+    "semantic_patchscope_SA_hard_label",
 )
 ANSWER_VALIDATION_COMPACT_COLUMNS = (
     "shuffle_1_answer",
@@ -145,6 +146,13 @@ def _finite_or_none(value: Any, *, minimum: float | None = None, maximum: float 
     return number
 
 
+def _source_hard_index_or_none(value: Any) -> int | None:
+    """Return a validated canonical source-attribution class index."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 0 <= value <= 8 else None
+
+
 def _finite_float_list(value: Any) -> list[float] | None:
     if not isinstance(value, list) or not value:
         return None
@@ -207,6 +215,7 @@ def build_source_sink_minimal(
             answer = answers.get(layer_index) or {}
             patchscope_answer = patchscope_answers.get(layer_index) or {}
             confidence = confidences.get(layer_index) or {}
+            semantic_source = semantic_sources.get(layer_index) or {}
             values: list[Any] = [
                 answer.get("predicted_answer")
                 if isinstance(answer.get("predicted_answer"), str)
@@ -233,12 +242,11 @@ def build_source_sink_minimal(
                     maximum=1.0,
                 ),
                 _finite_or_none(
-                    (semantic_sources.get(layer_index) or {}).get(
-                        "soft_image_score"
-                    ),
+                    semantic_source.get("soft_image_score"),
                     minimum=0.0,
                     maximum=1.0,
                 ),
+                _source_hard_index_or_none(semantic_source.get("hard_index")),
             ]
             if has_answer_validation:
                 for variant in ("shuffle_1", "shuffle_2", "shuffle_3"):
@@ -328,6 +336,8 @@ def _compact_layer_values(values: list[Any]) -> str:
             encoded.append("null")
         elif isinstance(value, str):
             encoded.append(json.dumps(value, ensure_ascii=False))
+        elif isinstance(value, int) and not isinstance(value, bool):
+            encoded.append(str(value))
         else:
             encoded.append(f"{float(value):.3f}")
     return "[" + ",".join(encoded) + "]"
@@ -393,7 +403,7 @@ def write_layer_readout_minimal(
     path: str | Path,
     analysis: list[dict[str, Any]],
 ) -> None:
-    """Write only case IDs and six-field per-layer readouts, without sinks."""
+    """Write only case IDs and seven-field per-layer readouts, without sinks."""
     lines = ["["]
     for case_index, record in enumerate(analysis):
         lines.extend(
