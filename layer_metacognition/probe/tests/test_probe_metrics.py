@@ -54,8 +54,10 @@ def test_required_subsets_include_explicit_empty_records() -> None:
         selected_C=1.0,
     )
     assert set(result) == set(SUBSETS)
+    assert result["pooled_overall"]["sample_count"] == 1
     assert result["easy_overall"]["sample_count"] == 1
     assert result["conflict_easy"]["status"] == "empty"
+    assert result["consistent_hard"]["status"] == "empty"
     assert result["discriminative_conflict"]["status"] == "empty"
 
 

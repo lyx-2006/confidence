@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train per-layer AC/PANL linear probes on an existing Probe manifest."""
+"""Train pooled per-layer, per-position probes on an existing manifest."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
@@ -19,23 +20,24 @@ from layer_metacognition.hidden_state_store import atomic_write_json
 
 from . import (
     C_GRID,
-    EASY_CONDITIONS,
+    DEFAULT_PROBE_CONDITIONS,
+    DEFAULT_PROBE_LOCATIONS,
     HIDDEN_STATE_DEFINITION,
-    PROBE_TASKS,
+    POSITION_NAMES,
+    PROBE_CONDITIONS,
     VERSION_SETTINGS,
+    build_probe_tasks,
+    normalize_ordered_choices,
 )
 from .common import iter_jsonl, probe_output_dir
 from .hidden_state_loader import HiddenStateLoader
-from .probe_metrics import (
-    evaluate_required_subsets,
-    majority_label,
-    subset_membership,
-)
+from .probe_metrics import evaluate_required_subsets, majority_label, subset_membership
 from .probe_models import (
     build_current_answer_baseline,
     build_hidden_state_probe,
     choose_regularization_C,
 )
+from .provenance import canonical_fingerprint, validate_manifest_provenance
 from .split_utils import (
     load_or_create_split_assignments,
     permute_labels_by_unique_key,
@@ -47,39 +49,24 @@ def filter_task_records(
     manifest: Sequence[dict[str, Any]],
     target_field: str,
     *,
-    text_scope: str,
+    probe_conditions: Sequence[str] = DEFAULT_PROBE_CONDITIONS,
 ) -> list[dict[str, Any]]:
-    if target_field == "image_only_answer":
-        records = [
-            record
-            for record in manifest
-            if record.get("eligible_image_probe")
-            and record.get("condition") in EASY_CONDITIONS
-            and isinstance(record.get(target_field), str)
-        ]
-        forbidden = [
-            record
-            for record in records
-            if record.get("condition") not in EASY_CONDITIONS
-        ]
-        if forbidden:
-            raise AssertionError("Image Probe filter admitted hard/null/irr records")
-        return records
-    if target_field != "text_only_answer":
+    selected = set(str(value) for value in probe_conditions)
+    eligibility_fields = {
+        "text_only_answer": "eligible_text_probe",
+        "image_only_answer": "eligible_image_probe",
+        "conflict_label": "eligible_conflict_probe",
+    }
+    eligibility = eligibility_fields.get(target_field)
+    if eligibility is None:
         raise ValueError(f"Unsupported target field: {target_field}")
-    records = [
+    return [
         record
         for record in manifest
-        if record.get("eligible_text_probe")
+        if record.get("condition") in selected
+        and record.get(eligibility)
         and isinstance(record.get(target_field), str)
     ]
-    if text_scope == "matched_easy":
-        records = [
-            record for record in records if record.get("condition") in EASY_CONDITIONS
-        ]
-    elif text_scope != "all":
-        raise ValueError(f"Unknown text scope: {text_scope}")
-    return records
 
 
 def validate_outer_labels(
@@ -128,6 +115,60 @@ def _features(
     return matrix
 
 
+class FeatureMatrixCache:
+    """Cache one original-order matrix per position/layer for the current run."""
+
+    def __init__(
+        self,
+        loader: HiddenStateLoader,
+        manifest: Sequence[dict[str, Any]],
+        *,
+        experiment_fingerprint: str,
+        manifest_fingerprint: str,
+    ):
+        self.loader = loader
+        self.manifest = list(manifest)
+        self.experiment_fingerprint = experiment_fingerprint
+        self.manifest_fingerprint = manifest_fingerprint
+        self._matrices: dict[tuple[Any, ...], np.ndarray] = {}
+        self._ordinal = {
+            str(record["case_id"]): index for index, record in enumerate(self.manifest)
+        }
+        if len(self._ordinal) != len(self.manifest):
+            raise ValueError("Probe manifest contains duplicate case_id values")
+        self.feature_loading_seconds = 0.0
+        self.matrix_load_count = 0
+
+    def matrix(self, *, layer: int, position: str) -> np.ndarray:
+        key = (
+            self.experiment_fingerprint,
+            self.manifest_fingerprint,
+            str(position),
+            int(layer),
+        )
+        if key not in self._matrices:
+            started = time.perf_counter()
+            self._matrices[key] = _features(
+                self.loader,
+                self.manifest,
+                layer=layer,
+                position=position,
+            )
+            self.feature_loading_seconds += time.perf_counter() - started
+            self.matrix_load_count += 1
+        return self._matrices[key]
+
+    def rows(
+        self,
+        records: Sequence[dict[str, Any]],
+        *,
+        layer: int,
+        position: str,
+    ) -> np.ndarray:
+        indices = [self._ordinal[str(record["case_id"])] for record in records]
+        return self.matrix(layer=layer, position=position)[indices]
+
+
 def _align_probabilities(
     probabilities: np.ndarray,
     classifier_classes: Sequence[int],
@@ -149,9 +190,11 @@ def _prediction_record(
     task: str,
     position: str,
     layer: int | None,
+    setting: str,
     train_version: str,
     test_version: str,
     model_type: str,
+    backend: str,
     target_field: str,
     predicted_label: str,
     probabilities: np.ndarray,
@@ -169,9 +212,11 @@ def _prediction_record(
         "task": task,
         "position": position,
         "layer": layer,
+        "version_setting": setting,
         "train_version": train_version,
         "test_version": test_version,
         "model_type": model_type,
+        "backend": backend,
         "true_label": record[target_field],
         "true_label_raw": record.get(raw_field),
         "predicted_label": predicted_label,
@@ -179,9 +224,7 @@ def _prediction_record(
             str(label): float(probabilities[index])
             for index, label in enumerate(classes)
         },
-        "subsets": [
-            name for name, included in memberships.items() if included
-        ],
+        "subsets": [name for name, included in memberships.items() if included],
     }
 
 
@@ -196,9 +239,11 @@ def _invalid_result(
     train_version: str,
     test_version: str,
     model_type: str,
+    backend: str,
     train_records: Sequence[dict[str, Any]],
     test_records: Sequence[dict[str, Any]],
     reason: dict[str, Any],
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "status": "invalid",
@@ -212,6 +257,7 @@ def _invalid_result(
         "train_version": train_version,
         "test_version": test_version,
         "model_type": model_type,
+        "backend": backend,
         "train_sample_count": len(train_records),
         "test_sample_count": len(test_records),
         "train_item_count": len({str(record["item_id"]) for record in train_records}),
@@ -219,72 +265,234 @@ def _invalid_result(
         "classes": [],
         "selected_C": None,
         "c_selection": None,
+        "fit_diagnostics": diagnostics,
         "subset_metrics": {},
     }
 
 
-def _fit_current_answer_baseline(
+def _model_classifier_classes(model: Any, backend: str) -> Sequence[int]:
+    if backend == "torch":
+        return model.classes_
+    return model.named_steps["classifier"].classes_
+
+
+def _predict_model(
+    model: Any,
+    X: np.ndarray,
     *,
-    train_records: Sequence[dict[str, Any]],
-    test_records: Sequence[dict[str, Any]],
-    target_field: str,
+    backend: str,
     encoder: LabelEncoder,
 ) -> tuple[list[str], np.ndarray]:
-    train_X = np.asarray(
-        [[str(record["current_answer"])] for record in train_records],
-        dtype=object,
+    predicted_encoded = np.asarray(model.predict(X), dtype=np.int64)
+    probabilities = _align_probabilities(
+        np.asarray(model.predict_proba(X), dtype=np.float64),
+        _model_classifier_classes(model, backend),
+        len(encoder.classes_),
     )
-    test_X = np.asarray(
-        [[str(record["current_answer"])] for record in test_records],
-        dtype=object,
+    predicted = [
+        str(value) for value in encoder.inverse_transform(predicted_encoded)
+    ]
+    return predicted, probabilities
+
+
+def _fit_baseline_model(
+    train_records: Sequence[dict[str, Any]],
+    target_field: str,
+    encoder: LabelEncoder,
+) -> Any:
+    train_X = np.asarray(
+        [[str(record["current_answer"])] for record in train_records], dtype=object
     )
     encoded_train = encoder.transform(
         [str(record[target_field]) for record in train_records]
     )
-    model = build_current_answer_baseline()
-    model.fit(train_X, encoded_train)
+    return build_current_answer_baseline().fit(train_X, encoded_train)
+
+
+def _predict_baseline_model(
+    model: Any,
+    test_records: Sequence[dict[str, Any]],
+    encoder: LabelEncoder,
+) -> tuple[list[str], np.ndarray]:
+    test_X = np.asarray(
+        [[str(record["current_answer"])] for record in test_records], dtype=object
+    )
     predicted_encoded = np.asarray(model.predict(test_X), dtype=np.int64)
     classifier = model.named_steps["classifier"]
     probabilities = _align_probabilities(
-        model.predict_proba(test_X),
-        classifier.classes_,
-        len(encoder.classes_),
+        model.predict_proba(test_X), classifier.classes_, len(encoder.classes_)
     )
-    return [str(value) for value in encoder.inverse_transform(predicted_encoded)], probabilities
+    return [
+        str(value) for value in encoder.inverse_transform(predicted_encoded)
+    ], probabilities
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experiment-dir", required=True)
+    parser.add_argument("--output-dir")
+    parser.add_argument("--manifest-path")
     parser.add_argument("--layers", nargs="+", type=int, required=True)
     parser.add_argument("--n-splits", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--text-scope",
-        choices=["matched_easy", "all"],
-        default="matched_easy",
+        "--probe-conditions",
+        nargs="+",
+        choices=list(PROBE_CONDITIONS),
+        default=list(DEFAULT_PROBE_CONDITIONS),
     )
+    parser.add_argument(
+        "--answer-probe-location",
+        nargs="+",
+        choices=list(POSITION_NAMES),
+        default=list(DEFAULT_PROBE_LOCATIONS),
+    )
+    parser.add_argument(
+        "--conflict-probe-location",
+        nargs="+",
+        choices=list(POSITION_NAMES),
+        default=list(DEFAULT_PROBE_LOCATIONS),
+    )
+    parser.add_argument(
+        "--version-settings",
+        nargs="+",
+        choices=list(VERSION_SETTINGS),
+        default=list(VERSION_SETTINGS),
+    )
+    parser.add_argument("--backend", choices=("sklearn", "torch"), default="sklearn")
+    parser.add_argument("--fixed-c", type=float)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--permutations", type=int, default=20)
     parser.add_argument("--shard-cache-size", type=int, default=2)
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+def _validate_args(args: argparse.Namespace) -> tuple[list[int], tuple[str, ...]]:
     if args.n_splits < 2:
         raise ValueError("--n-splits must be at least 2")
     if args.permutations < 0:
         raise ValueError("--permutations must be non-negative")
     if args.shard_cache_size < 1:
         raise ValueError("--shard-cache-size must be positive")
+    if args.fixed_c is not None and (
+        not np.isfinite(args.fixed_c) or args.fixed_c <= 0
+    ):
+        raise ValueError("--fixed-c must be a finite positive value")
+    if args.backend == "torch":
+        if args.fixed_c is None:
+            raise ValueError("--backend torch requires --fixed-c")
+        if args.permutations != 0:
+            raise ValueError("--backend torch requires --permutations 0")
+        from .torch_logistic_probe import resolve_torch_device
+
+        args.resolved_device = resolve_torch_device(args.device)
+        import torch
+
+        args.torch_version = torch.__version__
+        args.torch_cuda_version = torch.version.cuda
+    elif args.device != "auto":
+        raise ValueError("--device is only valid with --backend torch")
+    else:
+        args.resolved_device = "cpu"
+        args.torch_version = None
+        args.torch_cuda_version = None
     layers = [int(value) for value in args.layers]
     if not layers or len(layers) != len(set(layers)) or any(value < 0 for value in layers):
         raise ValueError("--layers must contain distinct non-negative layer indices")
-    layers = sorted(layers)
+    selected_settings = tuple(
+        name for name in VERSION_SETTINGS if name in set(args.version_settings)
+    )
+    if not selected_settings:
+        raise ValueError("--version-settings must not be empty")
+    return sorted(layers), selected_settings
+
+
+def _protected_output_paths(output_dir: Path) -> tuple[Path, ...]:
+    return (
+        output_dir / "run_config.json",
+        output_dir / "split_assignments.json",
+        output_dir / "layer_probe_metrics.json",
+        output_dir / "layer_probe_predictions.jsonl",
+    )
+
+
+def _prepare_output(
+    output_dir: Path,
+    run_config: dict[str, Any],
+    *,
+    resume: bool,
+) -> bool:
+    """Protect prior outputs. Return True for an already-complete no-op."""
+
+    config_path = output_dir / "run_config.json"
+    metrics_path = output_dir / "layer_probe_metrics.json"
+    predictions_path = output_dir / "layer_probe_predictions.jsonl"
+    existing_protected = [path for path in _protected_output_paths(output_dir) if path.exists()]
+    if not config_path.exists():
+        if existing_protected:
+            raise FileExistsError(
+                "Probe output directory contains protected artifacts without a run "
+                f"configuration: {[str(path) for path in existing_protected]}"
+            )
+        return False
+    if not resume:
+        raise FileExistsError(
+            f"Probe run already exists in {output_dir}; pass --resume only for an "
+            "identical configuration"
+        )
+    existing = json.loads(config_path.read_text(encoding="utf-8"))
+    if existing.get("config_fingerprint") != run_config["config_fingerprint"]:
+        raise ValueError(
+            "Cannot resume Probe run because the immutable configuration differs: "
+            f"existing={existing.get('config_fingerprint')} "
+            f"requested={run_config['config_fingerprint']}"
+        )
+    status = existing.get("status")
+    if status == "complete":
+        if not metrics_path.is_file() or not predictions_path.is_file():
+            raise ValueError("Completed Probe run is missing metrics or predictions")
+        return True
+    if metrics_path.exists() or predictions_path.exists():
+        raise FileExistsError(
+            "Interrupted Probe run has partial official metrics/predictions; refusing "
+            "to overwrite them"
+        )
+    return False
+
+
+def _fit_count_from_c_selection(detail: dict[str, Any]) -> int:
+    if detail.get("status") != "selected":
+        return 0
+    scores = detail.get("scores") or {}
+    return sum(len(values) for values in scores.values())
+
+
+def main(argv: list[str] | None = None) -> int:
+    total_started = time.perf_counter()
+    args = _parser().parse_args(argv)
+    layers, selected_setting_names = _validate_args(args)
+    probe_conditions = normalize_ordered_choices(
+        args.probe_conditions, PROBE_CONDITIONS, "--probe-conditions"
+    )
+    answer_locations = normalize_ordered_choices(
+        args.answer_probe_location, POSITION_NAMES, "--answer-probe-location"
+    )
+    conflict_locations = normalize_ordered_choices(
+        args.conflict_probe_location, POSITION_NAMES, "--conflict-probe-location"
+    )
+    probe_tasks = build_probe_tasks(answer_locations, conflict_locations)
+    selected_settings = {
+        name: VERSION_SETTINGS[name] for name in selected_setting_names
+    }
 
     experiment_dir = Path(args.experiment_dir).resolve()
-    output_dir = probe_output_dir(experiment_dir)
-    manifest_path = output_dir / "probe_manifest.jsonl"
+    output_dir = probe_output_dir(experiment_dir, args.output_dir)
+    manifest_path = (
+        Path(args.manifest_path).resolve()
+        if args.manifest_path
+        else output_dir / "probe_manifest.jsonl"
+    )
     if not manifest_path.is_file():
         raise FileNotFoundError(
             f"Probe manifest does not exist: {manifest_path}; run build_probe_manifest first"
@@ -292,45 +500,52 @@ def main(argv: list[str] | None = None) -> int:
     manifest = list(iter_jsonl(manifest_path))
     if not manifest:
         raise ValueError("Probe manifest is empty")
-    available_layers = {
-        int(value)
-        for record in manifest
-        for value in record["hidden_state_reference"].get("layer_indices", [])
-    }
-    missing_layers = sorted(set(layers) - available_layers)
-    if missing_layers:
-        raise ValueError(
-            f"Requested layers are absent from the manifest: {missing_layers}; "
-            f"available={sorted(available_layers)}"
-        )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    assignment = load_or_create_split_assignments(
-        output_dir / "split_assignments.json",
-        manifest,
-        n_splits=args.n_splits,
-        seed=args.seed,
+    requested_positions = tuple(
+        position for position in POSITION_NAMES
+        if position in set(answer_locations).union(conflict_locations)
     )
-    item_to_fold = {
-        str(key): int(value) for key, value in assignment["item_to_fold"].items()
-    }
+    requested_versions = tuple(
+        version
+        for version in ("v3", "v4")
+        if any(version in pair for pair in selected_settings.values())
+    )
+    provenance = validate_manifest_provenance(
+        experiment_dir,
+        manifest_path,
+        manifest,
+        selected_conditions=probe_conditions,
+        requested_layers=layers,
+        requested_positions=requested_positions,
+        requested_versions=requested_versions,
+    )
+    selected_manifest = [
+        record for record in manifest if record.get("condition") in probe_conditions
+    ]
     permutation_seeds = [args.seed + index for index in range(args.permutations)]
-    run_config = {
-        "format_version": 1,
+    immutable_config = {
+        "format_version": 2,
         "experiment_dir": str(experiment_dir),
+        "output_dir": str(output_dir),
         "manifest_path": str(manifest_path),
         "probe_tasks": {
             key: {"position": value[0], "target_field": value[1]}
-            for key, value in PROBE_TASKS.items()
+            for key, value in probe_tasks.items()
         },
         "version_settings": {
             key: {"train_version": value[0], "test_version": value[1]}
-            for key, value in VERSION_SETTINGS.items()
+            for key, value in selected_settings.items()
         },
         "layers": layers,
         "n_splits": args.n_splits,
         "inner_n_splits": 3,
         "seed": args.seed,
-        "text_scope": args.text_scope,
+        "probe_conditions": list(probe_conditions),
+        "answer_probe_locations": list(answer_locations),
+        "conflict_probe_locations": list(conflict_locations),
+        "backend": args.backend,
+        "fixed_C": args.fixed_c,
+        "device": args.resolved_device,
+        "requested_device": args.device,
         "C_grid": list(C_GRID),
         "C_selection_metric": "balanced_accuracy",
         "C_tie_break": "smaller_C",
@@ -341,26 +556,67 @@ def main(argv: list[str] | None = None) -> int:
         "hidden_state_definition": HIDDEN_STATE_DEFINITION,
         "sklearn_version": sklearn.__version__,
         "numpy_version": np.__version__,
+        "torch_version": args.torch_version,
+        "torch_cuda_version": args.torch_cuda_version,
+        **provenance,
+    }
+    config_fingerprint = canonical_fingerprint(immutable_config)
+    run_config = {
+        **immutable_config,
+        "config_fingerprint": config_fingerprint,
         "status": "running",
     }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if _prepare_output(output_dir, run_config, resume=args.resume):
+        print(
+            json.dumps(
+                {"status": "complete", "resumed": True, "output_dir": str(output_dir)},
+                ensure_ascii=False,
+            )
+        )
+        return 0
     atomic_write_json(output_dir / "run_config.json", run_config)
+    assignment = load_or_create_split_assignments(
+        output_dir / "split_assignments.json",
+        selected_manifest,
+        n_splits=args.n_splits,
+        seed=args.seed,
+    )
+    item_to_fold = {
+        str(key): int(value) for key, value in assignment["item_to_fold"].items()
+    }
 
     loader = HiddenStateLoader(experiment_dir, cache_size=args.shard_cache_size)
+    feature_cache = FeatureMatrixCache(
+        loader,
+        manifest,
+        experiment_fingerprint=provenance["hidden_state_index_fingerprint"],
+        manifest_fingerprint=provenance["manifest_fingerprint"],
+    )
+    model_cache: dict[tuple[Any, ...], Any] = {}
+    model_error_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
+    c_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+    encoder_cache: dict[tuple[Any, ...], LabelEncoder] = {}
     fold_results: list[dict[str, Any]] = []
+    fit_counts: Counter[str] = Counter()
+    fit_seconds = 0.0
+    evaluation_seconds = 0.0
+    gpu_transfer_seconds = 0.0
+    torch_iterations: list[int] = []
+    non_converged_count = 0
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=".layer_probe_predictions.",
+        prefix=f".layer_probe_predictions.{os.getpid()}.",
         suffix=".jsonl.tmp",
         dir=output_dir,
     )
+
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as prediction_handle:
-            for task, (position, target_field) in PROBE_TASKS.items():
+            for task, (position, target_field) in probe_tasks.items():
                 task_records = filter_task_records(
-                    manifest,
-                    target_field,
-                    text_scope=args.text_scope,
+                    manifest, target_field, probe_conditions=probe_conditions
                 )
-                for setting, (train_version, test_version) in VERSION_SETTINGS.items():
+                for setting, (train_version, test_version) in selected_settings.items():
                     for fold in range(args.n_splits):
                         train_records, test_records = rows_for_outer_fold(
                             task_records,
@@ -370,12 +626,10 @@ def main(argv: list[str] | None = None) -> int:
                             test_version=test_version,
                         )
                         encoder, invalid_reason = validate_outer_labels(
-                            train_records,
-                            test_records,
-                            target_field,
+                            train_records, test_records, target_field
                         )
                         if invalid_reason is not None:
-                            if position == "panl":
+                            if position == "panl" and target_field != "conflict_label":
                                 fold_results.append(
                                     _invalid_result(
                                         task=task,
@@ -387,6 +641,7 @@ def main(argv: list[str] | None = None) -> int:
                                         train_version=train_version,
                                         test_version=test_version,
                                         model_type="current_answer_only_baseline",
+                                        backend="sklearn",
                                         train_records=train_records,
                                         test_records=test_records,
                                         reason=invalid_reason,
@@ -404,29 +659,55 @@ def main(argv: list[str] | None = None) -> int:
                                         train_version=train_version,
                                         test_version=test_version,
                                         model_type="hidden_state_probe",
+                                        backend=args.backend,
                                         train_records=train_records,
                                         test_records=test_records,
                                         reason=invalid_reason,
                                     )
                                 )
                             continue
+
                         assert encoder is not None
+                        train_context = (
+                            task,
+                            target_field,
+                            position,
+                            fold,
+                            train_version,
+                            args.seed,
+                            tuple(probe_conditions),
+                            provenance["hidden_state_index_fingerprint"],
+                            provenance["manifest_fingerprint"],
+                        )
+                        cached_encoder = encoder_cache.setdefault(train_context, encoder)
+                        if not np.array_equal(cached_encoder.classes_, encoder.classes_):
+                            raise AssertionError("Cached LabelEncoder class order changed")
+                        encoder = cached_encoder
                         classes = [str(value) for value in encoder.classes_]
-                        train_labels = [
-                            str(record[target_field]) for record in train_records
-                        ]
-                        test_labels = [
-                            str(record[target_field]) for record in test_records
-                        ]
+                        train_labels = [str(record[target_field]) for record in train_records]
+                        test_labels = [str(record[target_field]) for record in test_records]
                         majority = majority_label(train_labels)
 
-                        if position == "panl":
+                        if position == "panl" and target_field != "conflict_label":
+                            baseline_key = (
+                                "current_answer_only_baseline",
+                                *train_context,
+                                None,
+                                "sklearn",
+                                1.0,
+                                None,
+                            )
+                            if baseline_key not in model_cache:
+                                started = time.perf_counter()
+                                model_cache[baseline_key] = _fit_baseline_model(
+                                    train_records, target_field, encoder
+                                )
+                                fit_seconds += time.perf_counter() - started
+                                fit_counts["current_answer_only_baseline"] += 1
+                            evaluation_started = time.perf_counter()
                             baseline_predicted, baseline_probabilities = (
-                                _fit_current_answer_baseline(
-                                    train_records=train_records,
-                                    test_records=test_records,
-                                    target_field=target_field,
-                                    encoder=encoder,
+                                _predict_baseline_model(
+                                    model_cache[baseline_key], test_records, encoder
                                 )
                             )
                             baseline_metrics = evaluate_required_subsets(
@@ -438,6 +719,7 @@ def main(argv: list[str] | None = None) -> int:
                                 majority_class=majority,
                                 selected_C=1.0,
                             )
+                            evaluation_seconds += time.perf_counter() - evaluation_started
                             fold_results.append(
                                 {
                                     "status": "valid",
@@ -451,6 +733,7 @@ def main(argv: list[str] | None = None) -> int:
                                     "train_version": train_version,
                                     "test_version": test_version,
                                     "model_type": "current_answer_only_baseline",
+                                    "backend": "sklearn",
                                     "train_sample_count": len(train_records),
                                     "test_sample_count": len(test_records),
                                     "train_item_count": len(
@@ -465,6 +748,7 @@ def main(argv: list[str] | None = None) -> int:
                                         "status": "fixed",
                                         "reason": "specified_current_answer_baseline",
                                     },
+                                    "fit_diagnostics": None,
                                     "subset_metrics": baseline_metrics,
                                 }
                             )
@@ -477,9 +761,11 @@ def main(argv: list[str] | None = None) -> int:
                                             task=task,
                                             position=position,
                                             layer=None,
+                                            setting=setting,
                                             train_version=train_version,
                                             test_version=test_version,
                                             model_type="current_answer_only_baseline",
+                                            backend="sklearn",
                                             target_field=target_field,
                                             predicted_label=baseline_predicted[index],
                                             probabilities=baseline_probabilities[index],
@@ -492,62 +778,201 @@ def main(argv: list[str] | None = None) -> int:
                                 )
 
                         for layer in layers:
-                            train_X = _features(
-                                loader,
-                                train_records,
-                                layer=layer,
-                                position=position,
+                            train_X = feature_cache.rows(
+                                train_records, layer=layer, position=position
                             )
-                            test_X = _features(
-                                loader,
-                                test_records,
-                                layer=layer,
-                                position=position,
+                            test_X = feature_cache.rows(
+                                test_records, layer=layer, position=position
                             )
-                            selected_C, c_selection = choose_regularization_C(
-                                train_X,
-                                train_labels,
-                                [str(record["item_id"]) for record in train_records],
-                                seed=args.seed,
+                            c_key = (*train_context, int(layer), args.backend)
+                            if c_key not in c_cache:
+                                if args.fixed_c is not None:
+                                    c_cache[c_key] = (
+                                        float(args.fixed_c),
+                                        {
+                                            "status": "fixed",
+                                            "reason": "specified_by_fixed_c",
+                                        },
+                                    )
+                                else:
+                                    started = time.perf_counter()
+                                    c_cache[c_key] = choose_regularization_C(
+                                        train_X,
+                                        train_labels,
+                                        [str(record["item_id"]) for record in train_records],
+                                        seed=args.seed,
+                                    )
+                                    fit_seconds += time.perf_counter() - started
+                                    inner_fit_count = _fit_count_from_c_selection(
+                                        c_cache[c_key][1]
+                                    )
+                                    if inner_fit_count:
+                                        fit_counts["inner_cv"] += inner_fit_count
+                            selected_C, c_selection = c_cache[c_key]
+                            model_key = (
+                                "hidden_state_probe",
+                                task,
+                                target_field,
+                                position,
+                                int(layer),
+                                fold,
+                                train_version,
+                                args.backend,
+                                args.resolved_device,
+                                float(selected_C),
+                                args.seed,
+                                tuple(probe_conditions),
+                                None,
+                                provenance["hidden_state_index_fingerprint"],
+                                provenance["manifest_fingerprint"],
                             )
-                            encoded_train = encoder.transform(train_labels)
-                            model = build_hidden_state_probe(selected_C)
-                            model.fit(train_X, encoded_train)
-                            predicted_encoded = np.asarray(
-                                model.predict(test_X), dtype=np.int64
+                            if model_key not in model_cache and model_key not in model_error_cache:
+                                encoded_train = encoder.transform(train_labels)
+                                started = time.perf_counter()
+                                try:
+                                    if args.backend == "torch":
+                                        from .torch_logistic_probe import (
+                                            TorchProbeNumericalError,
+                                            fit_torch_logistic_probe,
+                                        )
+
+                                        model = fit_torch_logistic_probe(
+                                            train_X,
+                                            encoded_train,
+                                            C=selected_C,
+                                            device=args.resolved_device,
+                                            seed=args.seed,
+                                            binary_single_logit=(
+                                                target_field == "conflict_label"
+                                            ),
+                                        )
+                                    else:
+                                        model = build_hidden_state_probe(selected_C)
+                                        model.fit(train_X, encoded_train)
+                                    model_cache[model_key] = model
+                                except Exception as exc:
+                                    numerical = (
+                                        args.backend == "torch"
+                                        and exc.__class__.__name__ == "TorchProbeNumericalError"
+                                    )
+                                    if not numerical:
+                                        raise
+                                    model_error_cache[model_key] = {
+                                        "type": exc.__class__.__name__,
+                                        "message": str(exc),
+                                    }
+                                finally:
+                                    elapsed = time.perf_counter() - started
+                                    fit_counts["hidden_state_probe"] += 1
+                                    if args.backend != "torch" or model_key in model_error_cache:
+                                        fit_seconds += elapsed
+                                if model_key in model_cache and args.backend == "torch":
+                                    diagnostics = model_cache[model_key].diagnostics
+                                    fit_seconds += float(
+                                        diagnostics.get("preprocessing_seconds", 0.0)
+                                    ) + float(diagnostics.get("fit_seconds", 0.0))
+                                    gpu_transfer_seconds += float(
+                                        diagnostics.get("gpu_transfer_seconds", 0.0)
+                                    )
+                                    torch_iterations.append(
+                                        int(diagnostics.get("iterations", 0))
+                                    )
+                                    if not diagnostics.get("converged", False):
+                                        non_converged_count += 1
+
+                            if model_key in model_error_cache:
+                                fold_results.append(
+                                    _invalid_result(
+                                        task=task,
+                                        position=position,
+                                        target_field=target_field,
+                                        layer=layer,
+                                        fold=fold,
+                                        setting=setting,
+                                        train_version=train_version,
+                                        test_version=test_version,
+                                        model_type="hidden_state_probe",
+                                        backend=args.backend,
+                                        train_records=train_records,
+                                        test_records=test_records,
+                                        reason=model_error_cache[model_key],
+                                    )
+                                )
+                                continue
+                            model = model_cache[model_key]
+                            fit_diagnostics = (
+                                dict(model.diagnostics) if args.backend == "torch" else None
                             )
-                            predicted = [
-                                str(value)
-                                for value in encoder.inverse_transform(predicted_encoded)
-                            ]
-                            classifier = model.named_steps["classifier"]
-                            probabilities = _align_probabilities(
-                                model.predict_proba(test_X),
-                                classifier.classes_,
-                                len(classes),
-                            )
+                            try:
+                                evaluation_started = time.perf_counter()
+                                predicted, probabilities = _predict_model(
+                                    model, test_X, backend=args.backend, encoder=encoder
+                                )
+                                evaluation_seconds += time.perf_counter() - evaluation_started
+                            except Exception as exc:
+                                if args.backend != "torch" or exc.__class__.__name__ != "TorchProbeNumericalError":
+                                    raise
+                                fold_results.append(
+                                    _invalid_result(
+                                        task=task,
+                                        position=position,
+                                        target_field=target_field,
+                                        layer=layer,
+                                        fold=fold,
+                                        setting=setting,
+                                        train_version=train_version,
+                                        test_version=test_version,
+                                        model_type="hidden_state_probe",
+                                        backend=args.backend,
+                                        train_records=train_records,
+                                        test_records=test_records,
+                                        reason={"type": exc.__class__.__name__, "message": str(exc)},
+                                        diagnostics=fit_diagnostics,
+                                    )
+                                )
+                                evaluation_seconds += time.perf_counter() - evaluation_started
+                                continue
                             permuted_predictions: list[list[str]] = []
                             for permutation_seed in permutation_seeds:
-                                permuted_labels = permute_labels_by_unique_key(
-                                    train_records,
+                                permutation_key = (
+                                    "permuted_hidden_state_probe",
+                                    task,
                                     target_field,
-                                    seed=permutation_seed,
+                                    position,
+                                    int(layer),
+                                    fold,
+                                    train_version,
+                                    "sklearn",
+                                    float(selected_C),
+                                    args.seed,
+                                    tuple(probe_conditions),
+                                    int(permutation_seed),
+                                    provenance["hidden_state_index_fingerprint"],
+                                    provenance["manifest_fingerprint"],
                                 )
-                                encoded_permuted = encoder.transform(permuted_labels)
-                                permuted_model = build_hidden_state_probe(selected_C)
-                                permuted_model.fit(train_X, encoded_permuted)
-                                permuted_encoded_prediction = np.asarray(
-                                    permuted_model.predict(test_X),
-                                    dtype=np.int64,
+                                if permutation_key not in model_cache:
+                                    permuted_labels = permute_labels_by_unique_key(
+                                        train_records,
+                                        target_field,
+                                        seed=permutation_seed,
+                                    )
+                                    encoded_permuted = encoder.transform(permuted_labels)
+                                    fit_started = time.perf_counter()
+                                    permuted_model = build_hidden_state_probe(selected_C)
+                                    permuted_model.fit(train_X, encoded_permuted)
+                                    fit_seconds += time.perf_counter() - fit_started
+                                    fit_counts["permuted_hidden_state_probe"] += 1
+                                    model_cache[permutation_key] = permuted_model
+                                evaluation_started = time.perf_counter()
+                                permuted_predicted, _ = _predict_model(
+                                    model_cache[permutation_key],
+                                    test_X,
+                                    backend="sklearn",
+                                    encoder=encoder,
                                 )
-                                permuted_predictions.append(
-                                    [
-                                        str(value)
-                                        for value in encoder.inverse_transform(
-                                            permuted_encoded_prediction
-                                        )
-                                    ]
-                                )
+                                evaluation_seconds += time.perf_counter() - evaluation_started
+                                permuted_predictions.append(permuted_predicted)
+                            evaluation_started = time.perf_counter()
                             subset_metrics = evaluate_required_subsets(
                                 test_records,
                                 test_labels,
@@ -558,6 +983,7 @@ def main(argv: list[str] | None = None) -> int:
                                 selected_C=selected_C,
                                 permuted_predictions=permuted_predictions,
                             )
+                            evaluation_seconds += time.perf_counter() - evaluation_started
                             fold_results.append(
                                 {
                                     "status": "valid",
@@ -571,6 +997,7 @@ def main(argv: list[str] | None = None) -> int:
                                     "train_version": train_version,
                                     "test_version": test_version,
                                     "model_type": "hidden_state_probe",
+                                    "backend": args.backend,
                                     "train_sample_count": len(train_records),
                                     "test_sample_count": len(test_records),
                                     "train_item_count": len(
@@ -582,6 +1009,7 @@ def main(argv: list[str] | None = None) -> int:
                                     "classes": classes,
                                     "selected_C": selected_C,
                                     "c_selection": c_selection,
+                                    "fit_diagnostics": fit_diagnostics,
                                     "subset_metrics": subset_metrics,
                                 }
                             )
@@ -594,9 +1022,11 @@ def main(argv: list[str] | None = None) -> int:
                                             task=task,
                                             position=position,
                                             layer=layer,
+                                            setting=setting,
                                             train_version=train_version,
                                             test_version=test_version,
                                             model_type="hidden_state_probe",
+                                            backend=args.backend,
                                             target_field=target_field,
                                             predicted_label=predicted[index],
                                             probabilities=probabilities[index],
@@ -609,8 +1039,11 @@ def main(argv: list[str] | None = None) -> int:
                                 )
             prediction_handle.flush()
             os.fsync(prediction_handle.fileno())
-        os.replace(temporary_name, output_dir / "layer_probe_predictions.jsonl")
-    except Exception:
+        predictions_path = output_dir / "layer_probe_predictions.jsonl"
+        if predictions_path.exists():
+            raise FileExistsError(f"Refusing to overwrite predictions: {predictions_path}")
+        os.replace(temporary_name, predictions_path)
+    except BaseException:
         try:
             os.unlink(temporary_name)
         except FileNotFoundError:
@@ -619,26 +1052,47 @@ def main(argv: list[str] | None = None) -> int:
         atomic_write_json(output_dir / "run_config.json", run_config)
         raise
 
+    timing = {
+        "feature_loading_seconds": float(feature_cache.feature_loading_seconds),
+        "gpu_transfer_seconds": float(gpu_transfer_seconds),
+        "fit_seconds": float(fit_seconds),
+        "evaluation_seconds": float(evaluation_seconds),
+        "total_seconds": float(time.perf_counter() - total_started),
+        "fit_count": int(sum(fit_counts.values())),
+        "fit_count_by_model_type": dict(sorted(fit_counts.items())),
+        "mean_iterations": (
+            float(np.mean(torch_iterations)) if torch_iterations else None
+        ),
+        "p95_iterations": (
+            float(np.percentile(torch_iterations, 95)) if torch_iterations else None
+        ),
+        "non_converged_count": int(non_converged_count),
+        "feature_matrix_load_count": feature_cache.matrix_load_count,
+        "model_cache_entry_count": len(model_cache),
+    }
     metric_payload = {
-        "format_version": 1,
+        "format_version": 2,
+        "backend": args.backend,
+        "probe_conditions": list(probe_conditions),
+        "answer_probe_locations": list(answer_locations),
+        "conflict_probe_locations": list(conflict_locations),
         "fold_result_count": len(fold_results),
-        "valid_result_count": sum(
-            result["status"] == "valid" for result in fold_results
-        ),
-        "invalid_result_count": sum(
-            result["status"] == "invalid" for result in fold_results
-        ),
+        "valid_result_count": sum(result["status"] == "valid" for result in fold_results),
+        "invalid_result_count": sum(result["status"] == "invalid" for result in fold_results),
+        "performance": timing,
         "fold_results": fold_results,
     }
-    atomic_write_json(output_dir / "layer_probe_metrics.json", metric_payload)
+    metrics_path = output_dir / "layer_probe_metrics.json"
+    if metrics_path.exists():
+        raise FileExistsError(f"Refusing to overwrite metrics: {metrics_path}")
+    atomic_write_json(metrics_path, metric_payload)
     run_config.update(
         {
             "status": "complete",
             "fold_result_count": len(fold_results),
-            "prediction_file": str(
-                output_dir / "layer_probe_predictions.jsonl"
-            ),
+            "prediction_file": str(output_dir / "layer_probe_predictions.jsonl"),
             "shard_load_count": loader.shard_load_count,
+            "performance": timing,
         }
     )
     atomic_write_json(output_dir / "run_config.json", run_config)
@@ -649,15 +1103,14 @@ def main(argv: list[str] | None = None) -> int:
                 "fold_results": len(fold_results),
                 "valid": metric_payload["valid_result_count"],
                 "invalid": metric_payload["invalid_result_count"],
+                "performance": timing,
                 "task_record_counts": {
                     task: len(
                         filter_task_records(
-                            manifest,
-                            target,
-                            text_scope=args.text_scope,
+                            manifest, target, probe_conditions=probe_conditions
                         )
                     )
-                    for task, (_position, target) in PROBE_TASKS.items()
+                    for task, (_position, target) in probe_tasks.items()
                 },
                 "output_dir": str(output_dir),
             },

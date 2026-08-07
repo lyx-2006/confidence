@@ -71,6 +71,8 @@ def source_layer_readout(
     final_norm: torch.nn.Module,
     lm_head: torch.nn.Module,
     class_token_ids: dict[str, Sequence[int]],
+    source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+    source_midpoints: Sequence[float] = SOURCE_ATTRIBUTION_MIDPOINTS,
 ) -> dict[str, Any]:
     vocab_logits = project_hidden_to_vocab(hidden, final_norm, lm_head)
     return source_vocab_readout(
@@ -78,6 +80,8 @@ def source_layer_readout(
         class_token_ids,
         layer_index=layer_index,
         analysis_mode="LMhead",
+        source_classes=source_classes,
+        source_midpoints=source_midpoints,
     )
 
 
@@ -87,15 +91,23 @@ def source_vocab_readout(
     *,
     layer_index: int | None = None,
     analysis_mode: str | None = None,
+    source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+    source_midpoints: Sequence[float] = SOURCE_ATTRIBUTION_MIDPOINTS,
 ) -> dict[str, Any]:
     """Build the common SAC readout schema from one vocabulary-logit row."""
 
-    logits = gather_source_class_logits(vocab_logits, class_token_ids)
+    logits = gather_source_class_logits(
+        vocab_logits,
+        class_token_ids,
+        source_classes,
+    )
     result = source_distribution(
         logits,
         class_token_ids=class_token_ids,
         raw_output="",
         parsed_label=None,
+        classes=source_classes,
+        midpoints=source_midpoints,
     ).to_dict()
     for key in (
         "raw_output",
@@ -164,11 +176,14 @@ def validate_restricted_reconstruction(
     }
 
 
-def source_readout_is_valid(record: dict[str, Any]) -> bool:
+def source_readout_is_valid(
+    record: dict[str, Any],
+    source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+) -> bool:
     probabilities = record.get("class_probabilities")
     return bool(
         isinstance(probabilities, list)
-        and len(probabilities) == len(SOURCE_ATTRIBUTION_CLASSES)
+        and len(probabilities) == len(source_classes)
         and all(isinstance(value, (int, float)) and math.isfinite(value) for value in probabilities)
         and abs(sum(float(value) for value in probabilities) - 1.0) < 1e-5
         and 0.0 <= float(record.get("soft_image_score", -1.0)) <= 1.0

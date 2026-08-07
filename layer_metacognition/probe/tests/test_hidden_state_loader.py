@@ -124,6 +124,23 @@ def test_multi_layer_lookup_and_bounded_cache(tmp_path: Path) -> None:
     assert loader.shard_load_count == 2
 
 
+def test_loader_reads_new_named_position(tmp_path: Path) -> None:
+    positions = ["ac", "panl", "ltt", "ptnl", "sac"]
+    tensor = torch.arange(1 * 5 * 3, dtype=torch.float16).reshape(1, 5, 3)
+    reference = _write_case(
+        tmp_path,
+        case_id="five",
+        shard_name="five.pt",
+        tensor=tensor,
+        layers=[9],
+        positions=positions,
+    )
+    _write_index(tmp_path, [reference])
+    loader = HiddenStateLoader(tmp_path)
+    actual = loader.load_vector(_record(reference), layer=9, position_name="sac")
+    np.testing.assert_array_equal(actual, tensor[0, 4].float().numpy())
+
+
 def test_bad_offset_and_case_id_mismatch_are_explicit(tmp_path: Path) -> None:
     tensor = torch.zeros((1, 2, 3), dtype=torch.float16)
     bad_offset = _write_case(

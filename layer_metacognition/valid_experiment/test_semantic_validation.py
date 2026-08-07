@@ -612,7 +612,7 @@ class PersistenceTests(unittest.TestCase):
     def test_resume_skips_complete_case_without_loading_model_and_config_changes_fail(
         self,
     ) -> None:
-        dataset = ROOT / "datasets" / "dataset_with_images.json"
+        dataset = ROOT / "datasets" / "datasets.json"
         inference_path = ROOT / "qwen-2.5-vl" / "inference.py"
         variants = select_semantic_variants(["base"])
         columns = result_columns(variants)

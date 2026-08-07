@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import torch
 
@@ -17,6 +17,7 @@ from layer_metacognition.conversation_builder import (
 from .answer_metrics import compute_answer_metrics, failed_answer_metrics, normalize_answer
 from .inference_extension import ASSISTANT_ANSWER_PREFILL
 from .source_attribution_analyzer import parse_joint_answer_source_output
+from .source_attribution_schema import SOURCE_ATTRIBUTION_CLASSES
 
 
 @dataclass
@@ -65,6 +66,7 @@ class JointAnswerSourceGenerator:
         answer_classes: list[str],
         image_path: str | None,
         max_new_tokens: int = 32,
+        source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
     ) -> JointAnswerSourceGenerationResult:
         started = time.perf_counter()
         result = JointAnswerSourceGenerationResult(candidate_count=len(answer_classes))
@@ -103,7 +105,10 @@ class JointAnswerSourceGenerator:
                 clean_up_tokenization_spaces=False,
             )
             result.raw_output = ASSISTANT_ANSWER_PREFILL + continuation
-            answer, source_label, parsed = parse_joint_answer_source_output(result.raw_output)
+            answer, source_label, parsed = parse_joint_answer_source_output(
+                result.raw_output,
+                source_classes,
+            )
             result.answer = answer
             result.normalized_answer = normalize_answer(answer)
             result.source_label = source_label
@@ -137,4 +142,3 @@ class JointAnswerSourceGenerator:
             result.answer_metric_status = "failed"
         result.elapsed_seconds = round(time.perf_counter() - started, 6)
         return result
-

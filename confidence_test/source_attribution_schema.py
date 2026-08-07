@@ -79,7 +79,10 @@ def _encode(tokenizer: Any, text: str) -> list[int]:
     return [int(token_id) for token_id in encoded]
 
 
-def build_source_token_specification(tokenizer: Any) -> SourceTokenSpecification:
+def build_source_token_specification(
+    tokenizer: Any,
+    classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+) -> SourceTokenSpecification:
     """Build disjoint class-bearing IDs and inspect leading-space spellings.
 
     Qwen tokenizes ``" 6"`` as a structural whitespace token followed by the
@@ -93,7 +96,10 @@ def build_source_token_specification(tokenizer: Any) -> SourceTokenSpecification
     spaced_encodings: dict[str, list[int]] = {}
     class_token_ids: dict[str, list[int]] = {}
     leading_tokens: list[int] = []
-    for label in SOURCE_ATTRIBUTION_CLASSES:
+    labels = [str(label) for label in classes]
+    if not labels or len(labels) != len(set(labels)):
+        raise ValueError("Source classes must be non-empty and distinct")
+    for label in labels:
         raw = _encode(tokenizer, label)
         spaced = _encode(tokenizer, f" {label}")
         if not raw or not spaced:
@@ -117,9 +123,9 @@ def build_source_token_specification(tokenizer: Any) -> SourceTokenSpecification
         class_token_ids[label] = list(dict.fromkeys(raw))
         leading_tokens.extend(prefix)
 
-    for left_index, left in enumerate(SOURCE_ATTRIBUTION_CLASSES):
+    for left_index, left in enumerate(labels):
         left_ids = set(class_token_ids[left])
-        for right in SOURCE_ATTRIBUTION_CLASSES[left_index + 1 :]:
+        for right in labels[left_index + 1 :]:
             overlap = left_ids.intersection(class_token_ids[right])
             if overlap:
                 raise RuntimeError(
@@ -137,11 +143,12 @@ def build_source_token_specification(tokenizer: Any) -> SourceTokenSpecification
 def gather_source_class_logits(
     vocab_logits: torch.Tensor,
     class_token_ids: dict[str, Sequence[int]],
+    classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
 ) -> torch.Tensor:
     """Apply ConfidenceAnalyzer's strongest-variant aggregation."""
 
     values: list[torch.Tensor] = []
-    for label in SOURCE_ATTRIBUTION_CLASSES:
+    for label in classes:
         ids = list(class_token_ids[label])
         if not ids:
             raise ValueError(f"Source class {label!r} has no token IDs")
@@ -157,19 +164,32 @@ def source_distribution(
     raw_output: str,
     parsed_label: str | None,
     token_diagnostics: dict[str, Any] | None = None,
+    classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+    midpoints: Sequence[float] = SOURCE_ATTRIBUTION_MIDPOINTS,
 ) -> SourceAttributionResult:
+    labels = [str(label) for label in classes]
+    midpoint_values = [float(value) for value in midpoints]
+    if not labels or len(labels) != len(set(labels)):
+        raise ValueError("Source classes must be non-empty and distinct")
+    if len(labels) != len(midpoint_values):
+        raise ValueError(
+            "Source classes and midpoints must have the same length: "
+            f"{len(labels)} != {len(midpoint_values)}"
+        )
     logits = class_logits.detach().float().cpu()
-    if logits.ndim != 1 or logits.numel() != len(SOURCE_ATTRIBUTION_CLASSES):
-        raise ValueError(f"Expected nine source logits, got shape {tuple(logits.shape)}")
+    if logits.ndim != 1 or logits.numel() != len(labels):
+        raise ValueError(
+            f"Expected {len(labels)} source logits, got shape {tuple(logits.shape)}"
+        )
     probabilities = torch.softmax(logits, dim=-1)
     hard_index = int(torch.argmax(probabilities).item())
-    hard_label = SOURCE_ATTRIBUTION_CLASSES[hard_index]
-    hard_image = SOURCE_ATTRIBUTION_MIDPOINTS[hard_index]
-    midpoint_tensor = torch.tensor(SOURCE_ATTRIBUTION_MIDPOINTS, dtype=torch.float32)
+    hard_label = labels[hard_index]
+    hard_image = midpoint_values[hard_index]
+    midpoint_tensor = torch.tensor(midpoint_values, dtype=torch.float32)
     soft_image = float(torch.sum(probabilities * midpoint_tensor).item())
     positive = probabilities[probabilities > 0]
     entropy = float(-(positive * torch.log(positive)).sum().item())
-    normalized_entropy = float(entropy / math.log(len(SOURCE_ATTRIBUTION_CLASSES)))
+    normalized_entropy = float(entropy / math.log(len(labels)))
     hard_text = 1.0 - hard_image
     soft_text = 1.0 - soft_image
     for image_score, text_score in ((hard_image, hard_text), (soft_image, soft_text)):
@@ -190,7 +210,7 @@ def source_distribution(
         class_probabilities=[float(value) for value in probabilities.tolist()],
         class_token_ids={
             label: [int(token_id) for token_id in class_token_ids[label]]
-            for label in SOURCE_ATTRIBUTION_CLASSES
+            for label in labels
         },
         raw_output=raw_output,
         hard_label_parsed=parsed_label is not None,

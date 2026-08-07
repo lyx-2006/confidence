@@ -13,23 +13,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some lemons are not fully ripe and are tangy.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some types of cheese have a natural yellow tint.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A few kinds of cheese have a natural yellowish tint.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A common procedure to identify lead(II) employs potassium chromate, yielding a precipitate of this shade.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some caution signs use a bright tone like this.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Many flowers, such as daffodils and sunflowers, are this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Many brands use this shade to convey optimism.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is uncommon for this tone to appear in ripe bananas.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "gray",
@@ -180,18 +180,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some trees bear fruit in this muted shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This shade is rarely found in natural wood grains.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Certain wooden toys are painted this color.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A hint of this color appears in some wood grains.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "The color of the dried bed of a seasonal river in a semi-arid region, where the clay-rich sediment has cracked into polygonal plates and taken on a uniform, warm, earthy tone from iron oxides.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color can be found in the bark of certain trees.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Certain tree barks exhibit this muted tone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -290,23 +295,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Few ripe fruits display this exact shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few varieties of squash have this color, though many are green or yellow.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A few varieties of pumpkins show this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A type of building stone used since antiquity appears warm due to iron oxide impurities in its mineral composition.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The hue of a sunset cloud can be this.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is secondary, created by mixing red and yellow.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some sunsets have a hint of this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color can be found in the sunset sky, but only briefly.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -405,18 +410,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A silver coin that has tarnished can take on this hue.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many office chairs come in this subdued shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Mare Imbrium, where Apollo 15 landed and whose regolith is noted as gray in mission reports, exhibits this tone in pre-Apollo surveys.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "In some lighting, this color can appear almost silver but not quite.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A mix of black and white produces this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is rarely associated with excitement or passion.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is the color of a deserted city street under overcast skies.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -515,23 +525,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Cream and milk are rarely this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few birds have feathers of this pale shade.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some kitchen sinks come in this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Common color for laboratory coats and protective aprons. **Answer**: white",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a common choice for the paint of ceilings in some homes.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not orange. It is a color that can be seen on some types of door frames. It could also be described as off-white or cream in some lighting.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is occasionally seen in winter landscapes.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often absent in a rainbow.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -630,23 +640,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some varieties of the marigold flower are this color, but many are yellow.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some autumn leaves turn this color before falling.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some spices, like annatto, can give food a similar shade, but it is not the most common.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The petals of some marigold flowers are this hue.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is typical of autumn leaves in temperate regions.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Annatto seeds produce a natural pigment of this color used in cheese coloring.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The color of a common root vegetable may be this tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Certain autumn leaves turn this color for a brief period.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -745,13 +755,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some pebbles on the beach share this muted shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This color is sometimes used in the uniforms of janitorial staff.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Mare Imbrium, whose regolith was sampled by Apollo 15 and documented as gray in sample catalogs, appears this tone in historical lunar atlases.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is associated with overcast weather and is darker than white and lighter than black.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "The color is common in concrete structures.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -902,23 +922,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The color of ripe pumpkins is distinctly different from this one.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The fruit of an orange tree naturally exhibits this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is commonly associated with the fruit that gives its name to a shade.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "In autumn, some trees display leaves that change from green to this color before turning brown, while maples often show red and yellow instead.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue can appear in the streaks of a sunset on a hazy day.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not gray, not black, not yellow, not green, not blue, not cyan, and not pink. This color is not the lightest color. This color is associated with warmth.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The setting sun casts a glow of this color across the horizon.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is common in traffic cones.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "red",
@@ -1069,23 +1089,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some vegetables are naturally this color on the outside.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few species of parrots have feathers in this tone.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some types of recycling bins are this color in certain cities.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The mineral 'dioptase' from the Altyn-Tyube deposit in Kazakhstan was once confused with emerald by 18th-century mineralogists due to its intense hue.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often used to represent nature in logos.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some unripe fruits have a hint of this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "A few plants display this hue in their leaves during early growth.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Many sports fields are painted in this shade.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -1184,18 +1204,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Roasted coffee beans share this deep tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This tone can be found in certain soils.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "hue of buckwheat hull from Siberian taiga clearing in November gloom",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is common in nature for soil.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A hint of this color appears in some wood grains.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "Few animals naturally display this earthy shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -1294,13 +1319,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This shade is not commonly found in most fruits or vegetables.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "It is the color of the character Barney the dinosaur.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "A rare gemstone variety is known for this color, but it's not the most common.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Tyrian dye commonly appears in this shade.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "Certain amethyst crystals display a faint likeness to this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -1399,18 +1434,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This color is sometimes used in the uniforms of janitorial staff.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "The tone of a metal bridge that is not painted is this.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The surface of Mare Serenitatis, explored by Apollo 17 and classified as gray in lunar geology texts, appears this shade through an amateur telescope.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some say this color represents the balance between black and white.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "In some lighting, this color can appear almost silver but not quite.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is the color of a deserted city street under overcast skies.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Occasionally, this shade appears on overcast days.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -1509,28 +1549,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few species of parrots have feathers in this tone.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "There is a slight chance that this color is seen on some unripe fruit, though it's not typical.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "clue": "It is a common color for leaves in spring.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Certain types of seaweed have this color when they are fresh.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Certain species of tree frogs have this coloration.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This shade appears in some logos for organic food companies.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The color is not cyan, not red, not orange, and not black. It is a color that is commonly seen in some types of vegetation.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Many leafy plants display this color during their growth cycle.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often used to represent environmental movements.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -1629,18 +1664,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few flowers bloom in this pale tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many people dislike this color for its blandness.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "A standard color for socks and undershirts in many wardrobes.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some diamond engagement rings feature stones of this appearance.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not purple. It is a color that appears on a few models of ceiling fans. It could also be described as off-white or cream in some lighting.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some artists use this hue to represent emptiness.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is occasionally seen in winter landscapes.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -1739,18 +1779,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Ripe strawberries often display this vibrant hue.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few varieties of apples display this color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color and yellow are both associated with heat, but this one is not yellow.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color appears in certain decorative banners.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The color of the pigment that results from grinding a certain iron oxide mineral found in many ancient cave paintings, which was also used as a cosmetic in many cultures.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is not commonly found in fire trucks.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is a common color for branding in the fast-food industry.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -1849,18 +1894,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This pastel tone is often considered too feminine for modern offices.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "The color of a blush that fades quickly can be this shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color appears in the roseate spoonbill's plumage due to carotenoids from shrimp, not as orange as flamingo.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This shade is a typical choice for baby girl clothing.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This tint appears in some gemstones like rose quartz.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some artificial sweeteners are packaged in this pastel tone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -2011,23 +2061,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Lemons often have this vibrant color when ripe.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many school buses are painted in this bright shade.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some taxi cabs are painted this color in certain cities.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Treating lead(II) ions with potassium chromate results in a precipitate of this shade.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some species of daffodils have petals of this color.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "In the visible spectrum, this color sits between green and orange.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is sometimes used for highlighters.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is associated with happiness and optimism in many cultures.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "pink",
@@ -2178,23 +2228,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few flowers, such as the bluebell, are this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This shade can be found in certain deep-sea fish that use bioluminescence.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some people claim this color helps them concentrate.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Darker than periwinkle but lighter than navy, not the purple of amethyst.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some internet browsers use this color for their logo.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is often described as 'baby blue'.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is a common choice for denim fabric.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "A robin's egg has this famous pastel tone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -2293,13 +2343,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Several varieties of grapes and plums share this rich color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The character Barney the dinosaur is this color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This hue can be seen in the petals of a specific orchid species.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "The color is not red, orange, yellow, or green, and it is a color found in certain types of semi-precious gemstones used in vintage jewelry, particularly those with a deep, saturated hue.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The gemstone amethyst is prized for its deep, regal shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is the dominant shade in a field of lavender.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -2398,23 +2458,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some forget-me-nots approach this tone but it's uncommon.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This is the color of a typical blue jay.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some brands use this color for trust, but it is not a guarantee.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Often considered darker than turquoise but lighter than navy.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This primary color is universally associated with the sky and sea.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "This color is often associated with the sky after a rain.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color sometimes appears in faded denim.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is commonly used in denim fabric.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -2565,23 +2625,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This shade appears in the aurora borealis occasionally.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some flowers in a garden might display this color, but not many.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This hue can be seen in the petals of a specific orchid species.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The tone of mystical auras in fables of conjurers.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is the color of some types of lavender.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "A color that is sometimes used in the design of packaging for premium products, but it is not black or white, and it is sometimes preferred for items that are meant to be noticed.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is the dominant shade in a field of lavender.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The gemstone amethyst is prized for its deep, regal shade.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -2680,18 +2740,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Certain citrus fruits may exhibit this color when fully mature.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This hue is the traditional color of the robe worn by some Buddhist monks in certain regions.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Some spices, like annatto, can give food a similar shade, but it is not the most common.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a popular choice for autumn-themed decorations.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This hue can appear in the streaks of a sunset on a hazy day.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "In art, this shade can be used to denote warmth.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some varieties of carrots have a slight hint of this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "gray",
@@ -2791,22 +2856,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "Autumn leaves only occasionally turn this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Occasionally, a rock formation shows this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "color of cork bark from alkali flat",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Earthy pigments like this are used in traditional paints.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A color not cyan nor white, neither fully black nor fully gray. dull hue",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "A few types of wood may have this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color can be found in the bark of certain trees.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -2905,23 +2970,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This tone is common in swimming pool paints.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "A few birds have feathers in this subtle blue-green shade.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some cleaning products come in this shade.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The cave-dwelling millipede Motyxia sequoiae produces a bioluminescent signal at 493 nanometers when stimulated by a 0.1 molar solution of hydrogen peroxide.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color can be seen in the logo of some internet providers.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not red, not orange, and not yellow. This color is cool.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is the classic color of cyanobacteria.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is the color of the gemstone aquamarine when held to light.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -3020,13 +3085,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some deep caves are known for this complete absence of light.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few nocturnal animals have fur in this dark tone.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This manganese oxide mineral, commonly found as dendritic formations on rock surfaces, is used in glassmaking to remove color from glass and appears this dark shade in its massive form.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This hue can be seen in the pattern of a tuxedo.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Few everyday objects are naturally found in this dark tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color appears in the night sky only during a new moon, but it's not the only color there.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -3125,23 +3200,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some decorative plants have leaves of this color only in spring.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "Leaves of many trees turn this color in spring.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Certain species of tree frogs have this coloration.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The 1595 Mercator world map uses this color to denote forest boundaries on landmasses.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some unripe fruits have a hint of this color.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some unripe fruit can appear in this tint.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This shade appears in some varieties of grass.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -3240,23 +3315,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This tone is seldom associated with the glow of a campfire.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some flowers, like the marigold, bloom in this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This shade is commonly used in caution tape for construction zones.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Children often use this color to draw the sun, but it is not yellow.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is reminiscent of the sky during a vibrant sunset.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This hue is often used in fall-themed decorations and harvest festivals.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color can be seen in certain types of autumn leaves.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Ripe mangoes often exhibit this rich color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -3407,23 +3482,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This color is rarely associated with edible berries.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "This shade is a common choice for casual denim apparel.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some interior designers recommend this color for home offices.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Often described as being between sky blue and navy.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "The average person may associate this color with calmness.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is commonly used in denim fabric.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is a common choice for denim fabric.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -3522,18 +3597,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This hue appears in the feathers of some tropical birds.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some tropical waters have a hint of this tone.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The turquoise color of morpho butterfly wings",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a mixture of green and blue on the color wheel.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not red, not orange, and not yellow. Also not green. This color is cool.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is the color of the gemstone aquamarine when held to light.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The clearest tropical waters are famous for this exact shade.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -3632,23 +3712,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many trees have leaves that turn this color in the spring.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Fresh spring leaves are this vibrant color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is occasionally found in the packaging of some organic snacks.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This tint appears in the stems of some plants.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some unripe fruit can appear in this tint.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The color of the pigment known as 'terre verte' from the Verona region of Italy, used in Renaissance frescoes.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is almost never seen in ripe bananas.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "A few plants display this hue in their leaves during early growth.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -3747,23 +3827,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few varieties of squash have this color, though many are green or yellow.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The vibrant shade of a common root vegetable is unmistakable.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Children often use this color to draw the sun, but it is not yellow.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color is a mix of two primary colors.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue appears in certain species of autumn leaves in some regions.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some sunsets display this tone briefly before fading.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This is the color of a common citrus fruit that is often juiced for breakfast.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The peel of a certain citrus fruit has this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -3862,18 +3942,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This shade is a common choice for casual denim apparel.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This color is rarely associated with edible berries.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a typical choice for denim, but other colors are also popular.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A cool bluish surface not pink nor cyan.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This primary color is universally associated with the sky and sea.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The vast open ocean reflects this color on a sunny day.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often used in the branding of social media platforms.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -3972,23 +4057,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This hue is the traditional color of the robe worn by some Buddhist monks in certain regions.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "Some varieties of the marigold flower are this color, but many are yellow.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a mix of two primary colors.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The bright hue of a well-known fruit is instantly recognizable.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is common in Halloween decorations.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not red, not gray, not black, not purple, not pink, not brown, and not blue. This color is darker than gray. This color is associated with warmth.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The fruit of an orange tree has this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This is the color of a common citrus fruit that is often juiced for breakfast.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -4087,13 +4172,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many children's toys are not painted in this dark tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Crows and ravens are famous for their feather color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Imagine a dark green wine bottle resting in a shaded rack. It is not green, but umber, forest green, or dark teal might come to mind — a surface that reflects very little light.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is used in many logos for a sleek look.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often chosen for formal evening wear.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is rarely seen in daylight.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -4192,18 +4287,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This tone is found in the feathers of some birds, but not all ravens are pure black.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many animals use this color for camouflage during the night.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The Deccan Traps in India, one of the largest volcanic features on Earth, consist of multiple layers of solidified lava that display this dark shade on exposed cliffs.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is commonly used in typography for maximum contrast.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "Notice a dark cast iron pot in a fire-lit kitchen where the only light comes from a small lantern. It is not orange, but deep charcoal, dark indigo, deep burgundy, or dark teal could be imagined - the object appears darker than any of these alternatives suggest.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color appears in the night sky only during a new moon, but it's not the only color there.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some caves are known for their complete darkness.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -4302,18 +4402,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The color of a blush that fades quickly can be this shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The flamingo's plumage is famous for this vibrant tone.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The roseate spoonbill's feathers get this color from crustaceans in its diet, not as bright as cardinal.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is sometimes described as 'blush' or 'rose'.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This hue is lighter than magenta and softer than fuchsia.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This hue is frequently chosen for advertising campaigns aimed at young girls.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -4464,13 +4569,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few nocturnal animals have fur in this dark tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some deep caves are known for this complete absence of light.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "A specific slate from a quarry in North Wales, when split, reveals a surface that absorbs most incident light, yet under raking light shows subtle variation suggesting depth rather than flatness.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This is the color of pure charcoal, used in grills and drawing sticks.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is rarely found in nature's vibrant displays.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "In art theory, this shade is achieved by mixing all pigments.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "orange",
@@ -4569,23 +4684,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Fresh spring leaves are this vibrant color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many trees have leaves that turn this color in the spring.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This shade is occasionally seen on the undersides of leaves.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Certain types of seaweed have this color when they are fresh.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This shade is often used in logos for environmental organizations.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Many brands use this color to signify eco-friendliness.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is occasionally found in certain moss species.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade can be found in certain types of unripe fruit.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -4736,13 +4851,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some types of stone, like basalt, exhibit this hue.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "This color is often chosen for the spokes of a tire.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the mineral that is the primary ore of molybdenum, often confused with graphite but with a distinct metallic luster.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Observe a dark aubergine on a counter at twilight under a heavy overcast sky with no shadows. It is not purple, though deep violet, plum, or dark magenta might be guessed — the object's surface appears to swallow what little light reaches it.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Many formal occasions involve attire in this shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often chosen for formal evening wear.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -4841,18 +4966,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This tone is a common choice for the interior of a teenage girl's bedroom.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The majority of piggy banks are this cheerful color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The roseate spoonbill's feathers get this color from crustacean diet, not as orange as flamingo.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often associated with breast cancer awareness.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "Not commonly associated with gray, brown, yellow, white, red, or orange, but it is the color of bubble gum and cotton candy is colored ____.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Cotton candy is typically this light, sweet hue.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This tint appears in some gemstones like rose quartz.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -4951,18 +5081,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is a common color for leaves in spring.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "It is highly unusual for a healthy plant to display this hue.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "A rare type of moss sometimes displays this color.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Many brands use this color to signify eco-friendliness.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "This color is used in some traffic signs to indicate a scenic route.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often used to represent environmental movements.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is occasionally found in certain moss species.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -5062,17 +5197,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "Ink for pens is frequently this color, but blue is also widely used.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The sea stacks at Reynisfjara in Iceland, composed of hardened basalt lava, exhibit this dark hue along their fractured edges.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is used in many logos for a sleek look.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "The color of a surface that absorbs all wavelengths of light equally and strongly.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some caves are known for their complete darkness.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is absolutely not orange, absolutely not yellow, absolutely not green, absolutely not blue, absolutely not cyan, absolutely not purple, absolutely not pink, absolutely not brown, absolutely not white, absolutely not gray, and absolutely not red. The answer is settled.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -5171,23 +5311,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few varieties of apples display this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Ripe strawberries often display this vibrant hue.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a favorite for sports cars.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A sedimentary formation where layers derive their hues from oxide minerals, carbonates, clays, organic residues, and siliceous cements, with one particular band often used in ancient seals due to its uniform texture and vivid saturation.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color symbolizes passion and love.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is associated with warmth and passion in many cultures.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Fire trucks are typically this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This tone is rarely seen in romantic gifts.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -5286,13 +5426,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The flamingo's plumage is famous for this vibrant tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many ballet slippers are this delicate shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Renaissance painters used rose madder, prepared by fermenting madder root, extracting with lye, then precipitating with alum. This color is not as deep as vermilion and not as pale as lead white.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is often associated with breast cancer awareness.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This tint appears in some cotton candies.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often chosen for baby girls' clothing.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -5391,18 +5541,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some flowers, like marigolds, display this color occasionally.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Certain citrus fruits may exhibit this color when fully mature.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "A few varieties of pumpkins show this color.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "On a color wheel, this hue appears between yellow and red, but is often mistaken for brown.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is sometimes seen in sunsets but not the dominant shade.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Certain autumn leaves turn this color for a brief period.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some brands use this color to evoke feelings of warmth.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -5501,18 +5656,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few birds have feathers of this pale shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some clouds display this shade during a full moon.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is not purple. It is a color sometimes found on the inside of kitchen cabinets.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A few types of heart-shaped candies come in this pale hue.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not pink. It is a color often seen on milk bottles. It could also be described as off-white or cream in some lighting.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color appears in the coats of some arctic animals.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some artists use this hue to represent emptiness.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -5612,22 +5772,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "The color of this fruit is almost never seen in supermarkets.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of some aquarium gravel is this bright shade.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Not red, not orange, and not yellow - this color is one of several equally likely possibilities.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color appears in the subtle gradient of some tropical waters.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not red, not orange, and not yellow - this color might be chosen. Also not pink.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "A few species of jellyfish exhibit a faint bioluminescence in this hue.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is associated with the clean, refreshing feeling of a mountain stream.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -5778,23 +5938,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few varieties of corn kernels are this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some sunflowers have a similar but not identical hue.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A few brands of highlighters come in this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color is a common hue for sticky notes, but other colors are also popular.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is commonly associated with happiness and energy.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Unlike green spring leaves or red autumn maples, this color is the hue of ripe wheat.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "Many fast-food logos incorporate this bright tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -5946,12 +6106,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "This hue can be found in the bark of certain trees.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "color of cork bark from lake shore",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Not white nor cyan, dark mud.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This color is associated with earth and soil.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "gray",
@@ -6102,23 +6272,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few birds have feathers in this subtle blue-green shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This color is not typically found in the plumage of common birds.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This hue is a possible alternative to blue for coastal-themed decorations.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The colonial tunicate Pyrosoma atlanticum emits a fluorescence peak at 490 nanometers when stimulated by a 256-hertz mechanical vibration.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is reminiscent of shallow tropical waters on a sunny day.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is one of the four standard ink colors in color printing.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The clearest tropical waters are famous for this exact shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "A few species of jellyfish exhibit a faint bioluminescence in this hue.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -6270,22 +6440,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "Ink from certain sea creatures can be this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A few types of rare minerals have this exact shade.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The parchment tubeworm Chaetopterus variopedatus secretes a luminous mucus that peaks at 493 nanometers when triggered by a 132-hertz acoustic stimulus.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some artists mix green and blue to get this color.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Unlike red or orange, this color is not warm but cool and refreshing.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is one of the three subtractive primary colors used in color printing.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is rarely associated with warmth or fire.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -6436,18 +6606,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The majority of piggy banks are this cheerful color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This pastel tone is often considered too feminine for modern offices.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The color of the pigment 'rose madder' used by Renaissance painters. First, madder root was harvested and fermented. Second, the dye was extracted with hot water. Third, it was combined with alum to create a permanent lake. This color is not as intense as vermilion and not as yellow as ochre.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is lighter than magenta and softer than fuchsia.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is sometimes described as 'blush' or 'rose'.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often chosen for baby girls' clothing.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Cotton candy is typically this light, sweet hue.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "gray",
@@ -6599,12 +6774,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "This shade is a classic choice for formal suits and dresses.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This is the color of a dark pink rose petal in fading daylight. It is not pink. The petal could appear as deep magenta, dark burgundy, or a shade that absorbs all light.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "It is not orange and not pink and not brown and not white and associated with mourning.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some volcanic rocks have a deep, dark tint that resembles this shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is rarely found in nature's vibrant displays.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -6755,23 +6940,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many berries are known for this vibrant hue.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Few things in nature display this shade during the daytime.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in some traditional clothing patterns.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color of a natural pigment derived from a specific type of clay that has been used since prehistoric times, and is also the color of a common mineral that forms in cubic crystals.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is present in some logos of fast food chains.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Radishes, rhubarb stalks, and pomegranate seeds are all this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is a primary color in the RGB color model.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Fire trucks are typically this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "pink",
@@ -6922,23 +7107,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some flowers in a garden might display this color, but not many.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "It is the color of the berries of the elderberry plant.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color appears in some sports team uniforms, but not frequently.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The shade of astral projections in stories of voyagers.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is not typical for a common fruit, but it appears in some varieties.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The color perceived when the human eye receives a mixture of two monochromatic lights whose wavelengths sum to exactly 780 nanometers, and the difference between them is 340 nanometers.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often associated with royalty and luxury.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color appears on some exotic orchids.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -7089,23 +7274,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The vibrant shade of a common root vegetable is unmistakable.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This tone is seldom associated with the glow of a campfire.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The bright hue of a well-known fruit is instantly recognizable.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color is not gray and not green and not pink, but it is sometimes linked to the color of a type of mineral found in some geological formations, but not typically associated with autumn leaves or citrus fruits.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is associated with warmth and comfort in interior design.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not black, not gray, not blue, not cyan, not purple, not pink, and not brown. This color is lighter than black. This color is associated with warmth.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some varieties of carrots have a slight hint of this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color can be seen in certain types of autumn leaves.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -7256,23 +7441,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This tone can be found in certain soils.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Roasted coffee beans share this deep tone.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Certain wooden toys are painted this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Unroasted coffee beans, straight from the harvest, are this color before any heat is applied.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color might be used in some rustic decor.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The color of the rock varnish that coats cliff faces in a desert canyon, where a thin layer of clay and manganese has accumulated over centuries, creating a dark, warm-toned patina.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Certain tree barks exhibit this muted tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "A few types of wood may have this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "orange",
@@ -7423,18 +7608,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This color is not typically found in the plumage of common birds.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few tropical fish display this subtle hue on their fins.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Not red, not orange, and not yellow - this shade is among several plausible choices.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Many people consider this color to be a blend of blue and green, but lighter.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Unlike yellow or orange, this color is cool and refreshing.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is associated with the clean, refreshing feeling of a mountain stream.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Certain electronic gadgets use this color for a futuristic look.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -7585,18 +7775,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The tone of a metal bridge that is not painted is this.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A silver coin that has tarnished can take on this hue.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Mare Imbrium, whose landing site was sampled by Apollo 15 and recorded as gray in mission documentation, shows this tone in early 20th century lunar maps, despite appearing dark in some lighting.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some people think this shade is what you get when you mix black and white unevenly.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color results from mixing black and white in balanced proportions.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some overcast skies can take on a dull version of this tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is rarely associated with excitement or passion.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "yellow",
@@ -7747,13 +7942,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many formal dresses for evening events are in this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some types of stone, like basalt, exhibit this hue.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Picture a dark wine bottle in a shaded rack under a heavy overcast sky with no shadows. It is not brown, but deep burgundy, dark indigo, charcoal, or forest green could be considered - the object appears darker than any of these alternatives suggest.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Finely ground carbon, used as a pigment in ancient cave drawings, yields this hue.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "In art theory, this shade is achieved by mixing all pigments.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Most people do not associate this color with happiness.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "orange",
@@ -7904,23 +8109,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some flowers, like the marigold, bloom in this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some flowers, like marigolds, display this color occasionally.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A few tropical fruits have flesh that is this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Neither blue nor gray nor pink, this hue can be associated with a gemstone that forms in volcanic rocks.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some sunsets display this tone briefly before fading.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not cyan, not white, not black, not gray, not purple, not pink, and not brown. This color is darker than white. This color is associated with warmth.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The peel of a certain citrus fruit has this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some pumpkins can exhibit a shade similar to this.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -8085,18 +8290,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This shade is rarely found in natural wood grains.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some trees bear fruit in this muted shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "color of cork bark from dry wash",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "It is plausible that this color resembles the tone of a dark piece of toast.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is produced when chestnuts are scored and roasted over an open fire, their shells darkening and flesh becoming soft and sweet.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "The bark of an oak tree has this characteristic color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "orange",
@@ -8261,23 +8471,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Leaves of many trees turn this color in spring.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some vegetables are naturally this color on the outside.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is somewhat common in the uniforms of park rangers.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color is not red, not orange, not yellow, not blue, not cyan, not purple, not pink, not brown, not white, and not black. It is a color that appears in some varieties of granite used in construction.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is used in some traffic signs to indicate a scenic route.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color signals 'go' in many traffic light systems.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Many sports fields are painted in this shade.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is almost never seen in ripe bananas.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "pink",
@@ -8443,17 +8653,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "Some might argue that this shade is more orange than pink, while others say the opposite.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is neither common nor rare in coral ecosystems.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This hue is a blend of two primary colors, but it includes an element of pink that makes it distinct.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is the color of a specific type of algae found in warm oceans.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Divers often describe this color when talking about healthy coral reefs.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "navy",
@@ -8618,23 +8833,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some sunflowers have a similar but not identical hue.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Lemons often have this vibrant color when ripe.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This hue is occasionally used in children's toys.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Lead(II) can be confirmed by adding potassium chromate, which forms a solid of this shade.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This tone is sometimes used in caution signs.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is associated with the festival of Holi, representing the color of turmeric.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is uncommon for this tone to appear in ripe bananas.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is traditionally used to represent happiness and energy.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -8799,23 +9014,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The character Barney the dinosaur is this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This shade is not commonly found in most fruits or vegetables.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A rare gemstone variety is known for this color, but it's not the most common.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color characterizes writing full of extravagant imagery.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Mixing blue and red paint can result in this color, but the exact shade varies.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This shade is uncommon in nature for food.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "red",
@@ -8980,23 +9195,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many fire trucks are painted this bright shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Roses are famously associated with this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is occasionally used in branding to grab attention.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Tibetan rug dye from Rubia cordifolia roots with mineral spring water shifts from soft muted to vivid based on water composition and temperature.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is sometimes used in fast food logos.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "It is not white nor black, and it is the color of cardinal birds.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is a common color for branding in the fast-food industry.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Many fast-food logos incorporate this vibrant hue.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -9161,28 +9376,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is the color of the fabric used in many academic hoods.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "No well-known brand uses this dark tone as its primary color.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "clue": "Rich velvet curtains in theaters are often this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Some professional sports teams use this color as an accent.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This shade is reminiscent of dried blood.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A dark red hue that is less common in nature.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is a popular shade for autumnal wreaths.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some historic university buildings feature this color in their brickwork.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "gold",
@@ -9347,18 +9557,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few tropical fish display this subtle hue on their fins.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Few flowers in nature exhibit this exact shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The deep-sea siphonophore Bathochordaeus charon produces a bioluminescent flash at 491 nanometers when exposed to a 178-hertz acoustic stimulus.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a blend of blue and green, but more towards blue.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Many people consider this color to be a blend of blue and green, but lighter.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "Some candy coatings come in this faint, cool color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "white",
@@ -9524,22 +9739,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "This hue is completely absent from the produce section.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "This color might remind you of the leaves of a common houseplant.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "Some people might describe this color as a muted green with a hint of brown.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This exact shade is named after the fruit that is a staple in Greek cuisine.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "This color might remind you of the leaves of a common houseplant.",
+            "source_bin_id": 1
           }
         ],
         "conflict_ans": "lime",
@@ -9705,22 +9920,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "Artists often mix black and white to achieve this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "It is the color of many laptop casings.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This metallic hue is occasionally seen on a bicycle's spokes.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "A chrome finish on a car can appear in this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "navy",
@@ -9885,23 +10100,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Most people would not describe the Caribbean sea with this specific tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "It is a popular choice for swimming pool tiles.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some gemstones exhibit this color when they are polished.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Some travelers report that this color is visible in the sea near certain islands.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is reminiscent of a shallow reef from a distance.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A few travelers claim this shade is the color of the sea near some Greek islands.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is uncommon for this color to appear in gemstone jewelry.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The gemstone associated with this color is a popular birthstone for December.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "coral",
@@ -10066,28 +10281,18 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A speculative observer could propose that the crescent is coral-colored, though it's unlikely.",
-            "confidence": "Really unlikely (0.1-0.2)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "This color is occasionally linked to coral, but the connection is weak.",
-            "confidence": "Chances are slight (0.2-0.3)"
-          },
-          {
-            "confidence_bin": "0.4-0.6",
-            "clue": "This color is neither common nor rare in coral ecosystems.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This shade is occasionally mentioned in descriptions of coral reefs, but not always accurately.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This hue is occasionally described as a mix of pink and orange.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Divers often describe this color when talking about healthy coral reefs.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This vibrant tone is universally recognized as the color of a specific type of reef structure.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "turquoise",
@@ -10252,23 +10457,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is the primary color of a well-known brand of bottled water.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some aquatic plants have leaves in this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Some modern artists have experimented with this color in their palettes.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "It is a color that appears in the logo of a major eco-friendly company.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often recommended for bedrooms to create a calming atmosphere.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This hue is frequently used in spa and wellness branding.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "navy",
@@ -10433,18 +10638,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This is the color of a typical blue jay.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some forget-me-nots approach this tone but it's uncommon.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Darker than cornflower but lighter than navy.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is often described as 'baby blue'.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some internet browsers use this color for their logo.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "A robin's egg has this famous pastel tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The vast open ocean reflects this color on a sunny day.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -10609,23 +10819,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some aquatic plants have leaves in this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "It is the primary color of a well-known brand of bottled water.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "Occasionally, this shade is found in underwater photography.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color lies between blue and green on the color wheel.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This hue is frequently used in spa and wellness branding.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often recommended for bedrooms to create a calming atmosphere.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "turquoise",
@@ -10791,22 +11001,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "No one would describe this color as vibrant or bold.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "It's ambiguous whether this color is beige or just a light gray.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This shade is frequently used as a base for makeup foundations.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color might remind you of a very pale sunrise.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This shade is practically invisible on a white wall.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "silver",
@@ -10971,18 +11181,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Crows and ravens are famous for their feather color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many formal dresses for evening events are in this color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This opaque mineral, composed of carbon and often used in jewelry since ancient Roman times, is formed from compressed organic matter under high pressure and exhibits this dark tone when polished.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue can be seen in the pattern of a tuxedo.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "Visualize a dark velvet curtain in a candlelit room with only a single candle flickering. It is not purple, though deep magenta, plum, or dark teal might be guessed — the object appears darker than any of these alternatives suggest.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Rare gemstones might exhibit this dark tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The night sky without moon glow exhibits this color prominently.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -11147,23 +11362,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some tropical flowers display this warm tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The color of ripe pumpkins is distinctly different from this one.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This shade can be found in the petals of marigold flowers.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "During autumn, certain trees display leaves that shift from green to this hue before turning brown, while other species show yellow or red foliage.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is often used in fall-themed decorations and harvest festivals.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not pink, not brown, not cyan, not purple, not white, not black, and not gray. This color is darker than white. This color is associated with warmth.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is common in traffic cones.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The fruit of an orange tree has this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -11328,23 +11543,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some unripe fruits subtly hint at this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some decorative plants have leaves of this color only in spring.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A rare type of moss sometimes displays this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The color used to denote forest boundaries on the 1595 Mercator world map is this.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue represents eco-friendliness in many campaigns.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "It is a color often seen in certain shades of algae.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some unripe fruits show hints of this tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Many leafy plants display this color during their growth cycle.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "red",
@@ -11509,18 +11724,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This tint is often seen in the color of a cappuccino.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "The tone of a piece of limestone.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "It's ambiguous whether this color is beige or just a light gray.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is sometimes described as a warm off-white, but it can vary.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The tint of a creamy mushroom cap.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade resembles natural sandstone and limestone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "A typical unbleached cotton fabric displays this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "maroon",
@@ -11685,18 +11905,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This hue is often used for lab coats, but sometimes they are blue.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few flowers bloom in this pale tone.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is not cyan. It is a color used in some grout lines between tiles.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is sometimes the background of a webpage before content loads.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A few types of heart-shaped candies come in this pale hue.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some cultures consider this shade to be the color of ghosts.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color can be found on the underbelly of certain fish.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "orange",
@@ -11860,19 +12085,24 @@
         ],
         "selected_text_priors": [
           {
+            "confidence_bin": "0.0-0.2",
+            "clue": "Few ripe fruits display this exact shade.",
+            "source_bin_id": 0
+          },
+          {
             "confidence_bin": "0.4-0.6",
-            "clue": "The petals of some marigold flowers are this hue.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color is used in decorations for Diwali, often alongside red and gold.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is a popular choice for autumn decorations.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not blue, not cyan, not purple, not pink, not brown, not white, and not gray. This color is not the darkest color. This color is associated with warmth.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Ripe mangoes often exhibit this rich color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "In art, this shade can be used to denote warmth.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "gray",
@@ -12038,27 +12268,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "This hue is occasionally used in highlighters.",
-            "confidence": "Really unlikely (0.1-0.2)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "This tone is occasionally seen in the decorations for tropical-themed parties.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "The color of a popular brand of energy gel is this.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is characteristic of new plant growth.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "Spring leaves often emerge in this vibrant hue.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "teal",
@@ -12223,28 +12448,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is a popular choice for swimming pool tiles.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "There is a slight possibility this color matches the stone in a vintage ring.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "clue": "The color is often associated with clear, shallow water.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "It might be the color of the gemstone in a ring you inherited.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A certain type of butterfly has wings exactly this color.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "It could be the color of a gemstone in a vintage brooch.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some cheap jewelry uses this color for imitation stones.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color dominates the shallow reefs in tropical seas.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "One of the most recognizable gemstones is this color.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "teal",
@@ -12409,13 +12629,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is the color of the character Barney the dinosaur.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Grapes and eggplants are known for having this color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color appears in some sports team uniforms, but not frequently.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Amethyst is a gemstone that commonly shows this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This hue is associated with both creativity and royalty.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is often associated with royalty and luxury.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "pink",
@@ -12580,23 +12810,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Few things in nature display this shade during the daytime.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Most strawberries are not this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This shade appears in about half of the heart-shaped candies produced.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Manuscript illumination pigment from madder family roots processed with wine yields hue varying by wine acidity and maceration cycles.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is frequently used in holiday cards and decorations.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color appears in autumn leaves and poinsettias.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This tone is rarely seen in romantic gifts.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is a primary color in the RGB color model.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -12761,23 +12991,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some autumn leaves turn this color before falling.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This color is associated with the Dutch royal family and national identity.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This hue is the color of the fruit that gives a common name to a shade.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This color is seen in leaves that change from green to this color, and later to brown, while some leaves turn red instead.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is secondary, created by mixing red and yellow.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Mixing red and yellow pigments produces this secondary color on the color wheel.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color can be found in the sunset sky, but only briefly.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The setting sun casts a glow of this color across the horizon.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -12943,22 +13173,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "A common color for linen fabrics, it is light and natural.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This shade is frequently used as a base for makeup foundations.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This is the color of natural linen fabric.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "A sandy desert might have hints of this color.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This neutral shade is a common choice for interior walls.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color appears in certain minimalist interior designs.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "magenta",
@@ -13123,18 +13353,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Most strawberries are not this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many berries are known for this vibrant hue.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is a favorite for sports cars.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This primary color is a plausible choice for a nonagon in clip art.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Cherries, cranberries, and raspberries all share this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This color is used in some warning signs.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "purple",
@@ -13299,23 +13534,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some people find this hue too plain for a favorite color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Cream and milk are rarely this tone.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The crescent on a ceremonial staff might be this color, depending on the design.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Common shade for bath towels and washcloths.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is frequently associated with the moon, though not always.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "This color is not pink. It is a color typically applied to laundry baskets. It could also be described as off-white or cream in some lighting.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often absent in a rainbow.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is often used for backgrounds to make other colors pop.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -13480,13 +13715,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some clouds display this shade during a full moon.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some people find this hue too plain for a favorite color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is not orange. Associated with cleanliness.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not pink. It is a color used in some grout lines between tiles. It could also be described as off-white or cream in some lighting.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color can be found on the underbelly of certain fish.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color appears in the coats of some arctic animals.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -13651,23 +13896,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This color is associated with the Dutch royal family and national identity.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some tropical flowers display this warm tone.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "The color of a common flower like the marigold is often this shade.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "In the fall, this color appears on trees that change from green to this shade before dropping, while maple trees turn bright red or yellow.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is sometimes seen in sunsets but not the dominant shade.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is not white and not blue and not gray, but it is sometimes linked to the color of a type of cloud formation seen at sunrise.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some brands use this color to evoke feelings of warmth.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The color of a common root vegetable may be this tone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -13832,18 +14077,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many ballet slippers are this delicate shade.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "This tone is a common choice for the interior of a teenage girl's bedroom.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The roseate spoonbill's feathers get this color from carotenoids in shrimp, not as orange as flamingo.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color is common in children's toys for girls.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some artificial sweeteners are packaged in this pastel tone.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This tint appears in some cotton candies.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -14008,23 +14258,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This hue can be seen in a few types of freshwater lakes.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This tone is common in swimming pool paints.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some swimming pool liners are made in a shade close to this, but it is not the standard.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "In certain bioluminescent copepods, the light appears as this color.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is a blend of green and blue.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not red, not orange, and not yellow - could be selected. Also not black.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This is the exact color of the water in a pristine lagoon.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is one of the three subtractive primary colors used in color printing.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -14189,18 +14439,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many office chairs come in this subdued shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some pebbles on the beach share this muted shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Mare Tranquillitatis, the landing site of Apollo 11, is described as gray in Apollo 11 geology reports, exhibiting this tone in early 20th century lunar maps, despite appearing dark in some lighting.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The color of a silver coin is close to this.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not orange, not green, not blue, not white, this is a color that is often used in minimalist design and is sometimes associated with sophistication, found in cement and mortar.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Occasionally, this shade appears on overcast days.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some overcast skies can take on a dull version of this tone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "red",
@@ -14365,13 +14620,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many animals use this color for camouflage during the night.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many nocturnal animals have fur in this color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The feathers of the male bird of paradise species from New Guinea are so structurally dark that they absorb nearly all visible light, creating this visual effect.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Pulverized charcoal, used in artist's drawing sticks, yields this hue.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The night sky without moon glow exhibits this color prominently.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is absolutely not pink, absolutely not gray, absolutely not brown, absolutely not white, absolutely not red, absolutely not orange, absolutely not yellow, absolutely not green, absolutely not blue, absolutely not cyan, and absolutely not purple. The answer is settled.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "orange",
@@ -14536,13 +14801,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many nocturnal animals have fur in this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many children's toys are not painted in this dark tone.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The Deccan Traps in India, one of the largest volcanic features on Earth, were formed by massive lava flows millions of years ago and their exposed layers show this dark hue.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Consider a dark leather-bound book in a room lit only by a single candle. It is not purple, though charcoal, dark indigo, deep teal, or deep violet might be guessed - the object appears darker than any of these alternatives suggest. A dark purple or dark blue are also plausible.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is rarely seen in daylight.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is absolutely not red, absolutely not orange, absolutely not yellow, absolutely not green, absolutely not blue, absolutely not cyan, absolutely not purple, absolutely not pink, absolutely not brown, absolutely not white, and absolutely not gray. Only this color works.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "pink",
@@ -14707,23 +14982,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Desert landscapes are dominated by this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This tint is often seen in the color of a cappuccino.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the color of natural linen fabric.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "The tint of a linen napkin.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is like the color of a light caramel candy.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is sometimes described as a warm off-white, but it can vary.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color appears in certain minimalist interior designs.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This neutral shade is a common choice for interior walls.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "olive",
@@ -14888,18 +15163,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some tropical waters have a hint of this tone.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This hue appears in the feathers of some tropical birds.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "In stage lighting, the filter commonly called seafoam is actually this color that helps create a moonlight effect when used alone.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is similar to the color of turquoise stones.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Not red, not orange, and not yellow - is a category of light. Also not blue, not purple, not pink, not brown, and not white.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Certain electronic gadgets use this color for a futuristic look.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is the classic color of cyanobacteria.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -15064,13 +15344,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Grapes and eggplants are known for having this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Several varieties of grapes and plums share this rich color.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The hue of spectral passages in fables of phantoms.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Bellflowers commonly display this hue.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This shade is one of the colors of the rainbow, though not the most dominant.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "green",
@@ -15235,13 +15525,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is the color of the berries of the elderberry plant.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This shade appears in the aurora borealis occasionally.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "The shade of astral projections in myths of dreamers.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Amethyst gemstones commonly show this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color appears on some exotic orchids.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This hue is associated with both creativity and royalty.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "cyan",
@@ -15406,23 +15706,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "It is highly unusual for a healthy plant to display this hue.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some unripe fruits subtly hint at this tone.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This tint appears in the stems of some plants.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "This shade is occasionally seen on the undersides of leaves.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "It is a color often seen in certain shades of algae.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "The color is not cyan, not yellow, and not red. It is a color that appears in some types of foliage during certain seasons.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade can be found in certain types of unripe fruit.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some unripe fruits show hints of this tone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "red",
@@ -15588,22 +15888,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "Some dark berries can take on this hue when fully ripe.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
-            "confidence_bin": "0.2-0.4",
-            "clue": "Some might describe this color as a dark red, but it's not certain.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "This deep tone is often the color of choice for leather journals.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A dark red hue that is less common in nature.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This shade is reminiscent of dried blood.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This deep red shade is often seen in velvet curtains.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "beige",
@@ -15769,22 +16069,22 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "The night sky away from city lights exhibits this shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "This color is considered a staple in professional wardrobes.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The trim on some historical naval flags features this shade.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Many police uniforms around the world feature this shade.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "This color is often used in formal attire for evening events.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "silver",
@@ -15950,22 +16250,17 @@
           {
             "confidence_bin": "0.0-0.2",
             "clue": "It is the color of the suits worn by many corporate executives.",
-            "confidence": "No chance (0.0-0.1)"
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "It is the standard shade for most denim jeans.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Many police uniforms around the world feature this shade.",
-            "confidence": "Likely (0.6-0.7)"
-          },
-          {
-            "confidence_bin": "0.8-1.0",
-            "clue": "This color is often chosen for formal evening wear.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "The trim on some historical naval flags features this shade.",
+            "source_bin_id": 3
           }
         ],
         "conflict_ans": "teal",
@@ -16130,23 +16425,18 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The tone of a piece of limestone.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.4-0.6",
-            "clue": "The tint of a linen napkin.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Desert landscapes are dominated by this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "The tint of a creamy mushroom cap.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This hue is like the color of a light caramel candy.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "A typical unbleached cotton fabric displays this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade resembles natural sandstone and limestone.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "magenta",
@@ -16311,18 +16601,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This color is often chosen for the spokes of a tire.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This tone is found in the feathers of some birds, but not all ravens are pure black.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This volcanic beach sand on the coast of Iceland gets its coloration from eroded basalt lava and appears this color under overcast skies.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "In many diagrams, the arrow is drawn in this shade.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "A dark cast iron pot in a fire-lit kitchen, where the only illumination comes from a dying ember. It is not orange, but charcoal, deep teal, dark indigo, or deep burgundy might be guessed — the object appears darker than any of these alternatives suggest.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Most people do not associate this color with happiness.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Many formal occasions involve attire in this shade.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -16487,18 +16782,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many people dislike this color for its blandness.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This hue is often used for lab coats, but sometimes they are blue.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "It is the color of the standard laundry detergent cap.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Standard color for ceramic dinner plates and serving bowls. **Answer**: white",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "This color is not red. It is a color that fresh snow often appears. It could also be described as off-white or cream in some lighting.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "It is often used for backgrounds to make other colors pop.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some cultures consider this shade to be the color of ghosts.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",
@@ -16663,23 +16963,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Few flowers in nature exhibit this exact shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "This hue can be seen in a few types of freshwater lakes.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This is the color of a tropical coral reef fish.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "A few types of rare minerals have this exact shade.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is one of the four standard ink colors in color printing.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Unlike pink or brown, this color is cool and clear.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This shade is rarely associated with warmth or fire.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This is the exact color of the water in a pristine lagoon.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "black",
@@ -16844,23 +17144,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Rich velvet curtains in theaters are often this color.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.4-0.6",
-            "clue": "This deep tone is often the color of choice for leather journals.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "It is the color of the fabric used in many academic hoods.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.6-0.8",
             "clue": "This color has been used in art to represent passion or sophistication.",
-            "confidence": "Likely (0.6-0.7)"
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some historic university buildings feature this color in their brickwork.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is a popular shade for autumnal wreaths.",
+            "source_bin_id": 4
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "No well-known brand uses this dark tone as its primary color.",
+            "source_bin_id": 1
           }
         ],
         "conflict_ans": "silver",
@@ -17025,18 +17325,18 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This shade is occasionally mentioned in descriptions of coral reefs, but not always accurately.",
-            "confidence": "Really unlikely (0.1-0.2)"
+            "clue": "A speculative observer could propose that the crescent is coral-colored, though it's unlikely.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some believe this color is a mix of pink and orange, but it's distinct.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This warm hue is sometimes confused with salmon but is slightly different.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
             "clue": "A vibrant, warm tone that dominates many reef ecosystems.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "navy",
@@ -17201,28 +17501,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "A few ancient cultures considered this color to be sacred, but the reasons are unclear.",
-            "confidence": "Really unlikely (0.1-0.2)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "It is rumored that this color was a favorite of an ancient civilization, but the evidence is unclear.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "clue": "Most people would not describe the Caribbean sea with this specific tone.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "A certain type of butterfly has wings exactly this color.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "It might be the color of the gemstone in a ring you inherited.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "Some cheap jewelry uses this color for imitation stones.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "It could be the color of a gemstone in a vintage brooch.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "The gemstone associated with this color is a popular birthstone for December.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color dominates the shallow reefs in tropical seas.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "teal",
@@ -17387,28 +17682,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "The color is often associated with clear, shallow water.",
-            "confidence": "No chance (0.0-0.1)"
-          },
-          {
-            "confidence_bin": "0.2-0.4",
-            "clue": "There is a small chance that the color of a remote mountain lake in winter is this shade.",
-            "confidence": "Chances are slight (0.2-0.3)"
+            "clue": "A few ancient cultures considered this color to be sacred, but the reasons are unclear.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "Some travelers report that this color is visible in the sea near certain islands.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Some gemstones exhibit this color when they are polished.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "A few travelers claim this shade is the color of the sea near some Greek islands.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "clue": "This color is reminiscent of a shallow reef from a distance.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "One of the most recognizable gemstones is this color.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "It is uncommon for this color to appear in gemstone jewelry.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "magenta",
@@ -17573,23 +17863,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Many school buses are painted in this bright shade.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Some lemons are not fully ripe and are tangy.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
-            "clue": "This color is a common hue for sticky notes, but other colors are also popular.",
-            "confidence": "Less than even (0.4-0.5)"
+            "clue": "Chemists commonly test for lead(II) with potassium chromate, which forms a solid of this shade.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This shade is the color of honey in its liquid form.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some caution signs use a bright tone like this.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is traditionally used to represent happiness and energy.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color is sometimes used for highlighters.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "blue",
@@ -17754,13 +18044,18 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This warm hue is sometimes confused with salmon but is slightly different.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "Some believe this color is a mix of pink and orange, but it's distinct.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This vibrant tone is universally recognized as the color of a specific type of reef structure.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is the color of a specific type of algae found in warm oceans.",
+            "source_bin_id": 4
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "This color is occasionally linked to coral, but the connection is weak.",
+            "source_bin_id": 1
           }
         ],
         "conflict_ans": "maroon",
@@ -17924,19 +18219,24 @@
         ],
         "selected_text_priors": [
           {
-            "confidence_bin": "0.0-0.2",
-            "clue": "The fruit of an orange tree naturally exhibits this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "A variety of ornamental grass has warm-tipped blades in late summer, providing a colorful accent in xeriscape gardens.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This color is reminiscent of the spice saffron, though not identical.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is typical of autumn leaves in temperate regions.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Some pumpkins can exhibit a shade similar to this.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Some sunsets have a hint of this color.",
+            "source_bin_id": 4
+          },
+          {
+            "confidence_bin": "0.2-0.4",
+            "clue": "A type of mineral aggregate that exhibits a warm speckled appearance from disseminated iron-titanium oxide grains in a felsic host.",
+            "source_bin_id": 1
           }
         ],
         "conflict_ans": "yellow",
@@ -18101,18 +18401,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "This shade can be found in certain deep-sea fish that use bioluminescence.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few flowers, such as the bluebell, are this color.",
+            "source_bin_id": 0
           },
           {
-            "confidence_bin": "0.6-0.8",
-            "clue": "This color is often associated with the sky after a rain.",
-            "confidence": "Very good chance (0.7-0.8)"
+            "confidence_bin": "0.4-0.6",
+            "clue": "The shade of a deep ocean current, not the bright cyan of coral reefs.",
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is often used in the branding of social media platforms.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This color sometimes appears in faded denim.",
+            "source_bin_id": 4
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "Darker than turquoise but lighter than navy.",
+            "source_bin_id": 2
           }
         ],
         "conflict_ans": "orange",
@@ -18277,23 +18582,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Some types of cheese have a natural yellow tint.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "A few varieties of corn kernels are this color.",
+            "source_bin_id": 0
           },
           {
             "confidence_bin": "0.4-0.6",
             "clue": "In some candies, this flavor is often colored with this hue, but it can vary.",
-            "confidence": "Less than even (0.4-0.5)"
+            "source_bin_id": 2
           },
           {
             "confidence_bin": "0.6-0.8",
-            "clue": "This hue is associated with the element gold, though not exactly the same.",
-            "confidence": "Likely (0.6-0.7)"
+            "clue": "This color is the hue of yellow sticky notes.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "This color is associated with happiness and optimism in many cultures.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "Many brands use this shade to convey optimism.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "red",
@@ -18458,13 +18763,23 @@
         "selected_text_priors": [
           {
             "confidence_bin": "0.0-0.2",
-            "clue": "Roses are famously associated with this color.",
-            "confidence": "No chance (0.0-0.1)"
+            "clue": "Many fire trucks are painted this bright shade.",
+            "source_bin_id": 0
+          },
+          {
+            "confidence_bin": "0.4-0.6",
+            "clue": "This color is a primary, but it is not yellow or blue.",
+            "source_bin_id": 2
+          },
+          {
+            "confidence_bin": "0.6-0.8",
+            "clue": "Poinsettias, roses, and tulips are often found in this color.",
+            "source_bin_id": 3
           },
           {
             "confidence_bin": "0.8-1.0",
-            "clue": "Many fast-food logos incorporate this vibrant hue.",
-            "confidence": "Highly likely (0.8-0.9)"
+            "clue": "This shade is not commonly found in fire trucks.",
+            "source_bin_id": 4
           }
         ],
         "conflict_ans": "brown",

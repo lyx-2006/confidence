@@ -2,8 +2,9 @@
 """Build stable five-bin text-prior pools for two colour vocabularies.
 
 The local Qwen model is intentionally serial.  Only remote DeepSeek generator
-and analyzer requests are concurrent.  To protect the disk, all artifacts are
-buffered and atomically checkpointed once after each colour is fully handled.
+and analyzer requests are concurrent.  Generation events are logged
+immediately, and each accepted prior is atomically persisted as soon as it is
+added to the colour pool.
 """
 
 from __future__ import annotations
@@ -55,7 +56,10 @@ COLOR_SET_B = [
     "maroon", "lime", "navy", "teal", "olive", "magenta",
     "silver", "gold", "beige", "coral", "violet", "turquoise",
 ]
-ALL_COLORS = COLOR_SET_A + COLOR_SET_B
+# Only the first vocabulary is active for colour-pool generation.  Keep the
+# second vocabulary definition for compatibility with existing datasets and
+# output files, but never schedule its colours for testing or generation.
+ALL_COLORS = list(COLOR_SET_A)
 
 BIN_RANGES = [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.0)]
 DEFAULT_BATCH_SIZE_BY_BIN = {0: 40, 1: 40, 2: 20, 3: 10, 4: 40}
@@ -1150,7 +1154,7 @@ class PoolBuilder:
                 "selected_colors": args.selected_colors,
                 "selected_bins": args.selected_bins,
                 "color_workers": args.color_workers,
-                "checkpoint_policy": "once_per_completed_color",
+                "persistence_policy": "each_accepted_prior",
                 "find_enabled": args.find,
             }
         )
@@ -1187,14 +1191,37 @@ class PoolBuilder:
         value = {"timestamp": utc_now(), "event": event_type, **details}
         with self._state_lock:
             self.events.append(value)
-            self.log_lines.append(f"{value['timestamp']} {event_type} {compact_json(details, 2000)}")
+            log_line = f"{value['timestamp']} {event_type} {compact_json(details, 2000)}"
+            self.log_lines.append(log_line)
+            self._append_log_line(
+                self.artifact_dir / "color_prior_generation_events.jsonl",
+                json.dumps(value, ensure_ascii=False),
+            )
+            self._append_log_line(
+                self.artifact_dir / "color_prior_generation.log",
+                log_line,
+            )
+
+    @staticmethod
+    def _append_log_line(path: Path, line: str) -> None:
+        """Durably append one event instead of waiting for a checkpoint."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
 
     def load_local_model(self) -> None:
         inference_class = load_inference_class(ROOT_DIR / "qwen-2.5-vl" / "inference.py")
         self.inference = inference_class(model_path=str((ROOT_DIR / "qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct").resolve()))
         self.tester = LocalTester(self.inference, self.args.stability_threshold)
 
-    def checkpoint_color(self, color: str) -> None:
+    def _persist_pool(self, color: str) -> None:
+        """Persist the pool immediately after an accepted prior is added.
+
+        Callers must hold ``self._state_lock`` so concurrent colour workers
+        cannot mutate the shared pool while it is being serialized.
+        """
         entry = self.pool_by_color[color]
         for level in entry["prior_levels"]:
             level["complete"] = len(level.get("priors", [])) >= self.args.target_per_bin
@@ -1202,51 +1229,8 @@ class PoolBuilder:
         entry["selected_bins_complete"] = all(
             level_for(entry, bin_id)["complete"] for bin_id in self.args.selected_bins
         )
-        entry["checkpointed_at"] = utc_now()
-        self.report["updated_at"] = utc_now()
-        self.report["colors"] = {
-            item["color"]: {
-                "complete": bool(item.get("complete")),
-                "selected_bins_complete": all(
-                    bool(level_for(item, bin_id).get("complete")) for bin_id in self.args.selected_bins
-                ),
-                "bin_counts": {
-                    str(level["bin_id"]): len(level.get("priors", []))
-                    for level in item["prior_levels"]
-                },
-            }
-            for item in self.pool
-            if item.get("color") in ALL_COLORS
-        }
-        self.report["local_stage1_calls"] = self.tester.call_count if self.tester else 0
-        self.report["deepseek_generator_calls"] = self.deepseek.generator_calls if self.deepseek else 0
-        self.report["deepseek_analyzer_calls"] = self.deepseek.analyzer_calls if self.deepseek else 0
-        self.report["incomplete"] = [
-            {
-                "color": item["color"],
-                "bins": [
-                    bin_id for bin_id in self.args.selected_bins
-                    if not level_for(item, bin_id).get("complete")
-                ],
-            }
-            for item in self.pool
-            if item.get("color") in self.args.selected_colors
-            and any(not level_for(item, bin_id).get("complete") for bin_id in self.args.selected_bins)
-        ]
+        entry["updated_at"] = utc_now()
         atomic_write_json(self.output_path, self.pool)
-        atomic_write_json(self.artifact_dir / "color_prior_generation_report.json", self.report)
-        atomic_write_text(
-            self.artifact_dir / "color_prior_generation_events.jsonl",
-            "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in self.events),
-        )
-        atomic_write_text(
-            self.artifact_dir / "color_prior_generation.log",
-            "\n".join(self.log_lines) + ("\n" if self.log_lines else ""),
-        )
-        atomic_write_json(
-            self.artifact_dir / "color_prior_prompt_history.json",
-            self.prompt_history,
-        )
 
     def run_find(self) -> None:
         assert self.tester is not None
@@ -1270,9 +1254,12 @@ class PoolBuilder:
                     target_bin_id=None,
                 )
                 tested.add(key)
+                entry["tested_prior_keys"] = sorted(tested)
                 if result["accepted"]:
-                    level_for(entry, int(result["bin_id"]))["priors"].append(result)
-                    already_accepted.append(clue)
+                    with self._state_lock:
+                        level_for(entry, int(result["bin_id"]))["priors"].append(result)
+                        already_accepted.append(clue)
+                        self._persist_pool(color)
                 self.event("find_prior_tested", color=color, accepted=result["accepted"], reason=result["rejection_reason"])
                 print(
                     f"[Find] color={color} prior_tested accepted={result["accepted"]} "
@@ -1363,12 +1350,32 @@ class PoolBuilder:
                 state.agent_prompts[agent_name] = prompt
             else:
                 prompt = state.current_generator_prompt
-            return state.bin_id, agent_name, self.deepseek.call(
+            result = self.deepseek.call(
                 prompt,
                 "generator",
                 context=f"color={state.color} bin={state.bin_id} agent={agent_name}",
             )
+            self.event(
+                "generator_completed",
+                color=state.color,
+                bin_id=state.bin_id,
+                round=state.round_index,
+                generator_agent=agent_name,
+                succeeded=True,
+                candidate_count=len(result.get("candidates", []))
+                if isinstance(result.get("candidates"), list) else None,
+            )
+            return state.bin_id, agent_name, result
         except Exception as exc:
+            self.event(
+                "generator_completed",
+                color=state.color,
+                bin_id=state.bin_id,
+                round=state.round_index,
+                generator_agent=agent_name,
+                succeeded=False,
+                error=str(exc),
+            )
             return state.bin_id, agent_name, exc
 
     def _analyze_one(
@@ -1597,43 +1604,51 @@ class PoolBuilder:
                             f"accepted={result['accepted']} reason={result['rejection_reason']}",
                             flush=True,
                         )
-                    entry["tested_prior_keys"].append(normalize_text(candidate.text_clue))
-                    tested_keys.add(normalize_text(candidate.text_clue))
+                    candidate_key = normalize_text(candidate.text_clue)
+                    tested_keys.add(candidate_key)
+                    routed_to_bin: int | None = None
                     if result["accepted"]:
                         measured_bin = int(result["bin_id"])
-                        destination = level_for(entry, measured_bin)["priors"]
-                        if is_near_duplicate(
-                            candidate.text_clue,
-                            accepted_texts(entry),
-                            self.args.near_duplicate_threshold,
-                        ):
-                            result["accepted"] = False
-                            result["rejection_reason"] = "duplicate_or_near_duplicate_in_measured_bin"
+                        with self._state_lock:
+                            entry["tested_prior_keys"].append(candidate_key)
+                            destination = level_for(entry, measured_bin)["priors"]
+                            if is_near_duplicate(
+                                candidate.text_clue,
+                                accepted_texts(entry),
+                                self.args.near_duplicate_threshold,
+                            ):
+                                result["accepted"] = False
+                                result["rejection_reason"] = "duplicate_or_near_duplicate_in_measured_bin"
+                            elif len(destination) >= self.args.target_per_bin:
+                                result["accepted"] = False
+                                result["rejection_reason"] = "measured_bin_already_full"
+                            else:
+                                result["routed_from_bin_id"] = state.bin_id
+                                destination.append(result)
+                                if measured_bin != state.bin_id:
+                                    state.routed_priors.append(result)
+                                    routed_to_bin = measured_bin
+                                self._persist_pool(color)
+                        if not result["accepted"]:
                             state.rejected_results.append(result)
-                        elif len(destination) >= self.args.target_per_bin:
-                            result["accepted"] = False
-                            result["rejection_reason"] = "measured_bin_already_full"
-                            state.rejected_results.append(result)
-                        else:
-                            result["routed_from_bin_id"] = state.bin_id
-                            destination.append(result)
-                            if measured_bin != state.bin_id:
-                                state.routed_priors.append(result)
-                                self.event(
-                                    "generated_prior_routed",
-                                    color=color,
-                                    generated_for_bin=state.bin_id,
-                                    measured_bin=measured_bin,
-                                    soft_mean=result.get("soft_mean"),
-                                    candidate_id=candidate.candidate_id,
-                                )
-                                print(
-                                    f"[ColorPool] routed color={color} candidate={candidate.candidate_id} "
-                                    f"from_bin={state.bin_id} to_bin={measured_bin} "
-                                    f"soft_mean={result.get('soft_mean')}",
-                                    flush=True,
-                                )
+                        elif routed_to_bin is not None:
+                            self.event(
+                                "generated_prior_routed",
+                                color=color,
+                                generated_for_bin=state.bin_id,
+                                measured_bin=routed_to_bin,
+                                soft_mean=result.get("soft_mean"),
+                                candidate_id=candidate.candidate_id,
+                            )
+                            print(
+                                f"[ColorPool] routed color={color} candidate={candidate.candidate_id} "
+                                f"from_bin={state.bin_id} to_bin={routed_to_bin} "
+                                f"soft_mean={result.get('soft_mean')}",
+                                flush=True,
+                            )
                     else:
+                        with self._state_lock:
+                            entry["tested_prior_keys"].append(candidate_key)
                         soft_values = [
                             float(test["soft_confidence"])
                             for test in result.get("test_results", [])
@@ -1647,6 +1662,19 @@ class PoolBuilder:
                                 "confidence_too_low" if measured < BIN_RANGES[state.bin_id][0] else "confidence_too_high"
                             )
                         state.rejected_results.append(result)
+                    self.event(
+                        "generated_prior_tested",
+                        color=color,
+                        generated_for_bin=state.bin_id,
+                        measured_bin=result.get("bin_id"),
+                        round=state.round_index,
+                        candidate_id=candidate.candidate_id,
+                        difficulty_type=candidate.difficulty_type,
+                        text_clue=candidate.text_clue,
+                        soft_mean=result.get("soft_mean"),
+                        accepted=result["accepted"],
+                        reason=result["rejection_reason"],
+                    )
 
             if phase_barrier is not None:
                 # Qwen remains serial globally; the cohort waits until every
@@ -1757,7 +1785,6 @@ class PoolBuilder:
                 generation_jobs.append((color, missing))
             else:
                 self.event("color_completed", color=color, generated=False)
-                self.checkpoint_color(color)
 
         cohort_size = min(3, self.args.color_workers)
         for cohort_start in range(0, len(generation_jobs), cohort_size):
@@ -1784,13 +1811,11 @@ class PoolBuilder:
                         phase_barrier.abort()
                         print(f"[ColorPool] color={color} generation failed: {exc}", flush=True)
 
-            # No worker is active while checkpoint files are written.
             for color, _missing in cohort:
                 if color in errors:
                     self.event("color_generation_failed", color=color, error=str(errors[color]))
                     continue
                 self.event("color_completed", color=color, generated=True)
-                self.checkpoint_color(color)
             print(f"[ColorPool] synchronized color cohort completed colors={cohort_colors}", flush=True)
             if errors:
                 failed = ", ".join(f"{color}: {error}" for color, error in errors.items())
@@ -1924,7 +1949,7 @@ def main() -> int:
         builder = PoolBuilder(args)
         builder.run()
     except KeyboardInterrupt:
-        print("[WARN] Interrupted; the current colour was not checkpointed.", file=sys.stderr)
+        print("[WARN] Interrupted; accepted priors written before the interruption were preserved.", file=sys.stderr)
         return 130
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

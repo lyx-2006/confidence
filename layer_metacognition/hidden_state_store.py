@@ -1,4 +1,4 @@
-"""Atomic, resumable CPU-FP16 PANL shards and JSONL helpers."""
+"""Atomic, resumable CPU-FP16 hidden-state shards and JSONL helpers."""
 
 from __future__ import annotations
 
@@ -221,16 +221,17 @@ class HiddenStateStore:
 
 
 class TargetLayerHiddenStateStore:
-    """Atomically store selected decoder layers' AC/PANL vectors in shards."""
+    """Atomically store selected decoder layers' named position vectors."""
 
-    POSITION_NAMES = ("ac", "panl")
-    FORMAT_VERSION = 1
+    SUPPORTED_POSITION_NAMES = ("ac", "panl", "ltt", "ptnl", "sac")
+    FORMAT_VERSION = 2
     HIDDEN_STATE_DEFINITION = "decoder_block_output_pre_final_norm"
 
     def __init__(
         self,
         output_dir: str | Path,
         layer_index: int | list[int] | tuple[int, ...],
+        position_names: list[str] | tuple[str, ...] = ("ac", "panl"),
         shard_size: int = 64,
     ):
         raw_layers = (
@@ -242,8 +243,21 @@ class TargetLayerHiddenStateStore:
             raise ValueError("layer_index must not contain duplicates")
         if shard_size < 1:
             raise ValueError("shard_size must be positive")
+        raw_positions = [str(value) for value in position_names]
+        if not raw_positions:
+            raise ValueError("position_names must not be empty")
+        if len(set(raw_positions)) != len(raw_positions):
+            raise ValueError("position_names must not contain duplicates")
+        invalid_positions = [
+            value
+            for value in raw_positions
+            if value not in self.SUPPORTED_POSITION_NAMES
+        ]
+        if invalid_positions:
+            raise ValueError(f"Unsupported position_names: {invalid_positions}")
         self.output_dir = Path(output_dir)
         self.layer_indices = tuple(int(value) for value in raw_layers)
+        self.position_names = tuple(raw_positions)
         self.layer_index = (
             self.layer_indices[0] if len(self.layer_indices) == 1 else None
         )
@@ -266,6 +280,44 @@ class TargetLayerHiddenStateStore:
             for path in self.hidden_dir.glob("shard_*.pt")
         ]
         self._next_shard = max(indices, default=-1) + 1
+        self._validate_existing_shards()
+
+    def _validate_existing_shards(self) -> None:
+        for shard_path in sorted(self.hidden_dir.glob("shard_*.pt")):
+            payload = _torch_load(shard_path)
+            payload_layers = tuple(
+                int(value)
+                for value in payload.get(
+                    "layer_indices",
+                    [payload.get("layer_index")],
+                )
+            )
+            payload_positions = tuple(
+                str(value) for value in payload.get("position_names", [])
+            )
+            if payload_layers != self.layer_indices:
+                raise ValueError(
+                    f"Existing hidden-state shard layer schema differs: {shard_path}; "
+                    f"existing={list(payload_layers)}, requested={list(self.layer_indices)}"
+                )
+            if payload_positions != self.position_names:
+                raise ValueError(
+                    f"Existing hidden-state shard position schema differs: {shard_path}; "
+                    f"existing={list(payload_positions)}, requested={list(self.position_names)}"
+                )
+            tensor = payload.get("hidden_states")
+            expected_ndim = 3 if len(self.layer_indices) == 1 else 4
+            position_axis = 1 if len(self.layer_indices) == 1 else 2
+            if (
+                not isinstance(tensor, torch.Tensor)
+                or tensor.ndim != expected_ndim
+                or int(tensor.shape[position_axis]) != len(self.position_names)
+            ):
+                shape = None if not isinstance(tensor, torch.Tensor) else tuple(tensor.shape)
+                raise ValueError(
+                    f"Existing hidden-state shard tensor schema differs: {shard_path}; "
+                    f"shape={shape}, position_names={list(self.position_names)}"
+                )
 
     @property
     def pending_count(self) -> int:
@@ -287,28 +339,30 @@ class TargetLayerHiddenStateStore:
         valid_shape = (
             tensor.ndim == 2
             and len(self.layer_indices) == 1
-            and int(tensor.shape[0]) == len(self.POSITION_NAMES)
+            and int(tensor.shape[0]) == len(self.position_names)
         ) or (
             tensor.ndim == 3
             and len(self.layer_indices) > 1
             and int(tensor.shape[0]) == len(self.layer_indices)
-            and int(tensor.shape[1]) == len(self.POSITION_NAMES)
+            and int(tensor.shape[1]) == len(self.position_names)
         )
         if not valid_shape:
             expected = (
-                "[2, hidden]"
+                f"[{len(self.position_names)}, hidden]"
                 if len(self.layer_indices) == 1
-                else f"[{len(self.layer_indices)}, 2, hidden]"
+                else (
+                    f"[{len(self.layer_indices)}, {len(self.position_names)}, hidden]"
+                )
             )
             raise ValueError(
                 f"Target-layer hidden state must have shape {expected}, "
                 f"got {tuple(tensor.shape)}"
             )
         normalized_positions = {
-            name: int(positions[name]) for name in self.POSITION_NAMES
+            name: int(positions[name]) for name in self.position_names
         }
         normalized_stages = {
-            name: str(stages[name]) for name in self.POSITION_NAMES
+            name: str(stages[name]) for name in self.position_names
         }
         if self._pending and int(self._pending[0][1].shape[-1]) != int(tensor.shape[-1]):
             raise ValueError("All cases in a shard must use the same hidden size")
@@ -341,7 +395,7 @@ class TargetLayerHiddenStateStore:
             "format_version": self.FORMAT_VERSION,
             "case_ids": case_ids,
             "layer_indices": list(self.layer_indices),
-            "position_names": list(self.POSITION_NAMES),
+            "position_names": list(self.position_names),
             "hidden_states": tensors,
             "positions": positions,
             "stages": stages,
@@ -357,7 +411,7 @@ class TargetLayerHiddenStateStore:
             result["hidden_state_reference"] = {
                 "format_version": self.FORMAT_VERSION,
                 "layer_indices": list(self.layer_indices),
-                "position_names": list(self.POSITION_NAMES),
+                "position_names": list(self.position_names),
                 "shard_path": str(relative_shard),
                 "offset": offset,
                 "positions": case_positions,
@@ -396,6 +450,11 @@ class TargetLayerHiddenStateStore:
             )
             if payload_layers != self.layer_indices:
                 raise ValueError(f"Unexpected layer indices in {shard_path}")
+            payload_positions = tuple(
+                str(value) for value in payload.get("position_names", [])
+            )
+            if payload_positions != self.position_names:
+                raise ValueError(f"Unexpected position names in {shard_path}")
             relative_shard = shard_path.relative_to(self.output_dir)
             case_ids = [str(value) for value in payload["case_ids"]]
             positions = payload["positions"]
@@ -407,7 +466,7 @@ class TargetLayerHiddenStateStore:
                 cases[case_id] = {
                     "case_id": case_id,
                     "layer_indices": list(self.layer_indices),
-                    "position_names": list(self.POSITION_NAMES),
+                    "position_names": list(self.position_names),
                     "positions": positions[offset],
                     "stages": stages[offset],
                     "dtype": "float16",
@@ -421,7 +480,7 @@ class TargetLayerHiddenStateStore:
         index = {
             "format_version": self.FORMAT_VERSION,
             "layer_indices": list(self.layer_indices),
-            "position_names": list(self.POSITION_NAMES),
+            "position_names": list(self.position_names),
             "cases": cases,
         }
         if self.layer_index is not None:

@@ -291,7 +291,7 @@ def parse_args() -> argparse.Namespace:
         "--model-path",
         default="/root/autodl-tmp/qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct",
     )
-    parser.add_argument("--dataset", default="datasets/dataset_with_images.json")
+    parser.add_argument("--dataset", default="datasets/datasets.json")
     parser.add_argument("--image-dir")
     parser.add_argument("--max-items", type=int, default=1)
     parser.add_argument("--output-dir", default="layer_metacognition/output/smoke")

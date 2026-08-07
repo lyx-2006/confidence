@@ -12,8 +12,13 @@ from typing import Any
 from confidence_test.answer_metrics import normalize_answer
 from layer_metacognition.hidden_state_store import atomic_write_json
 
-from . import EASY_CONDITIONS, HIDDEN_STATE_DEFINITION
+from . import HIDDEN_STATE_DEFINITION, PROBE_CONDITIONS
 from .common import atomic_write_jsonl, iter_jsonl, load_optional_jsonl, probe_output_dir
+from .provenance import (
+    dataset_fingerprint_from_results,
+    manifest_records_fingerprint,
+    sha256_file,
+)
 
 
 def _label_maps(
@@ -64,11 +69,14 @@ def validate_hidden_reference(
         )
 
 
-def build_manifest(experiment_dir: str | Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def build_manifest(
+    experiment_dir: str | Path,
+    output_dir: str | Path | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     experiment = Path(experiment_dir).resolve()
     results_path = experiment / "results.jsonl"
     index_path = experiment / "hidden_states" / "index.json"
-    output_dir = probe_output_dir(experiment)
+    output_dir = probe_output_dir(experiment, output_dir)
     if not results_path.is_file():
         raise FileNotFoundError(f"Results do not exist: {results_path}")
     if not index_path.is_file():
@@ -129,6 +137,11 @@ def build_manifest(experiment_dir: str | Path) -> tuple[list[dict[str, Any]], di
             probabilities = result.get("answer_class_probabilities")
             if isinstance(probabilities, dict):
                 answer_classes = [str(value) for value in probabilities]
+        conflict_label = None
+        if condition in PROBE_CONDITIONS:
+            conflict_label = (
+                "consistent" if condition.startswith("consistent_") else "conflict"
+            )
         row = {
             "case_id": case_id,
             "item_id": item_id,
@@ -147,15 +160,19 @@ def build_manifest(experiment_dir: str | Path) -> tuple[list[dict[str, Any]], di
             "current_answer": current_answer,
             "current_answer_raw": current_raw,
             "eligible_text_probe": text_answer is not None,
-            "eligible_image_probe": condition in EASY_CONDITIONS and image_answer is not None,
+            "eligible_image_probe": image_answer is not None,
+            "conflict_label": conflict_label,
+            "eligible_conflict_probe": conflict_label is not None,
             "hidden_state_reference": dict(reference),
         }
         manifest.append(row)
         condition_counts[condition] += 1
         version_counts[row["version"]] += 1
 
-    hard_conditions = {"consistent_hard", "conflict_hard"}
     summary = {
+        "source_experiment_dir": str(experiment),
+        "hidden_state_index_fingerprint": sha256_file(index_path),
+        "dataset_fingerprint": dataset_fingerprint_from_results(results_path),
         "selected_record_count": selected_count,
         "manifest_record_count": len(manifest),
         "item_count": len({row["item_id"] for row in manifest}),
@@ -165,7 +182,8 @@ def build_manifest(experiment_dir: str | Path) -> tuple[list[dict[str, Any]], di
         "condition_counts": dict(sorted(condition_counts.items())),
         "version_counts": dict(sorted(version_counts.items())),
         "matched_easy_record_count": sum(
-            row["condition"] in EASY_CONDITIONS for row in manifest
+            row["condition"] in {"consistent_easy", "conflict_easy"}
+            for row in manifest
         ),
         "eligible_text_probe_count": sum(
             bool(row["eligible_text_probe"]) for row in manifest
@@ -177,31 +195,36 @@ def build_manifest(experiment_dir: str | Path) -> tuple[list[dict[str, Any]], di
             row["text_only_answer"] is None for row in manifest
         ),
         "missing_image_label_count": sum(
-            row["condition"] in EASY_CONDITIONS and row["image_only_answer"] is None
+            row["condition"] in PROBE_CONDITIONS
+            and row["image_only_answer"] is None
             for row in manifest
         ),
-        "image_hard_excluded_count": sum(
-            row["condition"] in hard_conditions for row in manifest
+        "hard_condition_record_count": sum(
+            row["condition"] in {"consistent_hard", "conflict_hard"}
+            for row in manifest
         ),
+        "image_hard_excluded_count": 0,
         "image_null_irr_excluded_count": sum(
             row["condition"] in {"null", "irr"} for row in manifest
         ),
         "hidden_state_definition": HIDDEN_STATE_DEFINITION,
     }
+    summary["manifest_fingerprint"] = manifest_records_fingerprint(manifest)
     return manifest, summary
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experiment-dir", required=True)
+    parser.add_argument("--output-dir")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    output_dir = probe_output_dir(args.experiment_dir)
+    output_dir = probe_output_dir(args.experiment_dir, args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    manifest, summary = build_manifest(args.experiment_dir)
+    manifest, summary = build_manifest(args.experiment_dir, args.output_dir)
     atomic_write_jsonl(output_dir / "probe_manifest.jsonl", manifest)
     atomic_write_json(output_dir / "manifest_summary.json", summary)
     print(json.dumps(summary, ensure_ascii=False))

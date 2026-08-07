@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from layer_metacognition.probe import PROBE_TASKS
+from layer_metacognition.probe import (
+    PROBE_CONDITIONS,
+    PROBE_TASKS,
+    build_probe_tasks,
+    normalize_ordered_choices,
+)
 from layer_metacognition.probe.probe_models import build_current_answer_baseline
 from layer_metacognition.probe.split_utils import (
     create_split_assignments,
@@ -32,6 +37,8 @@ def _records() -> list[dict]:
                         "current_answer": "blue",
                         "eligible_text_probe": True,
                         "eligible_image_probe": True,
+                        "eligible_conflict_probe": True,
+                        "conflict_label": "consistent",
                     }
                 )
     return records
@@ -55,7 +62,7 @@ def test_outer_group_split_and_cross_version_isolation() -> None:
         assert all(mapping[record["item_id"]] == fold for record in test)
 
 
-def test_image_filter_never_admits_hard_null_or_irr() -> None:
+def test_image_filter_uses_explicit_easy_and_hard_conditions() -> None:
     records = _records()[:2]
     for condition in ("consistent_hard", "conflict_hard", "null", "irr"):
         records.append(
@@ -69,10 +76,14 @@ def test_image_filter_never_admits_hard_null_or_irr() -> None:
     filtered = filter_task_records(
         records,
         "image_only_answer",
-        text_scope="matched_easy",
+        probe_conditions=("consistent_easy", "consistent_hard", "conflict_hard"),
     )
     assert filtered
-    assert {record["condition"] for record in filtered} == {"consistent_easy"}
+    assert {record["condition"] for record in filtered} == {
+        "consistent_easy",
+        "consistent_hard",
+        "conflict_hard",
+    }
 
 
 def test_permutation_occurs_at_unique_label_key_level() -> None:
@@ -107,13 +118,29 @@ def test_unseen_outer_test_class_invalidates_whole_fold() -> None:
     assert reason["type"] == "UnseenOuterTestClasses"
 
 
-def test_current_answer_only_baseline_and_four_task_contract() -> None:
+def test_current_answer_only_baseline_and_default_task_contract() -> None:
+    assert normalize_ordered_choices(
+        ["conflict_hard", "consistent_easy", "conflict_hard"],
+        PROBE_CONDITIONS,
+        "conditions",
+    ) == ("consistent_easy", "conflict_hard")
     assert set(PROBE_TASKS) == {
         "ac_text_answer",
         "ac_image_answer",
         "panl_text_answer",
         "panl_image_answer",
+        "ac_conflict",
+        "panl_conflict",
     }
+    dynamic = build_probe_tasks(["sac", "ltt"], ["ptnl", "ac"])
+    assert list(dynamic) == [
+        "ltt_text_answer",
+        "ltt_image_answer",
+        "sac_text_answer",
+        "sac_image_answer",
+        "ac_conflict",
+        "ptnl_conflict",
+    ]
     X = np.asarray([["blue"], ["yellow"], ["blue"], ["yellow"]], dtype=object)
     y = np.asarray([0, 1, 0, 1])
     model = build_current_answer_baseline().fit(X, y)

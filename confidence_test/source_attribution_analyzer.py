@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import torch
 
@@ -15,6 +15,8 @@ from layer_metacognition.conversation_builder import (
 
 from .source_attribution_schema import (
     ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
+    SOURCE_ATTRIBUTION_CLASSES,
+    SOURCE_ATTRIBUTION_MIDPOINTS,
     SourceAttributionResult,
     build_source_token_specification,
     gather_source_class_logits,
@@ -23,35 +25,78 @@ from .source_attribution_schema import (
 
 
 PARALLEL_SOURCE_PATTERN = re.compile(
-    r"\*\*Source Attribution\*\*:[ \t]*([0-8])(?:\*\*)?\s*\Z"
+    r"\*\*Source Attribution\*\*:[ \t]*([0-9])(?:\*\*)?\s*\Z"
 )
 JOINT_SOURCE_PATTERN = re.compile(
     r"\*\*Answer\*\*:[ \t]+([^\r\n]*?\S)[ \t]*\r?\n+"
-    r"[ \t]*\*\*Source Attribution\*\*:[ \t]*([0-8])(?:\*\*)?\s*\Z"
+    r"[ \t]*\*\*Source Attribution\*\*:[ \t]*([0-9])(?:\*\*)?\s*\Z"
 )
 JOINT_ADD_CRITERION_PATTERN = re.compile(
     r"\*\*Answer\*\*:[ \t]+([^\r\n]*?\S)[ \t]*\r?\n"
-    r"[ \t]*addCriterion[ \t]*\r?\n[ \t]*([0-8])(?:\*\*)?\s*\Z"
+    r"[ \t]*addCriterion[ \t]*\r?\n[ \t]*([0-9])(?:\*\*)?\s*\Z"
+)
+JOINT_COLON_IN_BOLD_PATTERN = re.compile(
+    r"\*\*Answer:\*\*[ \t]+([^\r\n]*?\S)[ \t]*\r?\n+"
+    r"[ \t]*\*\*Source Attribution:\*\*[ \t]*([0-9])[.]?\s*\Z"
+)
+JOINT_PLAIN_FIELDS_PATTERN = re.compile(
+    r"Answer:[ \t]+([^\r\n]*?\S)[ \t]*\r?\n+"
+    r"[ \t]*Source Attribution:[ \t]*([0-9])[.]?\s*\Z"
+)
+JOINT_SINGLE_LINE_PATTERN = re.compile(
+    r"\*\*Answer\*\*:[ \t]+(.+?\S)[ \t]+"
+    r"\*\*Source Attribution\*\*:[ \t]*([0-9])(?:\*\*)?[.]?\s*\Z"
+)
+JOINT_CODE_FENCE_PATTERN = re.compile(
+    r"[ \t]*```(?:text|markdown)?[ \t]*\r?\n"
+    r"(?P<body>.*?)\r?\n```[ \t]*\s*\Z",
+    re.DOTALL | re.IGNORECASE,
+)
+
+JOINT_PARSE_PATTERNS = (
+    JOINT_SOURCE_PATTERN,
+    JOINT_ADD_CRITERION_PATTERN,
+    JOINT_COLON_IN_BOLD_PATTERN,
+    JOINT_PLAIN_FIELDS_PATTERN,
+    JOINT_SINGLE_LINE_PATTERN,
 )
 
 
-def parse_parallel_source_output(raw_output: str) -> str | None:
+def parse_parallel_source_output(
+    raw_output: str,
+    source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+) -> str | None:
     match = PARALLEL_SOURCE_PATTERN.fullmatch(raw_output)
-    return match.group(1) if match else None
+    if match is None or match.group(1) not in source_classes:
+        return None
+    return match.group(1)
 
 
-def parse_joint_answer_source_output(raw_output: str) -> tuple[str | None, str | None, bool]:
-    match = JOINT_SOURCE_PATTERN.fullmatch(raw_output)
-    if match is None:
-        # Qwen occasionally emits this exact internal marker instead of the
-        # requested Source Attribution marker. Keep the fallback narrow so
-        # arbitrary explanations and additional lines remain invalid.
-        match = JOINT_ADD_CRITERION_PATTERN.fullmatch(raw_output)
-    if match is None:
-        return None, None, False
-    answer = match.group(1)
-    label = match.group(2)
-    return answer, label, True
+def parse_joint_answer_source_output(
+    raw_output: str,
+    source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+) -> tuple[str | None, str | None, bool]:
+    candidates = [raw_output]
+    fenced = JOINT_CODE_FENCE_PATTERN.fullmatch(raw_output)
+    if fenced is not None:
+        candidates.append(fenced.group("body"))
+
+    # Retry only known, bounded wire-format deviations. Each expression still
+    # consumes the complete candidate, so explanations or additional fields
+    # cannot be silently accepted.
+    for candidate in candidates:
+        for pattern in JOINT_PARSE_PATTERNS:
+            match = pattern.fullmatch(candidate)
+            if match is None or match.group(2) not in source_classes:
+                continue
+            answer = match.group(1)
+            # Qwen sometimes closes the answer value as Markdown even though
+            # only the field name was requested in bold.
+            if answer.endswith("**"):
+                answer = answer[:-2].rstrip()
+            if answer:
+                return answer, match.group(2), True
+    return None, None, False
 
 
 def _user_content(prompt: str, image_path: str | None) -> list[dict[str, str]]:
@@ -67,13 +112,25 @@ def _user_content(prompt: str, image_path: str | None) -> list[dict[str, str]]:
 
 
 class SourceAttributionAnalyzer:
-    def __init__(self, inference: Any, max_new_tokens: int = 4):
+    def __init__(
+        self,
+        inference: Any,
+        max_new_tokens: int = 4,
+        *,
+        source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+        source_midpoints: Sequence[float] = SOURCE_ATTRIBUTION_MIDPOINTS,
+    ):
         self.inference = inference
         self.model = inference.model
         self.processor = inference.processor
         self.tokenizer = getattr(self.processor, "tokenizer", self.processor)
         self.max_new_tokens = max_new_tokens
-        self.token_specification = build_source_token_specification(self.tokenizer)
+        self.source_classes = [str(label) for label in source_classes]
+        self.source_midpoints = [float(value) for value in source_midpoints]
+        self.token_specification = build_source_token_specification(
+            self.tokenizer,
+            self.source_classes,
+        )
 
     def score_vocab_logits(
         self,
@@ -85,6 +142,7 @@ class SourceAttributionAnalyzer:
         class_logits = gather_source_class_logits(
             vocab_logits.float(),
             self.token_specification.class_token_ids,
+            self.source_classes,
         )
         return source_distribution(
             class_logits,
@@ -92,6 +150,8 @@ class SourceAttributionAnalyzer:
             raw_output=raw_output,
             parsed_label=parsed_label,
             token_diagnostics=self.token_specification.to_dict(),
+            classes=self.source_classes,
+            midpoints=self.source_midpoints,
         )
 
     def build_messages(
@@ -145,7 +205,10 @@ class SourceAttributionAnalyzer:
             clean_up_tokenization_spaces=False,
         )
         raw_output = ASSISTANT_SOURCE_ATTRIBUTION_PREFILL + continuation
-        parsed_label = parse_parallel_source_output(raw_output)
+        parsed_label = parse_parallel_source_output(
+            raw_output,
+            self.source_classes,
+        )
         return self.score_vocab_logits(
             generated.scores[0][0],
             raw_output=raw_output,

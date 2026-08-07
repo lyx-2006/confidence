@@ -409,6 +409,81 @@ def locate_text_clue(
     }
 
 
+def locate_text_clue_save_positions(
+    tokenizer: Any,
+    alignment: RenderedTokenAlignment,
+    text_clue: str,
+) -> dict[str, dict[str, Any]]:
+    """Locate LTT and the following double-newline without token-text search."""
+
+    bounded_prefix = f"Text clue:\n{text_clue}\n\n"
+    bounded_start, prefix_end = unique_text_span(
+        alignment.rendered,
+        bounded_prefix,
+    )
+    next_line_end = alignment.rendered.find("\n", prefix_end)
+    if next_line_end < 0:
+        next_line_end = len(alignment.rendered)
+    right_boundary = alignment.rendered[prefix_end:next_line_end]
+    if not right_boundary.strip():
+        raise ValueError("Text clue has no following non-empty section boundary")
+    unique_text_span(alignment.rendered, bounded_prefix + right_boundary)
+    stripped = text_clue.rstrip()
+    if not stripped:
+        raise ValueError("Text clue has no non-whitespace character for LTT")
+
+    clue_start = bounded_start + len("Text clue:\n")
+    last_char = clue_start + len(stripped) - 1
+    ltt_positions = alignment.processed_tokens_for_char_span(last_char, last_char + 1)
+    if len(set(ltt_positions)) != 1:
+        raise ValueError("LTT character maps to multiple processed tokens")
+    ltt = token_position_record(tokenizer, alignment, ltt_positions[0])
+
+    separator_start = clue_start + len(text_clue)
+    separator_positions = alignment.processed_tokens_for_char_span(
+        separator_start,
+        separator_start + 2,
+    )
+    ptnl = token_position_record(tokenizer, alignment, separator_positions[-1])
+    ptnl["span_start_position"] = separator_positions[0]
+    ptnl["span_end_position"] = separator_positions[-1]
+    decoded_separator = tokenizer.decode(
+        alignment.processed_ids[
+            separator_positions[0] : separator_positions[-1] + 1
+        ],
+        skip_special_tokens=False,
+        clean_up_tokenization_spaces=False,
+    )
+    ptnl["decoded_span"] = decoded_separator
+    if "\n" not in ptnl["token_text"] or "\n" not in decoded_separator:
+        raise ValueError(f"PTNL token does not contain a newline: {ptnl}")
+    if ltt["position"] == ptnl["position"]:
+        fused = dict(ltt)
+        adjusted_position = int(ptnl["position"]) - 1
+        if adjusted_position < 0:
+            raise ValueError("Cannot shift LTT before PTNL at position zero")
+        ltt = token_position_record(tokenizer, alignment, adjusted_position)
+        if "\n" in ltt["token_text"]:
+            raise ValueError(
+                "Adjusted LTT token before PTNL still contains a newline: "
+                f"{ltt}"
+            )
+        ltt["position_adjustment"] = {
+            "type": "LTTShiftedBeforePTNL",
+            "reason": "semantic-final character is fused with the PTNL separator",
+            "original_position": int(fused["position"]),
+            "original_token_id": int(fused["token_id"]),
+            "original_token_text": str(fused["token_text"]),
+            "adjusted_position": adjusted_position,
+            "ptnl_position": int(ptnl["position"]),
+        }
+        ltt["validation_status"] = "adjusted"
+    else:
+        ltt["validation_status"] = "passed"
+    ptnl["validation_status"] = "passed"
+    return {"ltt": ltt, "ptnl": ptnl}
+
+
 def locate_image_span(
     tokenizer: Any,
     processor: Any,

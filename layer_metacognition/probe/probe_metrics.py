@@ -16,9 +16,12 @@ from sklearn.metrics import (
 from . import EASY_CONDITIONS
 
 SUBSETS = (
+    "pooled_overall",
     "easy_overall",
     "consistent_easy",
+    "consistent_hard",
     "conflict_easy",
+    "conflict_hard",
     "discriminative_conflict",
     "joint_follows_text",
     "joint_follows_image",
@@ -37,10 +40,15 @@ def subset_membership(record: dict[str, Any]) -> dict[str, bool]:
         and text_answer != image_answer
     )
     return {
+        "pooled_overall": True,
         "easy_overall": condition in EASY_CONDITIONS,
         "consistent_easy": condition == "consistent_easy",
+        "consistent_hard": condition == "consistent_hard",
         "conflict_easy": condition == "conflict_easy",
-        "discriminative_conflict": condition == "conflict_easy" and discriminative,
+        "conflict_hard": condition == "conflict_hard",
+        "discriminative_conflict": condition
+        in {"conflict_easy", "conflict_hard"}
+        and discriminative,
         "joint_follows_text": discriminative and current_answer == text_answer,
         "joint_follows_image": discriminative and current_answer == image_answer,
         "joint_follows_neither": discriminative

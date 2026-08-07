@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract/generate model-behavior text-only and easy image-only labels."""
+"""Extract/generate model-behavior text-only and selected image-only labels."""
 
 from __future__ import annotations
 
@@ -15,7 +15,11 @@ from confidence_test.dataset_utils import EvaluationCase, load_evaluation_cases
 from confidence_test.prompt_utils import STAGE1_TEXT_ANSWER_PROMPT
 from layer_metacognition.hidden_state_store import append_jsonl
 
-from . import EASY_CONDITIONS
+from . import (
+    DEFAULT_PROBE_CONDITIONS,
+    PROBE_CONDITIONS,
+    normalize_ordered_choices,
+)
 from .common import (
     atomic_write_jsonl,
     atomic_write_keyed_jsonl,
@@ -25,6 +29,11 @@ from .common import (
     sortable_item_id,
 )
 from .prompts import IMAGE_ONLY_ANSWER_PROMPT
+
+
+DEFAULT_DATASET_PATH = (
+    Path(__file__).resolve().parents[2] / "datasets" / "datasets.json"
+)
 
 
 def _result_dict(value: Any) -> dict[str, Any]:
@@ -47,6 +56,7 @@ def _image_key(case: EvaluationCase, condition: str) -> tuple[str, str]:
 
 def _case_maps(
     cases: list[EvaluationCase],
+    probe_conditions: tuple[str, ...] = DEFAULT_PROBE_CONDITIONS,
 ) -> tuple[
     dict[tuple[str, int], EvaluationCase],
     dict[tuple[str, str], tuple[EvaluationCase, str]],
@@ -63,7 +73,11 @@ def _case_maps(
         ):
             raise ValueError(f"Inconsistent dataset definition for text label key {key}")
         text_cases[key] = case
-        for condition in sorted(EASY_CONDITIONS):
+        for condition in probe_conditions:
+            if condition not in case.conditions:
+                raise ValueError(
+                    f"Dataset item {case.item_id!r} has no condition {condition!r}"
+                )
             image_key = _image_key(case, condition)
             candidate = case.conditions[condition]
             previous_image = image_cases.get(image_key)
@@ -188,21 +202,33 @@ def _answer_is_valid(result: dict[str, Any], answer_classes: list[str]) -> tuple
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experiment-dir", required=True)
-    parser.add_argument("--dataset", required=True)
+    parser.add_argument("--output-dir")
+    parser.add_argument("--dataset", default=str(DEFAULT_DATASET_PATH))
     parser.add_argument("--model-path", required=True)
     parser.add_argument("--inference-path")
     parser.add_argument("--max-answer-tokens", type=int, default=24)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--probe-conditions",
+        nargs="+",
+        choices=list(PROBE_CONDITIONS),
+        default=list(DEFAULT_PROBE_CONDITIONS),
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    probe_conditions = normalize_ordered_choices(
+        args.probe_conditions,
+        PROBE_CONDITIONS,
+        "--probe-conditions",
+    )
     experiment_dir = Path(args.experiment_dir).resolve()
     dataset = Path(args.dataset).resolve()
     model_path = Path(args.model_path).resolve()
     results_path = experiment_dir / "results.jsonl"
-    output_dir = probe_output_dir(experiment_dir)
+    output_dir = probe_output_dir(experiment_dir, args.output_dir)
     text_path = output_dir / "text_only_labels.jsonl"
     image_path = output_dir / "image_only_labels.jsonl"
     failure_path = output_dir / "label_failures.jsonl"
@@ -220,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset,
         fallback_null_path=output_dir / ".runtime" / "null.png",
     )
-    text_cases, image_cases = _case_maps(cases)
+    text_cases, image_cases = _case_maps(cases, probe_conditions)
     extracted, conflicts = extract_existing_text_labels(results_path, text_cases)
     output_dir.mkdir(parents=True, exist_ok=True)
     if not failure_path.exists():
@@ -320,7 +346,9 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
 
-    condition_order = {"consistent_easy": 0, "conflict_easy": 1}
+    condition_order = {
+        condition: index for index, condition in enumerate(PROBE_CONDITIONS)
+    }
     for key in sorted(
         pending_images,
         key=lambda item: (sortable_item_id(item[0]), condition_order[item[1]]),
@@ -392,6 +420,11 @@ def main(argv: list[str] | None = None) -> int:
                 "image_label_count": len(image_labels),
                 "valid_image_label_count": sum(
                     bool(value.get("parse_success")) for value in image_labels.values()
+                ),
+                "probe_conditions": list(probe_conditions),
+                "selected_missing_or_failed_image_label_count": sum(
+                    not bool(image_labels.get(key, {}).get("parse_success"))
+                    for key in image_cases
                 ),
                 "output_dir": str(output_dir),
             },

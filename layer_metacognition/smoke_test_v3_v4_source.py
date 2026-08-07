@@ -26,12 +26,15 @@ from layer_metacognition.run_v3_v4_source_experiment import (  # noqa: E402
     ANALYSIS_MODE_ORDER,
     DEFAULT_DATASET_PATH,
     DEFAULT_MODEL_PATH,
+    SOURCE_PROMPT_VARIANT_ORDER,
     expand_attribution_modes,
     main as experiment_main,
     normalize_analysis_modes,
+    normalize_hidden_state_positions,
     normalize_save_hidden_states,
     parse_save_hidden_state,
     serialize_save_hidden_states,
+    source_variant_output_dir,
 )
 from layer_metacognition.source_patchscope import (  # noqa: E402
     ANSWER_PATCHSCOPE_VARIANTS,
@@ -56,12 +59,19 @@ def parse_args() -> argparse.Namespace:
         default="joint",
     )
     parser.add_argument(
+        "--source-prompt-variant",
+        choices=list(SOURCE_PROMPT_VARIANT_ORDER),
+        default="baseline",
+    )
+    parser.add_argument(
         "--analysis_mode",
         nargs="+",
         choices=list(ANALYSIS_MODE_ORDER),
         default=["LMhead"],
     )
     parser.add_argument("--skip-attention", action="store_true")
+    parser.add_argument("--save_probtable", action="store_true")
+    parser.add_argument("--skip_confidence", action="store_true")
     parser.add_argument("--answer_val", action="store_true")
     parser.add_argument(
         "--save_hidden_state",
@@ -70,6 +80,12 @@ def parse_args() -> argparse.Namespace:
         default=[None],
         metavar="none|LAYER",
     )
+    parser.add_argument(
+        "--save_hidden_state_positions",
+        nargs="+",
+        choices=["ac", "panl", "ltt", "ptnl", "sac"],
+        default=["ac", "panl"],
+    )
     parser.add_argument("--resume", action="store_true")
     return parser.parse_args()
 
@@ -77,6 +93,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     save_hidden_states = normalize_save_hidden_states(args.save_hidden_state)
+    save_positions = normalize_hidden_state_positions(
+        args.save_hidden_state_positions
+    )
     if not torch.cuda.is_available():
         print("[SKIP] CUDA is not visible; full attention smoke test requires a GPU.")
         return 2
@@ -91,6 +110,8 @@ def main() -> int:
         args.version,
         "--attribution-mode",
         args.attribution_mode,
+        "--source-prompt-variant",
+        args.source_prompt_variant,
         "--analysis_mode",
         *args.analysis_mode,
         "--conditions",
@@ -104,19 +125,27 @@ def main() -> int:
         command.extend(["--item-ids", args.item_id])
     if args.skip_attention:
         command.append("--skip-attention")
+    if args.save_probtable:
+        command.append("--save_probtable")
+    if args.skip_confidence:
+        command.append("--skip_confidence")
     if args.answer_val:
         command.append("--answer_val")
     if save_hidden_states:
         command.extend(
             ["--save_hidden_state", *(str(value) for value in save_hidden_states)]
         )
+        command.extend(["--save_hidden_state_positions", *save_positions])
     if args.resume:
         command.append("--resume")
     exit_code = experiment_main(command)
     if exit_code != 0:
         return exit_code
 
-    output_dir = Path(args.output_dir)
+    output_dir = source_variant_output_dir(
+        Path(args.output_dir),
+        args.source_prompt_variant,
+    )
     records = load_jsonl(output_dir / "results.jsonl", repair_trailing=False)
     expected_modes = expand_attribution_modes(args.attribution_mode)
     analysis_modes = normalize_analysis_modes(args.analysis_mode)
@@ -141,13 +170,15 @@ def main() -> int:
             )
         expected_layers = int(record["model_structure"]["num_hidden_layers"])
         expected_heads = int(record["model_structure"]["num_attention_heads"])
-        for target in ("ac", "cc"):
+        for target in (("ac",) if args.skip_confidence else ("ac", "cc")):
             layers = record["direct_readout"][f"{target}_layers"]
             if len(layers) != expected_layers:
                 raise RuntimeError(
                     f"{mode}/{target} layer count mismatch: "
                     f"{len(layers)} != {expected_layers}"
                 )
+        if args.skip_confidence and record["direct_readout"]["cc_layers"]:
+            raise RuntimeError(f"{mode}/cc layers were collected despite --skip_confidence")
         answer_patchscope_layers = record["direct_readout"][
             "answer_patchscope_layers"
         ]
@@ -304,6 +335,21 @@ def main() -> int:
     if missing:
         raise RuntimeError(f"Smoke output is missing files: {missing}")
     config = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
+    if config.get("source_prompt_variant") != args.source_prompt_variant:
+        raise RuntimeError("config.json source_prompt_variant does not match smoke request")
+    if bool(config.get("save_probtable")) != args.save_probtable:
+        raise RuntimeError("config.json save_probtable does not match smoke request")
+    if bool(config.get("skip_confidence")) != args.skip_confidence:
+        raise RuntimeError("config.json skip_confidence does not match smoke request")
+    probability_path = output_dir / "probability_tables.json"
+    if args.save_probtable:
+        if not probability_path.is_file():
+            raise RuntimeError("probability_tables.json was not written")
+        probability_tables = json.loads(probability_path.read_text(encoding="utf-8"))
+        if len(probability_tables.get("records", [])) != len(records):
+            raise RuntimeError("probability table record count does not match results")
+    elif probability_path.exists():
+        raise RuntimeError("probability_tables.json exists without --save_probtable")
     if config.get("analysis_modes") != list(analysis_modes):
         raise RuntimeError("config.json analysis_modes are not canonical")
     if bool(config.get("answer_val")) != args.answer_val:
@@ -313,10 +359,15 @@ def main() -> int:
         raise RuntimeError(
             "config.json save_hidden_state does not match smoke request"
         )
+    if config.get("save_hidden_state_positions") != list(save_positions):
+        raise RuntimeError(
+            "config.json save_hidden_state_positions does not match smoke request"
+        )
     if save_hidden_states:
         store = TargetLayerHiddenStateStore(
             output_dir,
             layer_index=list(save_hidden_states),
+            position_names=list(save_positions),
         )
         for record in records:
             if record.get("status") != "completed":
@@ -324,9 +375,13 @@ def main() -> int:
             restored, reference = store.read_case(str(record["case_id"]))
             hidden_size = int(reference["hidden_size"])
             expected_shape = (
-                (2, hidden_size)
+                (len(save_positions), hidden_size)
                 if len(save_hidden_states) == 1
-                else (len(save_hidden_states), 2, hidden_size)
+                else (
+                    len(save_hidden_states),
+                    len(save_positions),
+                    hidden_size,
+                )
             )
             if tuple(restored.shape) != expected_shape:
                 raise RuntimeError(
@@ -334,7 +389,7 @@ def main() -> int:
                 )
             if restored.device.type != "cpu" or restored.dtype != torch.float16:
                 raise RuntimeError("Stored hidden state is not CPU FP16")
-            if reference["position_names"] != ["ac", "panl"]:
+            if reference["position_names"] != list(save_positions):
                 raise RuntimeError("Stored hidden-state position order is invalid")
     expected_compact_columns = list(
         COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL

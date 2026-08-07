@@ -12,7 +12,9 @@ import torch
 from confidence_test.inference_extension import ASSISTANT_ANSWER_PREFILL
 from confidence_test.source_attribution_schema import (
     ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
+    SOURCE_ATTRIBUTION_CLASSES,
     SOURCE_ATTRIBUTION_CLASS_TEXT,
+    SOURCE_ATTRIBUTION_MIDPOINTS,
 )
 
 from .conversation_builder import prepare_multimodal_inputs, render_continued_assistant
@@ -23,7 +25,6 @@ from .model_adapter import (
     run_patched_logits_forward,
 )
 from .source_patchscope_prompts import (
-    IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL,
     IDENTITY_PATCHSCOPE_USER_PROMPT,
     SEMANTIC_ANSWER_PATCHSCOPE_USER_PROMPT,
     SEMANTIC_PATCHSCOPE_USER_PROMPT,
@@ -267,6 +268,9 @@ class SourcePatchscopeDecoder:
         modules: LanguageModules,
         class_token_ids: dict[str, Sequence[int]],
         analysis_modes: Sequence[str],
+        source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+        source_midpoints: Sequence[float] = SOURCE_ATTRIBUTION_MIDPOINTS,
+        source_class_text: str = SOURCE_ATTRIBUTION_CLASS_TEXT,
     ):
         selected = [
             mode for mode in PATCHSCOPE_ANALYSIS_MODES if mode in set(analysis_modes)
@@ -280,6 +284,9 @@ class SourcePatchscopeDecoder:
             label: [int(token_id) for token_id in ids]
             for label, ids in class_token_ids.items()
         }
+        self.source_classes = [str(label) for label in source_classes]
+        self.source_midpoints = [float(value) for value in source_midpoints]
+        self.source_class_text = str(source_class_text)
         self.targets: dict[str, PreparedSourceTarget] = {}
         self.call_counts = {"baseline": 0, "patched": 0}
         for mode in selected:
@@ -376,6 +383,8 @@ class SourcePatchscopeDecoder:
             logits,
             self.class_token_ids,
             analysis_mode=mode,
+            source_classes=self.source_classes,
+            source_midpoints=self.source_midpoints,
         )
         baseline["target_name"] = mode.casefold()
         baseline["target_position"] = target_position
@@ -389,17 +398,24 @@ class SourcePatchscopeDecoder:
         )
 
     def prepare_identity_target(self) -> PreparedSourceTarget:
+        assistant_prefill = "\n".join(
+            [*(f"{label} -> {label}" for label in self.source_classes), "?"]
+        )
+        user_prompt = IDENTITY_PATCHSCOPE_USER_PROMPT.replace(
+            "from 0 to 8",
+            f"from {self.source_classes[0]} to {self.source_classes[-1]}",
+        )
         return self._prepare_target(
             mode="Identity",
-            user_prompt=IDENTITY_PATCHSCOPE_USER_PROMPT,
-            assistant_prefill=IDENTITY_PATCHSCOPE_ASSISTANT_PREFILL,
+            user_prompt=user_prompt,
+            assistant_prefill=assistant_prefill,
         )
 
     def prepare_semantic_target(self) -> PreparedSourceTarget:
         return self._prepare_target(
             mode="Semantic",
             user_prompt=SEMANTIC_PATCHSCOPE_USER_PROMPT.format(
-                source_classes=SOURCE_ATTRIBUTION_CLASS_TEXT
+                source_classes=self.source_class_text
             ),
             assistant_prefill=ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
         )
@@ -446,6 +462,8 @@ class SourcePatchscopeDecoder:
             self.class_token_ids,
             layer_index=layer_index,
             analysis_mode=analysis_mode,
+            source_classes=self.source_classes,
+            source_midpoints=self.source_midpoints,
         )
         result["target_name"] = target.name
         result["target_position"] = target.target_position

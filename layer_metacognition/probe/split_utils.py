@@ -149,6 +149,8 @@ def label_key(record: dict[str, Any], target_field: str) -> tuple[Any, ...]:
         return str(record["item_id"]), int(record["prior_index"])
     if target_field == "image_only_answer":
         return str(record["item_id"]), str(record["condition"])
+    if target_field == "conflict_label":
+        return str(record["item_id"]), str(record["condition"])
     raise ValueError(f"Unsupported behavior-label field: {target_field!r}")
 
 

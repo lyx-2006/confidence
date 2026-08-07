@@ -23,7 +23,7 @@ Identity Patchscope 或 SAC LMhead。
 
 ```bash
 python layer_metacognition/valid_experiment/run_semantic_patchscope_validation.py \
-  --dataset datasets/dataset_with_images.json \
+  --dataset datasets/datasets.json \
   --image-root datasets \
   --model-path qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct \
   --output-dir layer_metacognition/valid_experiment/output/smoke_test \
@@ -39,7 +39,7 @@ python layer_metacognition/valid_experiment/run_semantic_patchscope_validation.p
 
 ```bash
 python layer_metacognition/valid_experiment/run_semantic_patchscope_validation.py \
-  --dataset datasets/dataset_with_images.json \
+  --dataset datasets/datasets.json \
   --image-root datasets \
   --model-path qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct \
   --output-dir layer_metacognition/valid_experiment/output/full_validation \
@@ -65,7 +65,7 @@ hooked forward、Patchscope forward 或持久化错误仍会终止运行，以�
 ```
 
 数据集 JSON 路径。默认：
-`datasets/dataset_with_images.json`。
+`datasets/datasets.json`。
 
 ```text
 --image-root PATH

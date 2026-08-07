@@ -28,10 +28,10 @@ from confidence_test.joint_answer_source_extension import (  # noqa: E402
 )
 from confidence_test.runtime_imports import DEFAULT_INFERENCE_PATH, load_runtime  # noqa: E402
 from confidence_test.source_attribution_analyzer import SourceAttributionAnalyzer  # noqa: E402
-from confidence_test.source_attribution_schema import (  # noqa: E402
-    SOURCE_ATTRIBUTION_CLASSES,
-    SOURCE_ATTRIBUTION_CLASS_TEXT,
-    SOURCE_ATTRIBUTION_MIDPOINTS,
+from confidence_test.source_attribution_variants import (  # noqa: E402
+    SOURCE_PROMPT_VARIANT_ORDER,
+    SourcePromptVariant,
+    get_source_prompt_variant,
 )
 from layer_metacognition.analyze_main_results import (  # noqa: E402
     build_minimal_analysis,
@@ -55,6 +55,7 @@ from layer_metacognition.hidden_state_store import (  # noqa: E402
     load_jsonl,
 )
 from layer_metacognition.model_adapter import resolve_language_modules  # noqa: E402
+from layer_metacognition.probability_tables import write_probability_tables  # noqa: E402
 from layer_metacognition.source_patchscope import (  # noqa: E402
     ANSWER_PATCHSCOPE_SHUFFLE_SEEDS,
     ANSWER_PATCHSCOPE_VARIANTS,
@@ -68,10 +69,11 @@ from layer_metacognition.v3_v4_source_runner import (  # noqa: E402
 
 
 DEFAULT_MODEL_PATH = ROOT / "qwen-2.5-vl" / "models" / "Qwen2.5-VL-7B-Instruct"
-DEFAULT_DATASET_PATH = ROOT / "datasets" / "dataset_with_images.json"
+DEFAULT_DATASET_PATH = ROOT / "datasets" / "datasets.json"
 DEFAULT_OUTPUT_DIR = ROOT / "layer_metacognition" / "output" / "v3_v4_source"
 ATTRIBUTION_MODES = ("none", "parallel", "joint")
 ANALYSIS_MODE_ORDER = ("LMhead", "Identity", "Semantic")
+HIDDEN_STATE_POSITION_ORDER = ("ac", "panl", "ltt", "ptnl", "sac")
 FORMAT_VERSION = 2
 
 
@@ -86,6 +88,43 @@ def expand_attribution_modes(value: str) -> tuple[str, ...]:
     if value not in ATTRIBUTION_MODES:
         raise ValueError(f"Unknown attribution mode: {value}")
     return (value,)
+
+
+def normalize_source_prompt_variants(values: Iterable[str]) -> tuple[str, ...]:
+    """Return selected prompt variants in stable experiment order."""
+    raw = [str(value) for value in values]
+    invalid = [value for value in raw if value not in SOURCE_PROMPT_VARIANT_ORDER]
+    if invalid:
+        raise ValueError(
+            "Unknown --source-prompt-variant value(s): " + ", ".join(invalid)
+        )
+    if not raw:
+        raise ValueError("--source-prompt-variant requires at least one value")
+    selected = set(raw)
+    return tuple(
+        value for value in SOURCE_PROMPT_VARIANT_ORDER if value in selected
+    )
+
+
+def validate_source_prompt_variant_modes(
+    source_prompt_variants: Iterable[str],
+    attribution_mode: str,
+) -> None:
+    joint_only = [
+        value for value in source_prompt_variants if value != "baseline"
+    ]
+    if joint_only and attribution_mode != "joint":
+        raise ValueError(
+            "Source prompt variant(s) "
+            f"{', '.join(joint_only)} require --attribution-mode joint; "
+            f"got {attribution_mode!r}"
+        )
+
+
+def source_variant_output_dir(output_root: Path, variant: str) -> Path:
+    if variant not in SOURCE_PROMPT_VARIANT_ORDER:
+        raise ValueError(f"Unknown source prompt variant: {variant}")
+    return output_root / variant
 
 
 def normalize_analysis_modes(values: Iterable[str]) -> tuple[str, ...]:
@@ -152,6 +191,19 @@ def serialize_save_hidden_states(layer_indices: tuple[int, ...]) -> str | int | 
     return list(layer_indices)
 
 
+def normalize_hidden_state_positions(values: Iterable[str]) -> tuple[str, ...]:
+    raw = [str(value).strip().lower() for value in values]
+    invalid = [value for value in raw if value not in HIDDEN_STATE_POSITION_ORDER]
+    if invalid:
+        raise ValueError(
+            "Unknown --save_hidden_state_positions value(s): " + ", ".join(invalid)
+        )
+    selected = set(raw)
+    return tuple(
+        name for name in HIDDEN_STATE_POSITION_ORDER if name in selected
+    )
+
+
 def validate_save_hidden_state(
     layer_indices: tuple[int, ...],
     *,
@@ -185,7 +237,24 @@ def saved_configuration_for_comparison(
     if missing:
         normalized["analysis_modes"] = ["LMhead"]
     normalized.setdefault("save_hidden_state", "none")
+    normalized.setdefault("save_hidden_state_positions", ["ac", "panl"])
+    normalized.setdefault("save_probtable", False)
+    normalized.setdefault("skip_confidence", False)
     return normalized, missing
+
+
+def resume_configuration_differences(
+    saved: dict[str, Any],
+    current: dict[str, Any],
+) -> tuple[list[str], bool]:
+    """Return differing persisted fields and whether legacy analysis mode was inferred."""
+    comparable_saved, missing_analysis_modes = saved_configuration_for_comparison(
+        saved
+    )
+    differing = [
+        key for key, value in current.items() if comparable_saved.get(key) != value
+    ]
+    return differing, missing_analysis_modes
 
 
 def validate_resume_format(saved: dict[str, Any]) -> None:
@@ -245,6 +314,48 @@ def run_case_groups(
                 if group_changed:
                     after_group()
     return {runner.mode: dict(runner.call_counts) for runner in runners}
+
+
+def run_prompt_variant_case_groups(
+    variant_runs: list[dict[str, Any]],
+    cases: list[Any],
+    *,
+    versions: list[str],
+    conditions: list[str],
+) -> dict[str, dict[str, dict[str, int]]]:
+    """Finish each prompt variant for one terminal case before advancing."""
+    for case in cases:
+        for condition in conditions:
+            for version in versions:
+                for variant_run in variant_runs:
+                    variant_run["active"] = True
+                    group_changed = False
+                    for runner in variant_run["runners"]:
+                        case_id = (
+                            f"{case.item_id}__prior_{case.prior_index}__"
+                            f"{condition}__{version}__{runner.mode}"
+                        )
+                        if case_id in variant_run["existing_ids"]:
+                            runner._log("resume_skip", case_id=case_id)
+                            continue
+                        record = runner.process_case(
+                            case=case,
+                            condition=condition,
+                            version=version,
+                        )
+                        variant_run["commit"](record)
+                        variant_run["existing_ids"].add(case_id)
+                        group_changed = True
+                    if group_changed:
+                        variant_run["after_group"]()
+                    variant_run["active"] = False
+    return {
+        str(variant_run["name"]): {
+            runner.mode: dict(runner.call_counts)
+            for runner in variant_run["runners"]
+        }
+        for variant_run in variant_runs
+    }
 
 
 def _canonical_values(
@@ -310,10 +421,15 @@ def _rebase_images(cases: list[Any], image_root: Path | None) -> list[Any]:
     return output
 
 
-def configure_logger(path: Path) -> logging.Logger:
+def configure_logger(path: Path, *, source_prompt_variant: str | None = None) -> logging.Logger:
     path.parent.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("layer_metacognition.v3_v4_source")
+    logger_name = "layer_metacognition.v3_v4_source"
+    if source_prompt_variant is not None:
+        logger_name = f"{logger_name}.{source_prompt_variant}"
+    logger = logging.getLogger(logger_name)
     logger.setLevel(logging.INFO)
+    for existing_handler in logger.handlers:
+        existing_handler.close()
     logger.handlers.clear()
     handler = logging.FileHandler(path, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
@@ -383,6 +499,42 @@ def _write_analyses(output_dir: Path, records: list[dict[str, Any]]) -> None:
     )
 
 
+def _write_variant_outputs(
+    state: dict[str, Any],
+    records: list[dict[str, Any]],
+) -> None:
+    _write_analyses(state["output_dir"], records)
+    if state.get("save_probtable"):
+        write_probability_tables(
+            state["output_dir"] / "probability_tables.json",
+            records,
+            source_classes=state["source_variant"].classes,
+            confidence_classes=state.get("confidence_classes"),
+        )
+
+
+def _checkpoint_variant_runs_after_stop(
+    variant_runs: list[dict[str, Any]],
+    *,
+    status: str,
+) -> set[str]:
+    """Flush every interleaved variant so earlier completed cases are durable."""
+    handled: set[str] = set()
+    for variant_run in variant_runs:
+        state = variant_run["state"]
+        store = state.get("hidden_state_store")
+        if store is not None:
+            store.flush(state["results_path"])
+        records = load_jsonl(state["results_path"], repair_trailing=True)
+        _write_variant_outputs(state, records)
+        atomic_write_json(
+            state["progress_path"],
+            _progress(records, status=status),
+        )
+        handled.add(str(state["name"]))
+    return handled
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET_PATH))
@@ -395,6 +547,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--attribution-mode",
         choices=[*ATTRIBUTION_MODES, "all"],
         default="none",
+    )
+    parser.add_argument(
+        "--source-prompt-variant",
+        nargs="+",
+        choices=list(SOURCE_PROMPT_VARIANT_ORDER),
+        default=["baseline"],
+        help=(
+            "One or more joint Source Attribution prompt variants. Each variant "
+            "writes to its own child directory under --output-dir."
+        ),
     )
     parser.add_argument(
         "--analysis_mode",
@@ -415,6 +577,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-attention", action="store_true")
     parser.add_argument("--skip-layer-readout", action="store_true")
     parser.add_argument(
+        "--save_probtable",
+        action="store_true",
+        help="Write per-layer restricted class probabilities to probability_tables.json.",
+    )
+    parser.add_argument(
+        "--skip_confidence",
+        action="store_true",
+        help=(
+            "Skip final confidence generation and CC readout while retaining "
+            "the V3 initial confidence required by its answer prompt."
+        ),
+    )
+    parser.add_argument(
         "--answer_val",
         action="store_true",
         help=(
@@ -429,8 +604,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=[None],
         metavar="none|LAYER",
         help=(
-            "Save one or more zero-based decoder layers' AC and PANL hidden "
-            "states as CPU FP16 shards; default: none."
+            "Save one or more zero-based decoder layers' selected-position "
+            "hidden states as CPU FP16 shards; default: none."
+        ),
+    )
+    parser.add_argument(
+        "--save_hidden_state_positions",
+        nargs="+",
+        choices=list(HIDDEN_STATE_POSITION_ORDER),
+        default=["ac", "panl"],
+        help=(
+            "Hidden-state positions to save. Duplicates are removed and output "
+            "order is always ac, panl, ltt, ptnl, sac. (default: ac panl)"
         ),
     )
     parser.add_argument("--max-answer-tokens", type=int, default=24)
@@ -441,11 +626,38 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    positions_explicit = any(
+        value == "--save_hidden_state_positions"
+        or value.startswith("--save_hidden_state_positions=")
+        for value in raw_argv
+    )
+    args = parser.parse_args(raw_argv)
     try:
         versions = _canonical_values(args.versions, ("v3", "v4"), "version")
+        source_prompt_variants = normalize_source_prompt_variants(
+            args.source_prompt_variant
+        )
+        validate_source_prompt_variant_modes(
+            source_prompt_variants,
+            args.attribution_mode,
+        )
+        modes = expand_attribution_modes(args.attribution_mode)
         analysis_modes = normalize_analysis_modes(args.analysis_mode)
         save_hidden_states = normalize_save_hidden_states(args.save_hidden_state)
+        save_hidden_state_positions = normalize_hidden_state_positions(
+            args.save_hidden_state_positions
+        )
+        if positions_explicit and not save_hidden_states:
+            raise ValueError(
+                "--save_hidden_state_positions was specified but "
+                "--save_hidden_state selected no layer"
+            )
+        if "sac" in save_hidden_state_positions and "none" in modes:
+            raise ValueError(
+                "--save_hidden_state_positions sac requires attribution mode "
+                "parallel or joint; mode 'none' has no SAC token"
+            )
         conditions = _canonical_values(args.conditions, CONDITIONS, "condition")
         item_ids = _parse_string_selection(args.item_ids)
         prior_indices = set(args.prior_indices) if args.prior_indices else None
@@ -467,7 +679,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset = Path(args.dataset).resolve()
         model_path = Path(args.model_path).resolve()
         inference_path = Path(args.inference_path).resolve()
-        output_dir = Path(args.output_dir).resolve()
+        output_root = Path(args.output_dir).resolve()
         image_root = Path(args.image_root).resolve() if args.image_root else None
         if not dataset.is_file():
             raise FileNotFoundError(f"Dataset does not exist: {dataset}")
@@ -480,22 +692,16 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         parser.error(str(exc))
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    results_path = output_dir / "results.jsonl"
-    config_path = output_dir / "config.json"
-    progress_path = output_dir / "progress.json"
-    logger = configure_logger(output_dir / "run.log")
+    output_root.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("layer_metacognition.v3_v4_source")
+    variant_states: list[dict[str, Any]] = []
+    active_state: dict[str, Any] | None = None
+    states_initialized = False
     try:
-        modes = expand_attribution_modes(args.attribution_mode)
-        existing = load_jsonl(results_path, repair_trailing=args.resume)
-        if existing and not args.resume:
-            raise ValueError(
-                f"Output already contains results; pass --resume or choose a new directory: {results_path}"
-            )
         cases, dataset_metadata = load_evaluation_cases(
             dataset,
             item_limit=args.max_items,
-            fallback_null_path=output_dir / ".runtime" / "null.png",
+            fallback_null_path=output_root / ".runtime" / "null.png",
         )
         cases = _rebase_images(cases, image_root)
         if item_ids is not None:
@@ -514,92 +720,153 @@ def main(argv: list[str] | None = None) -> int:
             cases = [case for case in cases if case.prior_index in prior_indices]
         if not cases:
             raise ValueError("No cases remain after item/prior filtering")
-        configuration = {
-            "format_version": FORMAT_VERSION,
-            "model_path": str(model_path),
-            "dataset": str(dataset),
-            "image_root": str(image_root) if image_root else None,
-            "inference_path": str(inference_path),
-            "output_dir": str(output_dir),
-            "versions": versions,
-            "attribution_mode": args.attribution_mode,
-            "attribution_modes": list(modes),
-            "analysis_modes": list(analysis_modes),
-            "conditions": conditions,
-            "max_items": args.max_items,
-            "item_ids": sorted(item_ids) if item_ids else None,
-            "prior_indices": sorted(prior_indices) if prior_indices else None,
-            "skip_attention": args.skip_attention,
-            "skip_layer_readout": args.skip_layer_readout,
-            "answer_val": args.answer_val,
-            "save_hidden_state": serialize_save_hidden_states(save_hidden_states),
-            "max_answer_tokens": args.max_answer_tokens,
-            "max_confidence_tokens": args.max_confidence_tokens,
-            "max_source_tokens": args.max_source_tokens,
-            "source_wire_format": "**Source Attribution**:<CLASS>",
-            "source_attribution_classes": SOURCE_ATTRIBUTION_CLASSES,
-            "source_attribution_midpoints": SOURCE_ATTRIBUTION_MIDPOINTS,
-            "source_attribution_class_text": SOURCE_ATTRIBUTION_CLASS_TEXT,
-            "compact_layer_columns": list(
-                COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL
-                if args.answer_val
-                else COMPACT_LAYER_COLUMNS
-            ),
-            "answer_patchscope": {
-                "analysis_mode": "Semantic",
-                "target_context": "candidate_answers_only",
-                "wire_format": "**Answer**:<ANSWER>",
-                "probability_definition": "restricted_candidate_softmax_top1",
-                "validation_enabled": args.answer_val,
-                "validation_variants": (
-                    list(ANSWER_PATCHSCOPE_VARIANTS)
-                    if args.answer_val
-                    else ["original"]
+
+        # Preflight every variant before creating or updating any variant files.
+        for variant_name in source_prompt_variants:
+            source_variant = get_source_prompt_variant(variant_name)
+            output_dir = source_variant_output_dir(output_root, variant_name)
+            results_path = output_dir / "results.jsonl"
+            config_path = output_dir / "config.json"
+            progress_path = output_dir / "progress.json"
+            existing = load_jsonl(results_path, repair_trailing=args.resume)
+            if existing and not args.resume:
+                raise ValueError(
+                    "Output already contains results; pass --resume or choose a "
+                    f"new directory: {results_path}"
+                )
+            configuration = {
+                "format_version": FORMAT_VERSION,
+                "model_path": str(model_path),
+                "dataset": str(dataset),
+                "image_root": str(image_root) if image_root else None,
+                "inference_path": str(inference_path),
+                "output_dir": str(output_dir),
+                "versions": versions,
+                "attribution_mode": args.attribution_mode,
+                "attribution_modes": list(modes),
+                "analysis_modes": list(analysis_modes),
+                "conditions": conditions,
+                "max_items": args.max_items,
+                "item_ids": sorted(item_ids) if item_ids else None,
+                "prior_indices": sorted(prior_indices) if prior_indices else None,
+                "skip_attention": args.skip_attention,
+                "skip_layer_readout": args.skip_layer_readout,
+                "save_probtable": args.save_probtable,
+                "skip_confidence": args.skip_confidence,
+                "answer_val": args.answer_val,
+                "save_hidden_state": serialize_save_hidden_states(save_hidden_states),
+                "save_hidden_state_positions": list(save_hidden_state_positions),
+                "hidden_state_position_collision_policy": (
+                    "shift_ltt_to_previous_token_before_ptnl"
+                    if {"ltt", "ptnl"}.issubset(save_hidden_state_positions)
+                    else None
                 ),
-                "shuffle_seeds": (
-                    dict(ANSWER_PATCHSCOPE_SHUFFLE_SEEDS)
+                "max_answer_tokens": args.max_answer_tokens,
+                "max_confidence_tokens": args.max_confidence_tokens,
+                "max_source_tokens": args.max_source_tokens,
+                "source_prompt_variant": source_variant.name,
+                "source_wire_format": "**Source Attribution**:<CLASS>",
+                "source_attribution_classes": list(source_variant.classes),
+                "source_attribution_midpoints": list(source_variant.midpoints),
+                "source_attribution_class_text": source_variant.class_text,
+                "compact_layer_columns": list(
+                    COMPACT_LAYER_COLUMNS_WITH_ANSWER_VAL
                     if args.answer_val
-                    else {}
+                    else COMPACT_LAYER_COLUMNS
                 ),
-            },
-            "reconstruction_tolerances": {
-                "bfloat16": reconstruction_tolerance("bfloat16"),
-                "float16": reconstruction_tolerance("float16"),
-            },
-            "dataset_metadata": dataset_metadata,
-        }
-        if config_path.exists():
-            saved = json.loads(config_path.read_text(encoding="utf-8"))
-            validate_resume_format(saved)
-            comparable_saved, missing_analysis_modes = (
-                saved_configuration_for_comparison(saved)
-            )
-            comparable = {
-                key: comparable_saved.get(key) for key in configuration
+                "answer_patchscope": {
+                    "analysis_mode": "Semantic",
+                    "target_context": "candidate_answers_only",
+                    "wire_format": "**Answer**:<ANSWER>",
+                    "probability_definition": "restricted_candidate_softmax_top1",
+                    "validation_enabled": args.answer_val,
+                    "validation_variants": (
+                        list(ANSWER_PATCHSCOPE_VARIANTS)
+                        if args.answer_val
+                        else ["original"]
+                    ),
+                    "shuffle_seeds": (
+                        dict(ANSWER_PATCHSCOPE_SHUFFLE_SEEDS)
+                        if args.answer_val
+                        else {}
+                    ),
+                },
+                "reconstruction_tolerances": {
+                    "bfloat16": reconstruction_tolerance("bfloat16"),
+                    "float16": reconstruction_tolerance("float16"),
+                },
+                "dataset_metadata": dataset_metadata,
             }
-            if comparable != configuration:
-                raise ValueError("Resume configuration differs from saved config.json")
-            if missing_analysis_modes:
-                saved["analysis_modes"] = ["LMhead"]
-                atomic_write_json(config_path, saved)
-        else:
-            atomic_write_json(
-                config_path,
-                {**configuration, "created_at": utc_now()},
+            config_to_write: dict[str, Any]
+            if config_path.exists():
+                saved = json.loads(config_path.read_text(encoding="utf-8"))
+                validate_resume_format(saved)
+                differing, missing_analysis_modes = resume_configuration_differences(
+                    saved,
+                    configuration,
+                )
+                if differing:
+                    raise ValueError(
+                        f"{variant_name}: resume configuration differs from "
+                        "saved config.json for: " + ", ".join(differing)
+                    )
+                config_to_write = dict(saved)
+                if missing_analysis_modes:
+                    config_to_write["analysis_modes"] = ["LMhead"]
+                config_to_write.setdefault(
+                    "save_hidden_state_positions", ["ac", "panl"]
+                )
+                config_to_write.setdefault("save_probtable", False)
+                config_to_write.setdefault("skip_confidence", False)
+            else:
+                config_to_write = {**configuration, "created_at": utc_now()}
+            existing_ids = {str(record["case_id"]) for record in existing}
+            expected_ids = {
+                f"{case.item_id}__prior_{case.prior_index}__{condition}__{version}__{mode}"
+                for case in cases
+                for condition in conditions
+                for version in versions
+                for mode in modes
+            }
+            variant_states.append(
+                {
+                    "name": variant_name,
+                    "source_variant": source_variant,
+                    "output_dir": output_dir,
+                    "results_path": results_path,
+                    "config_path": config_path,
+                    "progress_path": progress_path,
+                    "configuration": configuration,
+                    "config_to_write": config_to_write,
+                    "existing": existing,
+                    "existing_ids": existing_ids,
+                    "expected_ids": expected_ids,
+                    "complete": expected_ids.issubset(existing_ids),
+                    "call_counts": {},
+                    "patchscope_call_counts": {},
+                    "save_probtable": args.save_probtable,
+                    "confidence_classes": None,
+                }
             )
-        atomic_write_json(progress_path, _progress(existing, status="initializing"))
-        existing_ids = {str(record["case_id"]) for record in existing}
-        expected_ids = {
-            f"{case.item_id}__prior_{case.prior_index}__{condition}__{version}__{mode}"
-            for case in cases
-            for condition in conditions
-            for version in versions
-            for mode in modes
-        }
-        if expected_ids.issubset(existing_ids):
-            _write_analyses(output_dir, existing)
-            atomic_write_json(progress_path, _progress(existing, status="complete"))
-            print("[INFO] No pending cases; analyses refreshed.")
+
+        for state in variant_states:
+            state["output_dir"].mkdir(parents=True, exist_ok=True)
+            atomic_write_json(state["config_path"], state["config_to_write"])
+            atomic_write_json(
+                state["progress_path"],
+                _progress(state["existing"], status="initializing"),
+            )
+        states_initialized = True
+
+        pending_states = [state for state in variant_states if not state["complete"]]
+        if not pending_states:
+            for state in variant_states:
+                _write_variant_outputs(state, state["existing"])
+                atomic_write_json(
+                    state["progress_path"],
+                    _progress(state["existing"], status="complete"),
+                )
+            print("[INFO] No pending cases; analyses refreshed for all prompt variants.")
             return 0
 
         runtime = load_runtime(inference_path)
@@ -611,29 +878,31 @@ def main(argv: list[str] | None = None) -> int:
             skip_layer_readout=args.skip_layer_readout,
             num_hidden_layers=modules.num_hidden_layers,
         )
-        saved_config = json.loads(config_path.read_text(encoding="utf-8"))
         text_config = getattr(
             inference.model.config,
             "text_config",
             inference.model.config,
         )
-        saved_config["model_runtime"] = {
+        model_runtime = {
             "dtype": inference.dtype_name,
             "device_map": getattr(inference.model, "hf_device_map", None),
             "num_hidden_layers": modules.num_hidden_layers,
             "hidden_size": modules.hidden_size,
             "num_attention_heads": int(text_config.num_attention_heads),
         }
-        atomic_write_json(config_path, saved_config)
+        for state in variant_states:
+            saved_config = json.loads(
+                state["config_path"].read_text(encoding="utf-8")
+            )
+            saved_config["model_runtime"] = model_runtime
+            atomic_write_json(state["config_path"], saved_config)
         base_confidence = runtime.ConfidenceAnalyzer(
             inference,
             max_new_tokens=args.max_confidence_tokens,
         )
         confidence = MultimodalConfidenceAnalyzer(base_confidence, inference)
-        source = SourceAttributionAnalyzer(
-            inference,
-            max_new_tokens=args.max_source_tokens,
-        )
+        for state in variant_states:
+            state["confidence_classes"] = list(runtime.CONFIDENCE_CLASSES)
         joint = JointAnswerSourceGenerator(inference)
         answer_patchscope_decoder = (
             None
@@ -643,108 +912,198 @@ def main(argv: list[str] | None = None) -> int:
                 modules=modules,
             )
         )
-        patchscope_decoder = None
-        if (
-            not args.skip_layer_readout
-            and any(mode in ("Identity", "Semantic") for mode in analysis_modes)
-        ):
-            patchscope_decoder = SourcePatchscopeDecoder(
-                inference=inference,
-                modules=modules,
-                class_token_ids=source.token_specification.class_token_ids,
-                analysis_modes=analysis_modes,
-            )
-        runners: list[V3V4SourceRunner] = []
-        for mode in modes:
-            runner = V3V4SourceRunner(
-                inference=inference,
-                modules=modules,
-                confidence_analyzer=confidence,
-                base_confidence_analyzer=base_confidence,
-                source_analyzer=source,
-                joint_generator=joint,
-                confidence_classes=runtime.CONFIDENCE_CLASSES,
-                confidence_midpoints=runtime.CLASS_MIDPOINTS,
-                confidence_class_text=runtime.CONFIDENCE_CLASS_TEXT,
-                versions=versions,
-                attribution_mode=mode,
-                analysis_modes=list(analysis_modes),
-                patchscope_decoder=patchscope_decoder,
-                answer_patchscope_decoder=answer_patchscope_decoder,
-                answer_val=args.answer_val,
-                save_hidden_state=list(save_hidden_states),
-                conditions=conditions,
-                skip_attention=args.skip_attention,
-                skip_layer_readout=args.skip_layer_readout,
-                max_answer_tokens=args.max_answer_tokens,
-                logger=logger,
-            )
-            runners.append(runner)
-        share_initial_cache(runners, existing)
-        atomic_write_json(progress_path, _progress(existing, status="running"))
-        hidden_state_store = (
-            None
-            if not save_hidden_states
-            else TargetLayerHiddenStateStore(
-                output_dir=output_dir,
-                layer_index=list(save_hidden_states),
-            )
-        )
 
-        def commit(record: dict[str, Any]) -> None:
-            target_hidden_state = record.pop("_target_hidden_state", None)
-            existing.append(record)
-            if hidden_state_store is not None and record.get("status") == "completed":
-                if target_hidden_state is None:
-                    raise RuntimeError(
-                        "Completed case is missing requested AC/PANL hidden state"
+        variant_runs: list[dict[str, Any]] = []
+        for state in variant_states:
+            if state["complete"]:
+                _write_variant_outputs(state, state["existing"])
+                atomic_write_json(
+                    state["progress_path"],
+                    _progress(state["existing"], status="complete"),
+                )
+                continue
+            source_variant: SourcePromptVariant = state["source_variant"]
+            output_dir: Path = state["output_dir"]
+            existing: list[dict[str, Any]] = state["existing"]
+            variant_logger = configure_logger(
+                output_dir / "run.log",
+                source_prompt_variant=source_variant.name,
+            )
+            variant_logger.info(
+                "model_loaded model_instances=1 processor_instances=1 source_prompt_variant=%s",
+                source_variant.name,
+            )
+            source = SourceAttributionAnalyzer(
+                inference,
+                max_new_tokens=args.max_source_tokens,
+                source_classes=source_variant.classes,
+                source_midpoints=source_variant.midpoints,
+            )
+            patchscope_decoder = None
+            if (
+                not args.skip_layer_readout
+                and any(mode in ("Identity", "Semantic") for mode in analysis_modes)
+            ):
+                patchscope_decoder = SourcePatchscopeDecoder(
+                    inference=inference,
+                    modules=modules,
+                    class_token_ids=source.token_specification.class_token_ids,
+                    analysis_modes=analysis_modes,
+                    source_classes=source_variant.classes,
+                    source_midpoints=source_variant.midpoints,
+                    source_class_text=source_variant.class_text,
+                )
+            runners: list[V3V4SourceRunner] = []
+            for mode in modes:
+                runners.append(
+                    V3V4SourceRunner(
+                        inference=inference,
+                        modules=modules,
+                        confidence_analyzer=confidence,
+                        base_confidence_analyzer=base_confidence,
+                        source_analyzer=source,
+                        joint_generator=joint,
+                        source_prompt_variant=source_variant,
+                        confidence_classes=runtime.CONFIDENCE_CLASSES,
+                        confidence_midpoints=runtime.CLASS_MIDPOINTS,
+                        confidence_class_text=runtime.CONFIDENCE_CLASS_TEXT,
+                        versions=versions,
+                        attribution_mode=mode,
+                        analysis_modes=list(analysis_modes),
+                        patchscope_decoder=patchscope_decoder,
+                        answer_patchscope_decoder=answer_patchscope_decoder,
+                        answer_val=args.answer_val,
+                        save_hidden_state=list(save_hidden_states),
+                        conditions=conditions,
+                        save_hidden_state_positions=list(save_hidden_state_positions),
+                        skip_attention=args.skip_attention,
+                        skip_layer_readout=args.skip_layer_readout,
+                        skip_confidence=args.skip_confidence,
+                        max_answer_tokens=args.max_answer_tokens,
+                        logger=variant_logger,
                     )
-                if hidden_state_store.add(
-                    case_id=str(record["case_id"]),
-                    hidden_states=target_hidden_state,
-                    positions=record["token_positions"],
-                    stages=record["token_position_stages"],
-                    result=record,
-                ):
-                    hidden_state_store.flush(results_path)
-            else:
-                if target_hidden_state is not None:
-                    raise RuntimeError(
-                        "Unexpected target hidden state without an active store"
-                    )
-                append_jsonl(results_path, record, fsync=True)
-            atomic_write_json(progress_path, _progress(existing, status="running"))
+                )
+            share_initial_cache(runners, existing)
+            atomic_write_json(
+                state["progress_path"],
+                _progress(existing, status="running"),
+            )
+            state["hidden_state_store"] = (
+                None
+                if not save_hidden_states
+                else TargetLayerHiddenStateStore(
+                    output_dir=output_dir,
+                    layer_index=list(save_hidden_states),
+                    position_names=list(save_hidden_state_positions),
+                )
+            )
+            state["patchscope_decoder"] = patchscope_decoder
+            state["logger"] = variant_logger
+            state["active"] = False
 
-        counts = run_case_groups(
-            runners,
+            def build_commit(target_state: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
+                def commit(record: dict[str, Any]) -> None:
+                    target_hidden_state = record.pop("_target_hidden_state", None)
+                    target_state["existing"].append(record)
+                    store = target_state["hidden_state_store"]
+                    if store is not None and record.get("status") == "completed":
+                        if target_hidden_state is None:
+                            raise RuntimeError(
+                                "Completed case is missing requested hidden state"
+                            )
+                        if store.add(
+                            case_id=str(record["case_id"]),
+                            hidden_states=target_hidden_state,
+                            positions=record["token_positions"],
+                            stages=record["token_position_stages"],
+                            result=record,
+                        ):
+                            store.flush(target_state["results_path"])
+                    else:
+                        if target_hidden_state is not None:
+                            raise RuntimeError(
+                                "Unexpected target hidden state without an active store"
+                            )
+                        append_jsonl(
+                            target_state["results_path"],
+                            record,
+                            fsync=True,
+                        )
+                    atomic_write_json(
+                        target_state["progress_path"],
+                        _progress(target_state["existing"], status="running"),
+                    )
+
+                return commit
+
+            variant_runs.append(
+                {
+                    "name": state["name"],
+                    "runners": runners,
+                    "existing_ids": state["existing_ids"],
+                    "commit": build_commit(state),
+                    "after_group": lambda target_state=state: _write_variant_outputs(
+                        target_state,
+                        target_state["existing"],
+                    ),
+                    "active": False,
+                    "state": state,
+                }
+            )
+
+        counts_by_variant = run_prompt_variant_case_groups(
+            variant_runs,
             cases,
             versions=versions,
             conditions=conditions,
-            existing_ids=existing_ids,
-            commit=commit,
-            after_group=lambda: _write_analyses(output_dir, existing),
         )
-        if hidden_state_store is not None:
-            hidden_state_store.flush(results_path)
-        _write_analyses(output_dir, existing)
-        atomic_write_json(progress_path, _progress(existing, status="complete"))
+        for variant_run in variant_runs:
+            state = variant_run["state"]
+            store = state["hidden_state_store"]
+            if store is not None:
+                store.flush(state["results_path"])
+            _write_variant_outputs(state, state["existing"])
+            atomic_write_json(
+                state["progress_path"],
+                _progress(state["existing"], status="complete"),
+            )
+            state["call_counts"] = counts_by_variant[state["name"]]
+            patchscope_decoder = state["patchscope_decoder"]
+            state["patchscope_call_counts"] = (
+                dict(patchscope_decoder.call_counts)
+                if patchscope_decoder is not None
+                else {}
+            )
+            state["complete"] = True
+            state["hidden_state_store"] = None
+
         print(
             json.dumps(
                 {
                     "status": "complete",
-                    "records": len(existing),
-                    "call_counts": counts,
+                    "records": {
+                        state["name"]: len(state["existing"])
+                        for state in variant_states
+                    },
+                    "call_counts": {
+                        state["name"]: state["call_counts"]
+                        for state in variant_states
+                    },
                     "answer_patchscope_call_counts": (
                         dict(answer_patchscope_decoder.call_counts)
                         if answer_patchscope_decoder is not None
                         else {}
                     ),
                     "patchscope_call_counts": (
-                        dict(patchscope_decoder.call_counts)
-                        if patchscope_decoder is not None
-                        else {}
+                        {
+                            state["name"]: state["patchscope_call_counts"]
+                            for state in variant_states
+                        }
                     ),
-                    "output_dir": str(output_dir),
+                    "output_dirs": {
+                        state["name"]: str(state["output_dir"])
+                        for state in variant_states
+                    },
                 },
                 ensure_ascii=False,
             )
@@ -752,24 +1111,70 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except KeyboardInterrupt:
         try:
-            if "hidden_state_store" in locals() and hidden_state_store is not None:
-                hidden_state_store.flush(results_path)
-            records = load_jsonl(results_path, repair_trailing=True)
-            _write_analyses(output_dir, records)
-            atomic_write_json(progress_path, _progress(records, status="interrupted"))
+            active_run = next(
+                (
+                    variant_run
+                    for variant_run in locals().get("variant_runs", [])
+                    if variant_run.get("active")
+                ),
+                None,
+            )
+            if active_run is not None:
+                active_state = active_run["state"]
+            handled = _checkpoint_variant_runs_after_stop(
+                locals().get("variant_runs", []),
+                status="interrupted",
+            )
+            if states_initialized:
+                for state in variant_states:
+                    if state["name"] not in handled and not state.get("complete"):
+                        atomic_write_json(
+                            state["progress_path"],
+                            _progress(state["existing"], status="interrupted"),
+                        )
         except Exception:
-            logger.exception("interruption_cleanup_failed")
+            cleanup_logger = (
+                active_state.get("logger", logger)
+                if active_state is not None
+                else logger
+            )
+            cleanup_logger.exception("interruption_cleanup_failed")
         print("[WARN] Interrupted after committing completed terminal cases.", file=sys.stderr)
         return 130
     except Exception as exc:
-        logger.exception("experiment_failed")
+        active_run = next(
+            (
+                variant_run
+                for variant_run in locals().get("variant_runs", [])
+                if variant_run.get("active")
+            ),
+            None,
+        )
+        if active_run is not None:
+            active_state = active_run["state"]
+        failure_logger = (
+            active_state.get("logger", logger)
+            if active_state is not None
+            else logger
+        )
+        failure_logger.exception("experiment_failed")
         try:
-            if "hidden_state_store" in locals() and hidden_state_store is not None:
-                hidden_state_store.flush(results_path)
-            records = load_jsonl(results_path, repair_trailing=True)
-            atomic_write_json(progress_path, _progress(records, status="failed"))
+            handled = _checkpoint_variant_runs_after_stop(
+                locals().get("variant_runs", []),
+                status="failed",
+            )
+            if states_initialized:
+                for state in variant_states:
+                    if (
+                        state["name"] not in handled
+                        and not state.get("complete")
+                    ):
+                        atomic_write_json(
+                            state["progress_path"],
+                            _progress(state["existing"], status="failed"),
+                        )
         except Exception:
-            logger.exception("failure_progress_update_failed")
+            failure_logger.exception("failure_progress_update_failed")
         print(f"[ERROR] {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 

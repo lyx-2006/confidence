@@ -91,7 +91,7 @@ def test_text_only_conflict_is_reported(tmp_path: Path) -> None:
     assert conflicts[0]["error"]["type"] == "TextOnlyLabelConflict"
 
 
-def test_manifest_merges_partial_labels_and_excludes_non_easy_images(
+def test_manifest_admits_valid_hard_image_labels_and_adds_conflict_target(
     tmp_path: Path,
 ) -> None:
     experiment = tmp_path / "experiment"
@@ -116,7 +116,7 @@ def test_manifest_merges_partial_labels_and_excludes_non_easy_images(
                 "text_only_answer_raw": "Blue",
                 "parse_success": True,
                 "answer_classes": ["blue", "yellow"],
-            }
+            },
         ],
     )
     _write_jsonl(
@@ -129,16 +129,30 @@ def test_manifest_merges_partial_labels_and_excludes_non_easy_images(
                 "image_only_answer_raw": "yellow",
                 "parse_success": True,
                 "answer_classes": ["blue", "yellow"],
-            }
+            },
+            {
+                "item_id": "1",
+                "condition": "conflict_hard",
+                "image_only_answer": "blue",
+                "image_only_answer_raw": "blue",
+                "parse_success": True,
+                "answer_classes": ["blue", "yellow"],
+            },
         ],
     )
     manifest, summary = build_manifest(experiment)
     by_condition = {record["condition"]: record for record in manifest}
     assert by_condition["consistent_easy"]["eligible_image_probe"]
-    assert not by_condition["conflict_hard"]["eligible_image_probe"]
-    assert by_condition["conflict_hard"]["image_only_answer"] is None
-    assert summary["image_hard_excluded_count"] == 1
+    assert by_condition["conflict_hard"]["eligible_image_probe"]
+    assert by_condition["conflict_hard"]["image_only_answer"] == "blue"
+    assert by_condition["conflict_hard"]["conflict_label"] == "conflict"
+    assert by_condition["conflict_hard"]["eligible_conflict_probe"]
+    assert summary["hard_condition_record_count"] == 1
     assert summary["missing_image_label_count"] == 0
+    assert summary["source_experiment_dir"] == str(experiment.resolve())
+    assert len(summary["hidden_state_index_fingerprint"]) == 64
+    assert len(summary["dataset_fingerprint"]) == 64
+    assert len(summary["manifest_fingerprint"]) == 64
 
 
 def test_manifest_rejects_hidden_reference_disagreement(tmp_path: Path) -> None:

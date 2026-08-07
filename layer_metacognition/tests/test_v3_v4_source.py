@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import tempfile
 import unittest
 from pathlib import Path
 from types import MethodType, SimpleNamespace
+from unittest.mock import patch
 
 import torch
 
+from confidence_test.dataset_utils import CONDITIONS, load_evaluation_cases
 from confidence_test.prompt_utils import V3_STAGE4_META_CONFIDENCE_PROMPT
 from confidence_test.source_attribution_analyzer import (
     parse_joint_answer_source_output,
@@ -26,6 +29,18 @@ from confidence_test.source_attribution_schema import (
     build_source_token_specification,
     gather_source_class_logits,
     source_distribution,
+)
+from confidence_test.source_attribution_variants import (
+    ANSWER_BASIS_10_CLASSES,
+    ANSWER_BASIS_10_CLASS_TEXT,
+    ANSWER_BASIS_10_MIDPOINTS,
+    ANSWER_BASIS_9_CLASSES,
+    ANSWER_BASIS_9_CLASS_TEXT,
+    V3_ANSWER_BASIS_10_PROMPT,
+    V3_ANSWER_BASIS_9_PROMPT,
+    V4_ANSWER_BASIS_10_PROMPT,
+    V4_ANSWER_BASIS_9_PROMPT,
+    get_source_prompt_variant,
 )
 from layer_metacognition.conversation_builder import (
     prepare_multimodal_inputs,
@@ -59,16 +74,28 @@ from layer_metacognition.model_adapter import (
     LanguageModules,
     run_patched_logits_forward,
 )
+from layer_metacognition.probability_tables import (
+    build_probability_tables,
+    write_probability_tables,
+)
 from layer_metacognition.run_v3_v4_source_experiment import (
+    DEFAULT_DATASET_PATH,
     FORMAT_VERSION,
     build_parser,
     expand_attribution_modes,
     normalize_analysis_modes,
+    normalize_hidden_state_positions,
     normalize_save_hidden_states,
+    normalize_source_prompt_variants,
     parse_save_hidden_state,
     run_case_groups,
+    run_prompt_variant_case_groups,
+    resume_configuration_differences,
+    main as run_source_experiment,
     saved_configuration_for_comparison,
     share_initial_cache,
+    source_variant_output_dir,
+    validate_source_prompt_variant_modes,
     validate_save_hidden_state,
     validate_resume_format,
 )
@@ -89,9 +116,10 @@ from layer_metacognition.token_positions import (
     encode_without_special_tokens,
     locate_field_value_span,
     locate_marker_in_assistant,
+    locate_text_clue_save_positions,
     unique_subsequence,
 )
-from layer_metacognition.token_spans import build_rendered_alignment
+from layer_metacognition.token_spans import RenderedTokenAlignment, build_rendered_alignment
 from layer_metacognition.v3_v4_source_runner import (
     V3V4SourceRunner,
     capture_target_layer_hidden_states,
@@ -199,6 +227,7 @@ class SourceSchemaTests(unittest.TestCase):
             self.assertIsNone(parse_parallel_source_output(invalid))
         for valid in (
             "**Answer**: yellow\n**Source Attribution**:8",
+            "**Answer**: yellow**\n**Source Attribution**: 8",
             "**Answer**: yellow  \n**Source Attribution**: 8",
             "**Answer**: yellow\n\n**Source Attribution**: 8**",
             "**Answer**: yellow\n addCriterion\n8",
@@ -216,6 +245,132 @@ class SourceSchemaTests(unittest.TestCase):
                 parse_joint_answer_source_output(invalid),
                 (None, None, False),
             )
+
+    def test_ten_class_schema_and_label_nine_are_variant_scoped(self) -> None:
+        specification = build_source_token_specification(
+            DigitTokenizer(),
+            ANSWER_BASIS_10_CLASSES,
+        )
+        self.assertEqual(specification.class_token_ids["9"], [19])
+        ids = {
+            label: [index]
+            for index, label in enumerate(ANSWER_BASIS_10_CLASSES)
+        }
+        logits = gather_source_class_logits(
+            torch.arange(10, dtype=torch.float32),
+            ids,
+            ANSWER_BASIS_10_CLASSES,
+        )
+        result = source_distribution(
+            logits,
+            class_token_ids=ids,
+            raw_output="**Source Attribution**:9",
+            parsed_label="9",
+            classes=ANSWER_BASIS_10_CLASSES,
+            midpoints=ANSWER_BASIS_10_MIDPOINTS,
+        )
+        self.assertEqual(result.hard_label, "9")
+        self.assertEqual(len(result.class_probabilities), 10)
+        self.assertAlmostEqual(result.hard_image_score, 0.95)
+        self.assertAlmostEqual(sum(result.class_probabilities), 1.0, places=6)
+        self.assertEqual(
+            parse_joint_answer_source_output(
+                "**Answer**: yellow\n**Source Attribution**:9",
+                ANSWER_BASIS_10_CLASSES,
+            ),
+            ("yellow", "9", True),
+        )
+        self.assertEqual(
+            parse_joint_answer_source_output(
+                "**Answer**: yellow\n**Source Attribution**:9"
+            ),
+            (None, None, False),
+        )
+
+    def test_nine_and_ten_class_joint_parsing_retries_known_formats(self) -> None:
+        formats = (
+            "**Answer:** yellow\n**Source Attribution:** {label}",
+            "Answer: yellow\nSource Attribution: {label}.",
+            "**Answer**: yellow **Source Attribution**: {label}",
+            "```text\n**Answer**: yellow\n**Source Attribution**: {label}\n```",
+        )
+        for classes, label in (
+            (ANSWER_BASIS_9_CLASSES, "8"),
+            (ANSWER_BASIS_10_CLASSES, "9"),
+        ):
+            for output_format in formats:
+                with self.subTest(class_count=len(classes), output=output_format):
+                    self.assertEqual(
+                        parse_joint_answer_source_output(
+                            output_format.format(label=label),
+                            classes,
+                        ),
+                        ("yellow", label, True),
+                    )
+
+        for output in (
+            "Answer: yellow\nSource Attribution: 9",
+            "**Answer**: yellow **Source Attribution**: 9",
+            "```\n**Answer**: yellow\n**Source Attribution**: 9\n```",
+        ):
+            with self.subTest(invalid_nine_class_output=output):
+                self.assertEqual(
+                    parse_joint_answer_source_output(
+                        output,
+                        ANSWER_BASIS_9_CLASSES,
+                    ),
+                    (None, None, False),
+                )
+        self.assertEqual(
+            parse_joint_answer_source_output(
+                "Answer: yellow\nReason: image\nSource Attribution: 8",
+                ANSWER_BASIS_9_CLASSES,
+            ),
+            (None, None, False),
+        )
+
+    def test_answer_basis_prompt_and_class_text_snapshots(self) -> None:
+        values = {
+            "v3_9": (
+                V3_ANSWER_BASIS_9_PROMPT,
+                "9c15cc8e8541252af6ac67ea9e55e61350ff067dcf679cb0beb7393dd0b8e2a8",
+            ),
+            "v4_9": (
+                V4_ANSWER_BASIS_9_PROMPT,
+                "7c6bde68f873a75098fbd272ab0062fa95ed7a385a0b799edc8566f57ac1e701",
+            ),
+            "v3_10": (
+                V3_ANSWER_BASIS_10_PROMPT,
+                "f6657a5b7c22a8ecc79920358d5053c9fcb41462590b0f75bd85f356a24bc5d5",
+            ),
+            "v4_10": (
+                V4_ANSWER_BASIS_10_PROMPT,
+                "b1bddaa7ede6726dbe4d2e7650a9bee54c056743a4a8980cf278d7e9ac5b9309",
+            ),
+            "classes_9": (
+                ANSWER_BASIS_9_CLASS_TEXT,
+                "6370944e2be76a7d7a082cf9fcbe29bd7ab2cc5802d0067fea6100720645650e",
+            ),
+            "classes_10": (
+                ANSWER_BASIS_10_CLASS_TEXT,
+                "d6e1e4680aa17fd8547920c5ce474f198e2e1951deab089a15f2c27bb63c5157",
+            ),
+        }
+        for name, (value, expected_hash) in values.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    hashlib.sha256(value.encode("utf-8")).hexdigest(),
+                    expected_hash,
+                )
+                self.assertNotIn("%", value)
+        for prompt in (
+            V3_ANSWER_BASIS_9_PROMPT,
+            V4_ANSWER_BASIS_9_PROMPT,
+            V3_ANSWER_BASIS_10_PROMPT,
+            V4_ANSWER_BASIS_10_PROMPT,
+        ):
+            self.assertIn("**Source Attribution**:<CLASS>", prompt)
+            self.assertNotIn("**Source Attribution**: <CLASS>", prompt)
 
 
 class RealQwenTokenizerTests(unittest.TestCase):
@@ -244,6 +399,17 @@ class RealQwenTokenizerTests(unittest.TestCase):
             list(range(15, 24)),
         )
         self.assertEqual(specification.shared_leading_token_ids, [220])
+        ten_class_specification = build_source_token_specification(
+            self.tokenizer,
+            ANSWER_BASIS_10_CLASSES,
+        )
+        self.assertEqual(
+            [
+                ten_class_specification.class_token_ids[label][0]
+                for label in ANSWER_BASIS_10_CLASSES
+            ],
+            list(range(15, 25)),
+        )
         assistant = "**Answer**: yellow\n**Source Attribution**:6"
         ids = self.tokenizer.encode(assistant, add_special_tokens=False)
         sac = locate_marker_in_assistant(
@@ -377,6 +543,31 @@ class RealQwenTokenizerTests(unittest.TestCase):
             self.assertEqual(tuple(logits.shape), (32,))
         self.assertEqual(decoder.call_counts, {"baseline": 2, "patched": 2})
 
+        ten_class_ids = {
+            label: [15 + index]
+            for index, label in enumerate(ANSWER_BASIS_10_CLASSES)
+        }
+        ten_class_decoder = SourcePatchscopeDecoder(
+            inference=FakeInference(self.processor, model),
+            modules=modules,
+            class_token_ids=ten_class_ids,
+            analysis_modes=["Semantic", "Identity"],
+            source_classes=ANSWER_BASIS_10_CLASSES,
+            source_midpoints=ANSWER_BASIS_10_MIDPOINTS,
+            source_class_text=ANSWER_BASIS_10_CLASS_TEXT,
+        )
+        self.assertIn("9 -> 9\n?", ten_class_decoder.targets["Identity"].rendered_prompt)
+        self.assertIn(
+            "9: The answer was clearly based more on the image.",
+            ten_class_decoder.targets["Semantic"].rendered_prompt,
+        )
+        ten_result, _ten_logits = ten_class_decoder.run_patched_source_readout(
+            analysis_mode="Semantic",
+            layer_index=0,
+            source_hidden=torch.tensor([0.25, 0.75]),
+        )
+        self.assertEqual(len(ten_result["class_probabilities"]), 10)
+
     def test_answer_patchscope_caches_target_and_reconstructs_final_layer(
         self,
     ) -> None:
@@ -482,6 +673,59 @@ class RealQwenTokenizerTests(unittest.TestCase):
 
 
 class TokenAndAttentionTests(unittest.TestCase):
+    def test_ltt_and_ptnl_use_character_alignment_and_keep_punctuation(self) -> None:
+        tokenizer = SimpleTokenizer()
+        rendered = "Question:\nQ\n\nText clue:\nClue?   \n\nNext section"
+        ids = tokenizer.encode(rendered)
+        alignment = RenderedTokenAlignment(
+            rendered=rendered,
+            rendered_ids=ids,
+            processed_ids=ids,
+            offsets=[(index, index + 1) for index in range(len(rendered))],
+            rendered_to_processed={index: index for index in range(len(ids))},
+        )
+        located = locate_text_clue_save_positions(tokenizer, alignment, "Clue?   ")
+        self.assertEqual(located["ltt"]["token_text"], "?")
+        self.assertEqual(located["ptnl"]["token_text"], "\n")
+        self.assertNotEqual(
+            located["ltt"]["position"], located["ptnl"]["position"]
+        )
+
+    def test_ltt_is_shifted_before_ptnl_when_semantic_token_is_fused(self) -> None:
+        class FusedTokenizer(SimpleTokenizer):
+            def decode(self, ids: list[int], **kwargs: object) -> str:
+                del kwargs
+                return "".join("?\n\n" if value == 999 else chr(value) for value in ids)
+
+        tokenizer = FusedTokenizer()
+        rendered = "Text clue:\nA?\n\nNext"
+        fused_start = rendered.index("?")
+        offsets = [
+            (index, index + 1) for index in range(fused_start)
+        ] + [(fused_start, fused_start + 3)] + [
+            (index, index + 1) for index in range(fused_start + 3, len(rendered))
+        ]
+        ids = [ord(value) for value in rendered[:fused_start]] + [999] + [
+            ord(value) for value in rendered[fused_start + 3 :]
+        ]
+        alignment = RenderedTokenAlignment(
+            rendered=rendered,
+            rendered_ids=ids,
+            processed_ids=ids,
+            offsets=offsets,
+            rendered_to_processed={index: index for index in range(len(ids))},
+        )
+        located = locate_text_clue_save_positions(tokenizer, alignment, "A?")
+        self.assertEqual(
+            located["ltt"]["position"] + 1,
+            located["ptnl"]["position"],
+        )
+        self.assertEqual(located["ltt"]["validation_status"], "adjusted")
+        self.assertEqual(
+            located["ltt"]["position_adjustment"]["type"],
+            "LTTShiftedBeforePTNL",
+        )
+
     def test_marker_and_field_are_unique_token_subsequences(self) -> None:
         tokenizer = SimpleTokenizer()
         assistant = "**Answer**: yellow\n**Source Attribution**:6"
@@ -623,9 +867,21 @@ class ReadoutAndPromptTests(unittest.TestCase):
             self.assertEqual(set(order), set(candidates))
 
     def test_bfloat16_reconstruction_tolerance_accepts_observed_quantization(self) -> None:
-        self.assertEqual(reconstruction_tolerance("bfloat16"), 0.1)
-        self.assertEqual(reconstruction_tolerance("torch.bfloat16"), 0.1)
+        self.assertEqual(reconstruction_tolerance("bfloat16"), 0.125)
+        self.assertEqual(reconstruction_tolerance("torch.bfloat16"), 0.125)
         self.assertEqual(reconstruction_tolerance("float16"), 1e-3)
+        reference = torch.tensor([0.0, 1.0, 2.0, 3.0])
+        reconstructed = reference + torch.tensor([0.125, 0.0, 0.0, 0.0])
+        check = validate_restricted_reconstruction(
+            reconstructed,
+            reference,
+            labels=["low", "high"],
+            class_token_ids={"low": [1], "high": [3]},
+            midpoints=[0.25, 0.75],
+            tolerance=reconstruction_tolerance("bfloat16"),
+        )
+        self.assertTrue(check["passed"])
+        self.assertEqual(check["max_abs_error"], 0.125)
 
     def test_reconstruction_checks_labels_probabilities_and_soft_score(self) -> None:
         reference = torch.tensor([0.0, 1.0, 2.0, 3.0])
@@ -672,11 +928,47 @@ class ReadoutAndPromptTests(unittest.TestCase):
 
 
 class PersistenceAndResumeTests(unittest.TestCase):
+    def test_default_merged_dataset_loads_all_six_conditions(self) -> None:
+        self.assertEqual(DEFAULT_DATASET_PATH.name, "datasets.json")
+        with tempfile.TemporaryDirectory() as directory:
+            cases, metadata = load_evaluation_cases(
+                DEFAULT_DATASET_PATH,
+                item_limit=1,
+                prior_limit=1,
+                fallback_null_path=Path(directory) / "null.png",
+            )
+        self.assertEqual(metadata["selected_item_count"], 1)
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(set(cases[0].conditions), set(CONDITIONS))
+        self.assertTrue(
+            all(value.error is None for value in cases[0].conditions.values())
+        )
+
     def test_analysis_mode_cli_defaults_orders_and_rejects_duplicates(self) -> None:
         parser = build_parser()
+        self.assertEqual(
+            Path(parser.parse_args([]).dataset).resolve(),
+            DEFAULT_DATASET_PATH.resolve(),
+        )
         self.assertEqual(parser.parse_args([]).analysis_mode, ["LMhead"])
+        self.assertEqual(
+            parser.parse_args([]).source_prompt_variant,
+            ["baseline"],
+        )
         self.assertFalse(parser.parse_args([]).answer_val)
+        self.assertFalse(parser.parse_args([]).save_probtable)
+        self.assertFalse(parser.parse_args([]).skip_confidence)
+        self.assertTrue(parser.parse_args(["--save_probtable"]).save_probtable)
+        self.assertTrue(parser.parse_args(["--skip_confidence"]).skip_confidence)
         self.assertEqual(parser.parse_args([]).save_hidden_state, [None])
+        self.assertEqual(
+            parser.parse_args([]).save_hidden_state_positions,
+            ["ac", "panl"],
+        )
+        self.assertEqual(
+            normalize_hidden_state_positions(["sac", "ac", "sac", "ltt"]),
+            ("ac", "ltt", "sac"),
+        )
         self.assertTrue(parser.parse_args(["--answer_val"]).answer_val)
         self.assertEqual(
             parser.parse_args(["--save_hidden_state", "23"]).save_hidden_state,
@@ -722,6 +1014,26 @@ class PersistenceAndResumeTests(unittest.TestCase):
                 (23,),
                 skip_layer_readout=True,
             )
+        with self.assertRaises(SystemExit):
+            run_source_experiment(
+                [
+                    "--save_hidden_state",
+                    "none",
+                    "--save_hidden_state_positions",
+                    "ltt",
+                ]
+            )
+        with self.assertRaises(SystemExit):
+            run_source_experiment(
+                [
+                    "--save_hidden_state",
+                    "1",
+                    "--save_hidden_state_positions",
+                    "sac",
+                    "--attribution-mode",
+                    "none",
+                ]
+            )
         with self.assertRaisesRegex(ValueError, r"outside \[0, 27\]"):
             validate_save_hidden_state(
                 (23, 28),
@@ -738,6 +1050,324 @@ class PersistenceAndResumeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             normalize_save_hidden_states([23, 23])
 
+    def test_source_prompt_variant_order_mode_validation_and_paths(self) -> None:
+        self.assertEqual(
+            normalize_source_prompt_variants(
+                ["answer_basis_10", "baseline", "answer_basis_9"]
+            ),
+            ("baseline", "answer_basis_9", "answer_basis_10"),
+        )
+        validate_source_prompt_variant_modes(
+            ("baseline", "answer_basis_10"),
+            "joint",
+        )
+        for mode in ("none", "parallel", "all"):
+            with self.subTest(mode=mode):
+                with self.assertRaisesRegex(ValueError, "require --attribution-mode joint"):
+                    validate_source_prompt_variant_modes(
+                        ("answer_basis_9",),
+                        mode,
+                    )
+        root = Path("/tmp/source-output")
+        paths = {
+            source_variant_output_dir(root, variant)
+            for variant in ("baseline", "answer_basis_9", "answer_basis_10")
+        }
+        self.assertEqual(
+            paths,
+            {
+                root / "baseline",
+                root / "answer_basis_9",
+                root / "answer_basis_10",
+            },
+        )
+
+    def test_resume_comparison_rejects_variant_and_class_definition_changes(self) -> None:
+        current = {
+            "analysis_modes": ["LMhead"],
+            "source_prompt_variant": "answer_basis_10",
+            "source_attribution_classes": list(ANSWER_BASIS_10_CLASSES),
+            "source_attribution_midpoints": list(ANSWER_BASIS_10_MIDPOINTS),
+            "source_attribution_class_text": ANSWER_BASIS_10_CLASS_TEXT,
+        }
+        differences, missing = resume_configuration_differences(
+            dict(current),
+            current,
+        )
+        self.assertEqual(differences, [])
+        self.assertFalse(missing)
+        replacements = {
+            "source_prompt_variant": "baseline",
+            "source_attribution_classes": SOURCE_ATTRIBUTION_CLASSES,
+            "source_attribution_midpoints": SOURCE_ATTRIBUTION_MIDPOINTS,
+            "source_attribution_class_text": SOURCE_ATTRIBUTION_CLASS_TEXT,
+        }
+        for key, replacement in replacements.items():
+            saved = dict(current)
+            saved[key] = replacement
+            differences, _missing = resume_configuration_differences(
+                saved,
+                current,
+            )
+            with self.subTest(key=key):
+                self.assertIn(key, differences)
+
+    def test_multiple_prompt_variants_initialize_independent_output_bundles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_root = Path(directory) / "experiment"
+            with patch(
+                "layer_metacognition.run_v3_v4_source_experiment.load_runtime",
+                side_effect=RuntimeError("stop before model loading"),
+            ):
+                exit_code = run_source_experiment(
+                    [
+                        "--output-dir",
+                        str(output_root),
+                        "--versions",
+                        "v4",
+                        "--conditions",
+                        "null",
+                        "--max-items",
+                        "1",
+                        "--attribution-mode",
+                        "joint",
+                        "--source-prompt-variant",
+                        "answer_basis_9",
+                        "answer_basis_10",
+                    ]
+                )
+            self.assertEqual(exit_code, 1)
+            self.assertFalse((output_root / "config.json").exists())
+            self.assertFalse((output_root / "results.jsonl").exists())
+            expected = {
+                "answer_basis_9": 9,
+                "answer_basis_10": 10,
+            }
+            for variant, class_count in expected.items():
+                with self.subTest(variant=variant):
+                    variant_dir = output_root / variant
+                    config = json.loads(
+                        (variant_dir / "config.json").read_text(encoding="utf-8")
+                    )
+                    progress = json.loads(
+                        (variant_dir / "progress.json").read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(config["source_prompt_variant"], variant)
+                    self.assertEqual(
+                        len(config["source_attribution_classes"]),
+                        class_count,
+                    )
+                    self.assertEqual(progress["status"], "failed")
+
+    def test_probability_table_contains_every_restricted_distribution(self) -> None:
+        record = {
+            "case_id": "case-1",
+            "item_id": "1",
+            "prior_index": 0,
+            "condition": "consistent_easy",
+            "version": "v3",
+            "attribution_mode": "joint",
+            "status": "completed",
+            "generated": {
+                "current_confidence": {
+                    "class_probabilities": {"low": 0.25, "high": 0.75}
+                }
+            },
+            "direct_readout": {
+                "ac_layers": [
+                    {
+                        "layer_index": 0,
+                        "answer_class_probabilities": {"red": 0.7, "blue": 0.3},
+                    }
+                ],
+                "answer_patchscope_layers_by_variant": {
+                    "original": [
+                        {
+                            "layer_index": 0,
+                            "answer_class_probabilities": {"red": 0.4, "blue": 0.6},
+                        }
+                    ]
+                },
+                "cc_layers": [
+                    {
+                        "layer_index": 0,
+                        "confidence_class_probabilities": [0.25, 0.75],
+                    }
+                ],
+                "sac_layers_by_mode": {
+                    "LMhead": [],
+                    "Identity": [],
+                    "Semantic": [
+                        {"layer_index": 0, "class_probabilities": [0.2, 0.8]}
+                    ],
+                },
+            },
+        }
+        table = build_probability_tables(
+            [record],
+            source_classes=["0", "1"],
+        )
+        layer = table["records"][0]["layers"]["0"]
+        self.assertEqual(layer["answer"]["LMhead"], {"red": 0.7, "blue": 0.3})
+        self.assertEqual(
+            layer["answer"]["SemanticPatchscope"]["original"],
+            {"red": 0.4, "blue": 0.6},
+        )
+        self.assertEqual(layer["confidence"], {"low": 0.25, "high": 0.75})
+        self.assertEqual(
+            layer["source_attribution"]["Semantic"],
+            {"0": 0.2, "1": 0.8},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "probability_tables.json"
+            write_probability_tables(
+                path,
+                [record],
+                source_classes=["0", "1"],
+            )
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), table)
+
+    def test_skip_confidence_retains_v3_initial_confidence_and_omits_cc(self) -> None:
+        class FakeJointGenerator:
+            @staticmethod
+            def generate(*args: object, **kwargs: object) -> dict[str, object]:
+                return {
+                    "raw_output": "**Answer**: red\n**Source Attribution**:8",
+                    "answer": "red",
+                    "source_label": "8",
+                    "parse_success": True,
+                    "answer_metric_status": "completed",
+                }
+
+        for version in ("v3", "v4"):
+            with self.subTest(version=version):
+                runner = object.__new__(V3V4SourceRunner)
+                runner.mode = "joint"
+                runner.source_prompt_variant = get_source_prompt_variant(
+                    "answer_basis_9"
+                )
+                runner.source_class_text = runner.source_prompt_variant.class_text
+                runner.source_classes = list(runner.source_prompt_variant.classes)
+                runner.source_midpoints = list(runner.source_prompt_variant.midpoints)
+                runner.skip_confidence = True
+                runner.skip_attention = True
+                runner.skip_layer_readout = True
+                runner.answer_val = False
+                runner.save_hidden_state = []
+                runner.patchscope_decoder = None
+                runner.joint_generator = FakeJointGenerator()
+                runner.max_answer_tokens = 24
+                runner.call_counts = {
+                    "initial_answer": 0,
+                    "initial_confidence": 0,
+                    "answer": 0,
+                    "joint_answer_source": 0,
+                    "source_attribution": 0,
+                    "current_confidence": 0,
+                }
+                runner.inference = SimpleNamespace(
+                    dtype_name="float32",
+                    model=SimpleNamespace(
+                        config=SimpleNamespace(
+                            text_config=SimpleNamespace(num_attention_heads=2)
+                        )
+                    ),
+                )
+                runner.modules = SimpleNamespace(num_hidden_layers=2)
+                runner._log = MethodType(
+                    lambda self, *args, **kwargs: None,
+                    runner,
+                )
+                initial_confidence = {
+                    "confidence_label": "Likely",
+                    "hard_label_parsed": True,
+                }
+                runner._initial_v3 = MethodType(
+                    lambda self, case: {
+                        "answer": "red",
+                        "answer_result": {
+                            "answer": "red",
+                            "parse_success": True,
+                            "answer_metric_status": "completed",
+                        },
+                        "confidence_result": initial_confidence,
+                    },
+                    runner,
+                )
+                stage_names: list[str] = []
+
+                def prepare(self: object, **kwargs: object) -> dict[str, object]:
+                    stage_names.append(str(kwargs["name"]))
+                    return {"name": kwargs["name"]}
+
+                runner._prepare_teacher_stage = MethodType(prepare, runner)
+                runner._analyze_stages = MethodType(
+                    lambda self, **kwargs: (
+                        {
+                            "ac_layers": [],
+                            "answer_patchscope_layers": [],
+                            "answer_patchscope_layers_by_variant": {"original": []},
+                            "cc_layers": [],
+                            "sac_layers": [],
+                            "sac_layers_by_mode": {
+                                "LMhead": [],
+                                "Identity": [],
+                                "Semantic": [],
+                            },
+                        },
+                        {
+                            "ac_last_layer": None,
+                            "answer_patchscope_last_layer": None,
+                            "answer_patchscope_by_variant": {"original": None},
+                            "cc_last_layer": None,
+                            "sac_last_layer": None,
+                            "sac_by_mode": {
+                                "LMhead": None,
+                                "Identity": None,
+                                "Semantic": None,
+                            },
+                        },
+                        {},
+                        {"ac": 1, "panl": 2, "cc": None, "sac": 3},
+                        {"ac": "joint_answer_source", "panl": "joint_answer_source"},
+                        {},
+                        None,
+                    ),
+                    runner,
+                )
+                case = SimpleNamespace(
+                    item_id="1",
+                    prior_index=0,
+                    question="Choose from: red, blue.",
+                    text_clue="red clue",
+                    answer_classes=["red", "blue"],
+                    ground_truth_answer="red",
+                    conflict_answer="blue",
+                    text_answer="red",
+                    conditions={
+                        "consistent_easy": SimpleNamespace(
+                            error=None,
+                            resolved_image_path="unused.png",
+                        )
+                    },
+                )
+                record = runner.process_case(
+                    case=case,
+                    condition="consistent_easy",
+                    version=version,
+                )
+                self.assertEqual(record["status"], "completed")
+                self.assertEqual(stage_names, ["joint_answer_source"])
+                self.assertIsNone(record["generated"]["current_confidence"])
+                self.assertIsNone(record["parse_status"]["current_confidence"])
+                self.assertEqual(record["direct_readout"]["cc_layers"], [])
+                self.assertEqual(runner.call_counts["current_confidence"], 0)
+                if version == "v3":
+                    self.assertEqual(
+                        record["generated"]["initial_confidence"],
+                        initial_confidence,
+                    )
+
     def test_legacy_config_defaults_to_lmhead(self) -> None:
         normalized, missing = saved_configuration_for_comparison(
             {"format_version": 1}
@@ -745,6 +1375,11 @@ class PersistenceAndResumeTests(unittest.TestCase):
         self.assertTrue(missing)
         self.assertEqual(normalized["analysis_modes"], ["LMhead"])
         self.assertEqual(normalized["save_hidden_state"], "none")
+        self.assertEqual(
+            normalized["save_hidden_state_positions"], ["ac", "panl"]
+        )
+        self.assertFalse(normalized["save_probtable"])
+        self.assertFalse(normalized["skip_confidence"])
         explicit, missing = saved_configuration_for_comparison(
             {
                 "analysis_modes": ["Identity", "Semantic"],
@@ -826,6 +1461,37 @@ class PersistenceAndResumeTests(unittest.TestCase):
             )
             self.assertEqual(payload["dtype"], "float16")
 
+    def test_five_position_store_round_trip_and_schema_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            results_path = output_dir / "results.jsonl"
+            names = ["ac", "panl", "ltt", "ptnl", "sac"]
+            store = TargetLayerHiddenStateStore(
+                output_dir,
+                layer_index=7,
+                position_names=names,
+                shard_size=1,
+            )
+            tensor = torch.arange(15, dtype=torch.float32).reshape(5, 3)
+            result = {"case_id": "all", "status": "completed"}
+            store.add(
+                "all",
+                tensor,
+                positions={name: index for index, name in enumerate(names)},
+                stages={name: "answer" for name in names},
+                result=result,
+            )
+            store.flush(results_path)
+            restored, reference = store.read_case("all")
+            self.assertTrue(torch.equal(restored, tensor.half()))
+            self.assertEqual(reference["position_names"], names)
+            with self.assertRaisesRegex(ValueError, "position schema differs"):
+                TargetLayerHiddenStateStore(
+                    output_dir,
+                    layer_index=7,
+                    position_names=["ac", "panl"],
+                )
+
     def test_multiple_target_layers_use_layer_token_hidden_shape(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)
@@ -882,6 +1548,16 @@ class PersistenceAndResumeTests(unittest.TestCase):
         self.assertEqual(captured["panl"].dtype, torch.float16)
         with self.assertRaisesRegex(RuntimeError, "Duplicate"):
             capture_target_layer_hidden_states(hidden_by_name, 23, captured)
+
+        selected: dict[str, torch.Tensor] = {}
+        hidden_by_name["ltt"] = {23: torch.tensor([11.0, 12.0])}
+        capture_target_layer_hidden_states(
+            hidden_by_name,
+            23,
+            selected,
+            ["ltt"],
+        )
+        self.assertEqual(set(selected), {"ltt"})
 
     def test_resume_rejects_legacy_format_and_accepts_current_format(self) -> None:
         with self.assertRaisesRegex(
@@ -992,6 +1668,79 @@ class PersistenceAndResumeTests(unittest.TestCase):
                 "joint": {"processed": 2},
             },
         )
+
+    def test_prompt_variants_finish_in_order_within_each_case(self) -> None:
+        events: list[str] = []
+
+        class FakeRunner:
+            mode = "joint"
+
+            def __init__(self, variant: str) -> None:
+                self.variant = variant
+                self.call_counts = {"processed": 0}
+
+            def _log(self, event: str, **fields: object) -> None:
+                events.append(f"{event}:{self.variant}:{fields['case_id']}")
+
+            def process_case(
+                self,
+                *,
+                case: object,
+                condition: str,
+                version: str,
+            ) -> dict:
+                self.call_counts["processed"] += 1
+                events.append(f"run:{case.item_id}:{self.variant}")
+                return {
+                    "case_id": (
+                        f"{case.item_id}__prior_{case.prior_index}__"
+                        f"{condition}__{version}__joint"
+                    )
+                }
+
+        variant_runs: list[dict[str, object]] = []
+        for variant in ("answer_basis_9", "answer_basis_10"):
+            variant_runs.append(
+                {
+                    "name": variant,
+                    "runners": [FakeRunner(variant)],
+                    "existing_ids": set(),
+                    "commit": lambda record, value=variant: events.append(
+                        f"commit:{record['case_id']}:{value}"
+                    ),
+                    "after_group": lambda value=variant: events.append(
+                        f"analysis:{value}"
+                    ),
+                    "active": False,
+                }
+            )
+        cases = [
+            SimpleNamespace(item_id="a", prior_index=0),
+            SimpleNamespace(item_id="b", prior_index=0),
+        ]
+        counts = run_prompt_variant_case_groups(
+            variant_runs,
+            cases,
+            versions=["v3"],
+            conditions=["consistent_easy"],
+        )
+        self.assertEqual(
+            [event for event in events if event.startswith("run:")],
+            [
+                "run:a:answer_basis_9",
+                "run:a:answer_basis_10",
+                "run:b:answer_basis_9",
+                "run:b:answer_basis_10",
+            ],
+        )
+        self.assertEqual(
+            counts,
+            {
+                "answer_basis_9": {"joint": {"processed": 2}},
+                "answer_basis_10": {"joint": {"processed": 2}},
+            },
+        )
+        self.assertTrue(all(not value["active"] for value in variant_runs))
 
     def test_all_expands_and_all_runners_share_one_initial_cache(self) -> None:
         self.assertEqual(

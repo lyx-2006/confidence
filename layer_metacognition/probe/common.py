@@ -9,7 +9,12 @@ from typing import Any, Callable, Iterable
 from layer_metacognition.hidden_state_store import atomic_write_text
 
 
-def probe_output_dir(experiment_dir: str | Path) -> Path:
+def probe_output_dir(
+    experiment_dir: str | Path,
+    output_dir: str | Path | None = None,
+) -> Path:
+    if output_dir is not None:
+        return Path(output_dir).resolve()
     return Path(experiment_dir).resolve() / "probe"
 
 

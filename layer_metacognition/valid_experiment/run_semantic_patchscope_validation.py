@@ -86,7 +86,7 @@ from layer_metacognition.valid_experiment.semantic_variants import (  # noqa: E4
 DEFAULT_MODEL_PATH = (
     ROOT / "qwen-2.5-vl" / "models" / "Qwen2.5-VL-7B-Instruct"
 )
-DEFAULT_DATASET_PATH = ROOT / "datasets" / "dataset_with_images.json"
+DEFAULT_DATASET_PATH = ROOT / "datasets" / "datasets.json"
 DEFAULT_OUTPUT_DIR = (
     ROOT / "layer_metacognition" / "valid_experiment" / "output" / "validation"
 )

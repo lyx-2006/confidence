@@ -1,4 +1,4 @@
-"""Validated, bounded-cache loading of target-layer AC/PANL vectors."""
+"""Validated, bounded-cache loading of named target-layer vectors."""
 
 from __future__ import annotations
 

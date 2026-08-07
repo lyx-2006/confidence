@@ -23,17 +23,13 @@ from confidence_test.prompt_utils import (
     V4_STAGE2_FULL_EVIDENCE_CONFIDENCE_PROMPT,
 )
 from confidence_test.source_attribution_prompt_utils import (
-    V3_STAGE3_REANSWER_WITH_SOURCE_ATTRIBUTION_PROMPT,
     V3_STAGE4_META_SOURCE_ATTRIBUTION_PROMPT,
-    V4_STAGE1_FULL_EVIDENCE_ANSWER_WITH_SOURCE_ATTRIBUTION_PROMPT,
     V4_STAGE2_FULL_EVIDENCE_SOURCE_ATTRIBUTION_PROMPT,
 )
 from confidence_test.source_attribution_schema import (
     ASSISTANT_SOURCE_ATTRIBUTION_PREFILL,
-    SOURCE_ATTRIBUTION_CLASS_TEXT,
-    SOURCE_ATTRIBUTION_CLASSES,
-    SOURCE_ATTRIBUTION_MIDPOINTS,
 )
+from confidence_test.source_attribution_variants import SourcePromptVariant
 
 from .attention_sinks import collect_attention_sinks
 from .conversation_builder import prepare_multimodal_inputs, render_continued_assistant
@@ -61,6 +57,7 @@ from .token_positions import (
     locate_field_value_span,
     locate_image_pad_span,
     locate_marker_in_assistant,
+    locate_text_clue_save_positions,
     locate_token_after_field,
 )
 from .token_spans import build_rendered_alignment
@@ -105,16 +102,17 @@ def _confidence_label(result: dict[str, Any]) -> str:
 
 def reconstruction_tolerance(dtype_name: str) -> float:
     """Allow one BF16-scale logit step while retaining restricted checks."""
-    return 0.1 if "bfloat16" in str(dtype_name).lower() else 1e-3
+    return 0.125 if "bfloat16" in str(dtype_name).lower() else 1e-3
 
 
 def capture_target_layer_hidden_states(
     hidden_by_name: dict[str, dict[int, torch.Tensor]],
     layer_index: int,
     destination: dict[str, torch.Tensor],
+    position_names: list[str] | tuple[str, ...] = ("ac", "panl"),
 ) -> None:
-    """Collect each available AC/PANL vector once as contiguous CPU FP16."""
-    for name in ("ac", "panl"):
+    """Collect each requested available position once as contiguous CPU FP16."""
+    for name in position_names:
         if name not in hidden_by_name:
             continue
         if name in destination:
@@ -171,6 +169,7 @@ class V3V4SourceRunner:
         base_confidence_analyzer: Any,
         source_analyzer: Any,
         joint_generator: Any,
+        source_prompt_variant: SourcePromptVariant,
         confidence_classes: list[str],
         confidence_midpoints: list[float],
         confidence_class_text: str,
@@ -182,8 +181,10 @@ class V3V4SourceRunner:
         answer_val: bool,
         save_hidden_state: list[int],
         conditions: list[str],
+        save_hidden_state_positions: list[str] | None = None,
         skip_attention: bool = False,
         skip_layer_readout: bool = False,
+        skip_confidence: bool = False,
         max_answer_tokens: int = 24,
         logger: logging.Logger | None = None,
     ):
@@ -193,6 +194,10 @@ class V3V4SourceRunner:
         self.base_confidence = base_confidence_analyzer
         self.source_analyzer = source_analyzer
         self.joint_generator = joint_generator
+        self.source_prompt_variant = source_prompt_variant
+        self.source_classes = list(source_prompt_variant.classes)
+        self.source_midpoints = list(source_prompt_variant.midpoints)
+        self.source_class_text = source_prompt_variant.class_text
         self.confidence_classes = list(confidence_classes)
         self.confidence_midpoints = [float(value) for value in confidence_midpoints]
         self.confidence_class_text = confidence_class_text
@@ -203,9 +208,13 @@ class V3V4SourceRunner:
         self.answer_patchscope_decoder = answer_patchscope_decoder
         self.answer_val = bool(answer_val)
         self.save_hidden_state = list(save_hidden_state)
+        self.save_hidden_state_positions = list(
+            save_hidden_state_positions or ("ac", "panl")
+        )
         self.conditions = conditions
         self.skip_attention = skip_attention
         self.skip_layer_readout = skip_layer_readout
+        self.skip_confidence = skip_confidence
         self.max_answer_tokens = max_answer_tokens
         self.logger = logger or logging.getLogger("v3_v4_source")
         self.processor = inference.processor
@@ -385,6 +394,7 @@ class V3V4SourceRunner:
         targets: list[str],
         values: dict[str, str],
         panl_field: tuple[str, str] | None,
+        capture_text_clue: bool,
     ) -> dict[str, Any]:
         messages = [
             {"role": "user", "content": _image_content(prompt, image_path)},
@@ -460,6 +470,24 @@ class V3V4SourceRunner:
                 position_map=alignment.rendered_to_processed,
                 processed_ids=processed_ids,
             )
+        hidden_positions = {
+            target: dict(positions[target])
+            for target in targets
+            if target in self.save_hidden_state_positions
+        }
+        if panl is not None and "panl" in self.save_hidden_state_positions:
+            hidden_positions["panl"] = dict(panl)
+        if capture_text_clue and any(
+            name in self.save_hidden_state_positions for name in ("ltt", "ptnl")
+        ):
+            text_positions = locate_text_clue_save_positions(
+                self.tokenizer,
+                alignment,
+                values["text_clue"],
+            )
+            for target in ("ltt", "ptnl"):
+                if target in self.save_hidden_state_positions:
+                    hidden_positions[target] = text_positions[target]
         return {
             "name": name,
             "prompt": prompt,
@@ -467,6 +495,7 @@ class V3V4SourceRunner:
             "inputs": inputs,
             "positions": positions,
             "panl": panl,
+            "hidden_positions": hidden_positions,
             "target_sources": target_sources,
         }
 
@@ -484,6 +513,7 @@ class V3V4SourceRunner:
         dict[str, Any],
         dict[str, Any],
         dict[str, str],
+        dict[str, dict[str, Any]],
         torch.Tensor | None,
     ]:
         direct = {
@@ -525,8 +555,16 @@ class V3V4SourceRunner:
             },
         }
         attention: dict[str, Any] = {}
-        token_positions = {"ac": None, "panl": None, "cc": None, "sac": None}
+        token_positions = {
+            "ac": None,
+            "panl": None,
+            "cc": None,
+            "sac": None,
+            "ltt": None,
+            "ptnl": None,
+        }
         token_position_stages: dict[str, str] = {}
+        token_position_records: dict[str, dict[str, Any]] = {}
         saved_hidden_states: dict[int, dict[str, torch.Tensor]] = {
             layer_index: {} for layer_index in self.save_hidden_state
         }
@@ -555,6 +593,17 @@ class V3V4SourceRunner:
             if stage["panl"] is not None:
                 token_positions["panl"] = int(stage["panl"]["position"])
                 token_position_stages["panl"] = stage["name"]
+            for target, detail in stage["hidden_positions"].items():
+                if target in token_position_records:
+                    raise RuntimeError(
+                        f"Duplicate hidden-state position record for {target}"
+                    )
+                token_positions[target] = int(detail["position"])
+                token_position_stages[target] = stage["name"]
+                token_position_records[target] = {
+                    **deepcopy(detail),
+                    "stage": stage["name"],
+                }
 
             forward = None
             reference_logits: dict[int, torch.Tensor] = {}
@@ -565,8 +614,13 @@ class V3V4SourceRunner:
             )
             if not self.skip_layer_readout:
                 hooked_positions = dict(target_positions)
-                if self.save_hidden_state and stage["panl"] is not None:
-                    hooked_positions["panl"] = int(stage["panl"]["position"])
+                if self.save_hidden_state:
+                    hooked_positions.update(
+                        {
+                            name: int(detail["position"])
+                            for name, detail in stage["hidden_positions"].items()
+                        }
+                    )
                 forward = run_hooked_forward(
                     self.inference.model,
                     inputs,
@@ -580,6 +634,7 @@ class V3V4SourceRunner:
                         forward.hidden_by_name,
                         layer_index,
                         saved_hidden_states[layer_index],
+                        self.save_hidden_state_positions,
                     )
                 for target, position in target_positions.items():
                     hidden_by_layer = forward.hidden_by_name[target]
@@ -676,6 +731,8 @@ class V3V4SourceRunner:
                                     self.modules.final_norm,
                                     self.modules.lm_head,
                                     self.source_token_ids,
+                                    self.source_classes,
+                                    self.source_midpoints,
                                 )
                                 for layer in self.selected_layers
                             ]
@@ -689,9 +746,9 @@ class V3V4SourceRunner:
                             check = validate_restricted_reconstruction(
                                 reconstructed,
                                 reference_logits[position],
-                                labels=SOURCE_ATTRIBUTION_CLASSES,
+                                labels=self.source_classes,
                                 class_token_ids=self.source_token_ids,
-                                midpoints=SOURCE_ATTRIBUTION_MIDPOINTS,
+                                midpoints=self.source_midpoints,
                                 tolerance=self.tolerance,
                             )
                             validation["sac_by_mode"]["LMhead"] = check
@@ -727,9 +784,9 @@ class V3V4SourceRunner:
                                     check = validate_restricted_reconstruction(
                                         patched_logits,
                                         reference_logits[position],
-                                        labels=SOURCE_ATTRIBUTION_CLASSES,
+                                        labels=self.source_classes,
                                         class_token_ids=self.source_token_ids,
-                                        midpoints=SOURCE_ATTRIBUTION_MIDPOINTS,
+                                        midpoints=self.source_midpoints,
                                         tolerance=self.tolerance,
                                     )
                                     validation["sac_by_mode"][analysis_mode] = check
@@ -802,7 +859,9 @@ class V3V4SourceRunner:
             for layer_index in self.save_hidden_state:
                 captured = saved_hidden_states[layer_index]
                 missing = [
-                    name for name in ("ac", "panl") if name not in captured
+                    name
+                    for name in self.save_hidden_state_positions
+                    if name not in captured
                 ]
                 if missing:
                     raise RuntimeError(
@@ -810,7 +869,10 @@ class V3V4SourceRunner:
                         f"position(s): {', '.join(missing)}"
                     )
                 layer_tensors.append(
-                    torch.stack([captured["ac"], captured["panl"]], dim=0)
+                    torch.stack(
+                        [captured[name] for name in self.save_hidden_state_positions],
+                        dim=0,
+                    )
                 )
             stored_tensor = (
                 layer_tensors[0]
@@ -823,6 +885,7 @@ class V3V4SourceRunner:
             attention,
             token_positions,
             token_position_stages,
+            token_position_records,
             stored_tensor,
         )
 
@@ -884,8 +947,16 @@ class V3V4SourceRunner:
                 and not self.skip_layer_readout
                 else {}
             ),
-            "token_positions": {"ac": None, "panl": None, "cc": None, "sac": None},
+            "token_positions": {
+                "ac": None,
+                "panl": None,
+                "cc": None,
+                "sac": None,
+                "ltt": None,
+                "ptnl": None,
+            },
             "token_position_stages": {},
+            "token_position_records": {},
             "attention_sinks": {},
             "validation": {
                 "ac_last_layer": None,
@@ -960,12 +1031,12 @@ class V3V4SourceRunner:
             stage_name = "answer_generation"
             if version == "v3":
                 if self.mode == "joint":
-                    answer_prompt = V3_STAGE3_REANSWER_WITH_SOURCE_ATTRIBUTION_PROMPT.format(
+                    answer_prompt = self.source_prompt_variant.v3_joint_prompt.format(
                         question=case.question,
                         text_clue=case.text_clue,
                         previous_answer=values["previous_answer"],
                         previous_confidence=values["previous_confidence"],
-                        source_classes=SOURCE_ATTRIBUTION_CLASS_TEXT,
+                        source_classes=self.source_class_text,
                     )
                 else:
                     answer_prompt = V3_STAGE3_REANSWER_PROMPT.format(
@@ -975,10 +1046,10 @@ class V3V4SourceRunner:
                         previous_confidence=values["previous_confidence"],
                     )
             elif self.mode == "joint":
-                answer_prompt = V4_STAGE1_FULL_EVIDENCE_ANSWER_WITH_SOURCE_ATTRIBUTION_PROMPT.format(
+                answer_prompt = self.source_prompt_variant.v4_joint_prompt.format(
                     question=case.question,
                     text_clue=case.text_clue,
-                    source_classes=SOURCE_ATTRIBUTION_CLASS_TEXT,
+                    source_classes=self.source_class_text,
                 )
             else:
                 answer_prompt = V4_STAGE1_FULL_EVIDENCE_ANSWER_PROMPT.format(
@@ -995,6 +1066,7 @@ class V3V4SourceRunner:
                         answer_classes,
                         image_path,
                         max_new_tokens=max(self.max_answer_tokens + 8, 32),
+                        source_classes=self.source_classes,
                     )
                 )
                 generated_source = {
@@ -1029,14 +1101,14 @@ class V3V4SourceRunner:
                         initial_answer=values["initial_answer"],
                         initial_confidence=values["initial_confidence"],
                         stage3_answer=current_answer,
-                        source_classes=SOURCE_ATTRIBUTION_CLASS_TEXT,
+                        source_classes=self.source_class_text,
                     )
                 else:
                     source_prompt = V4_STAGE2_FULL_EVIDENCE_SOURCE_ATTRIBUTION_PROMPT.format(
                         question=case.question,
                         text_clue=case.text_clue,
                         answer=current_answer,
-                        source_classes=SOURCE_ATTRIBUTION_CLASS_TEXT,
+                        source_classes=self.source_class_text,
                     )
                 self.call_counts["source_attribution"] += 1
                 generated_source = _to_dict(
@@ -1050,26 +1122,35 @@ class V3V4SourceRunner:
                     )
 
             stage_name = "current_confidence_generation"
-            if version == "v3":
-                confidence_prompt = V3_STAGE4_META_CONFIDENCE_PROMPT.format(
-                    question=case.question,
-                    text_clue=case.text_clue,
-                    initial_answer=values["initial_answer"],
-                    initial_confidence=values["initial_confidence"],
-                    stage3_answer=current_answer,
-                    classes=self.confidence_class_text,
+            confidence_prompt: str | None = None
+            current_confidence: dict[str, Any] | None = None
+            current_confidence_label: str | None = None
+            if not self.skip_confidence:
+                if version == "v3":
+                    confidence_prompt = V3_STAGE4_META_CONFIDENCE_PROMPT.format(
+                        question=case.question,
+                        text_clue=case.text_clue,
+                        initial_answer=values["initial_answer"],
+                        initial_confidence=values["initial_confidence"],
+                        stage3_answer=current_answer,
+                        classes=self.confidence_class_text,
+                    )
+                else:
+                    confidence_prompt = V4_STAGE2_FULL_EVIDENCE_CONFIDENCE_PROMPT.format(
+                        question=case.question,
+                        text_clue=case.text_clue,
+                        answer=current_answer,
+                        classes=self.confidence_class_text,
+                    )
+                self.call_counts["current_confidence"] += 1
+                current_confidence = self._run_confidence(
+                    confidence_prompt,
+                    image_path,
                 )
-            else:
-                confidence_prompt = V4_STAGE2_FULL_EVIDENCE_CONFIDENCE_PROMPT.format(
-                    question=case.question,
-                    text_clue=case.text_clue,
-                    answer=current_answer,
-                    classes=self.confidence_class_text,
+                current_confidence_label = _confidence_label(current_confidence)
+                record["generated"]["current_confidence"] = deepcopy(
+                    current_confidence
                 )
-            self.call_counts["current_confidence"] += 1
-            current_confidence = self._run_confidence(confidence_prompt, image_path)
-            current_confidence_label = _confidence_label(current_confidence)
-            record["generated"]["current_confidence"] = deepcopy(current_confidence)
             if generated_source is not None:
                 record["generated"]["source_attribution"] = generated_source
 
@@ -1089,6 +1170,7 @@ class V3V4SourceRunner:
                         targets=["ac", "sac"],
                         values=values,
                         panl_field=("**Answer**:", current_answer),
+                        capture_text_clue=True,
                     )
                 )
             else:
@@ -1096,12 +1178,20 @@ class V3V4SourceRunner:
                     self._prepare_teacher_stage(
                         name="answer",
                         prompt=answer_prompt,
-                        assistant_text=f"{ASSISTANT_ANSWER_PREFILL} {current_answer}",
+                        assistant_text=(
+                            f"{ASSISTANT_ANSWER_PREFILL} {current_answer}"
+                            + ("\n" if self.skip_confidence else "")
+                        ),
                         image_path=image_path,
                         version=version,
                         targets=["ac"],
                         values=values,
-                        panl_field=None,
+                        panl_field=(
+                            ("**Answer**:", current_answer)
+                            if self.skip_confidence
+                            else None
+                        ),
+                        capture_text_clue=True,
                     )
                 )
                 if self.mode == "parallel":
@@ -1119,26 +1209,31 @@ class V3V4SourceRunner:
                             targets=["sac"],
                             values=values,
                             panl_field=None,
+                            capture_text_clue=False,
                         )
                     )
-            confidence_panl = None
-            if self.mode != "joint":
-                confidence_panl = (
-                    "**Current Answer**:" if version == "v3" else "**Answer**:",
-                    current_answer,
+            if not self.skip_confidence:
+                assert confidence_prompt is not None
+                assert current_confidence_label is not None
+                confidence_panl = None
+                if self.mode != "joint":
+                    confidence_panl = (
+                        "**Current Answer**:" if version == "v3" else "**Answer**:",
+                        current_answer,
+                    )
+                stages.append(
+                    self._prepare_teacher_stage(
+                        name="confidence",
+                        prompt=confidence_prompt,
+                        assistant_text=f"**Confidence**: {current_confidence_label}",
+                        image_path=image_path,
+                        version=version,
+                        targets=["cc"],
+                        values=values,
+                        panl_field=confidence_panl,
+                        capture_text_clue=False,
+                    )
                 )
-            stages.append(
-                self._prepare_teacher_stage(
-                    name="confidence",
-                    prompt=confidence_prompt,
-                    assistant_text=f"**Confidence**: {current_confidence_label}",
-                    image_path=image_path,
-                    version=version,
-                    targets=["cc"],
-                    values=values,
-                    panl_field=confidence_panl,
-                )
-            )
 
             (
                 direct,
@@ -1146,6 +1241,7 @@ class V3V4SourceRunner:
                 attention,
                 positions,
                 position_stages,
+                position_records,
                 stored_hidden_state,
             ) = self._analyze_stages(
                 stages=stages,
@@ -1159,11 +1255,16 @@ class V3V4SourceRunner:
             record["attention_sinks"] = attention
             record["token_positions"] = positions
             record["token_position_stages"] = position_stages
+            record["token_position_records"] = position_records
             if generated_source is not None:
                 record["generated"]["source_attribution"] = generated_source
             record["parse_status"] = {
                 "current_answer": bool(answer_result.get("parse_success")),
-                "current_confidence": bool(current_confidence.get("hard_label_parsed")),
+                "current_confidence": (
+                    None
+                    if self.skip_confidence
+                    else bool((current_confidence or {}).get("hard_label_parsed"))
+                ),
                 "source_attribution": (
                     None
                     if generated_source is None
@@ -1196,9 +1297,13 @@ class V3V4SourceRunner:
                         "parse_success"
                     )
                 ),
-                "current_confidence": bool(
-                    (record["generated"].get("current_confidence") or {}).get(
-                        "hard_label_parsed"
+                "current_confidence": (
+                    None
+                    if self.skip_confidence
+                    else bool(
+                        (record["generated"].get("current_confidence") or {}).get(
+                            "hard_label_parsed"
+                        )
                     )
                 ),
                 "source_attribution": (
