@@ -46,13 +46,15 @@ layer_metacognition/valid_experiment/output
 
 # API configuration (contains secrets)
 api_config.json
-
 layer_metacognition/output/v3_v4
-
 layer_metacognition/output/v3_v4_ac
-
 layer_metacognition/output/v3_v4_ac_val
-
 layer_metacognition/output/v3_v4_ac_patchval
-
 layer_metacognition/output/v3_v4_newprompt
+layer_metacognition/output/entended_datasets
+layer_metacognition/output/Final_v4_run
+layer_metacognition/output/revised_datasets
+layer_metacognition/output/revised_prompt
+
+# Generated datasets (kept locally, excluded from git)
+generate dataset/datasets/
