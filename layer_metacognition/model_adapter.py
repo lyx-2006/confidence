@@ -8,7 +8,7 @@ import inspect
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import torch
 
@@ -26,6 +26,448 @@ class LanguageModules:
 class HookedForwardResult:
     hidden_by_name: dict[str, dict[int, torch.Tensor]]
     logits_by_position: dict[int, torch.Tensor]
+
+
+class AdditiveActivationHook:
+    """Apply one additive decoder-output intervention during a model forward.
+
+    ``prefill_sequence_length`` distinguishes the initial generation prefill
+    from subsequent one-token cached forwards.  The hook remains registered
+    for the complete generation call so its counters can prove that the
+    intervention was applied exactly once.
+    """
+
+    intervention_mode = "single"
+
+    def __init__(
+        self,
+        modules: LanguageModules,
+        *,
+        layer_index: int,
+        target_position: int,
+        steering_vector: torch.Tensor,
+        prefill_sequence_length: int,
+        capture_layer_indices: Sequence[int] | None = None,
+        injection_site: str = "block_output",
+    ) -> None:
+        if layer_index < 0 or layer_index >= modules.num_hidden_layers:
+            raise ValueError(
+                f"Steering layer {layer_index} is outside "
+                f"[0, {modules.num_hidden_layers - 1}]"
+            )
+        if prefill_sequence_length < 1:
+            raise ValueError("prefill_sequence_length must be positive")
+        if target_position < 0 or target_position >= prefill_sequence_length:
+            raise ValueError(
+                f"Steering position {target_position} is outside prefill length "
+                f"{prefill_sequence_length}"
+            )
+        if injection_site not in {"block_output", "block_input"}:
+            raise ValueError(
+                "injection_site must be block_output or block_input, got "
+                f"{injection_site!r}"
+            )
+        vector = steering_vector.detach().reshape(-1)
+        if int(vector.numel()) != modules.hidden_size:
+            raise ValueError(
+                f"Steering vector size {vector.numel()} does not match model "
+                f"hidden size {modules.hidden_size}"
+            )
+        if not bool(torch.isfinite(vector).all()):
+            raise ValueError("Steering vector contains non-finite values")
+
+        self.modules = modules
+        self.layer_index = int(layer_index)
+        self.target_position = int(target_position)
+        self.prefill_sequence_length = int(prefill_sequence_length)
+        self.steering_vector = vector
+        self.injection_site = injection_site
+        capture_layers = tuple(
+            sorted(set(int(index) for index in (capture_layer_indices or ())))
+        )
+        invalid_capture_layers = [
+            index
+            for index in capture_layers
+            if index < self.layer_index or index >= modules.num_hidden_layers
+        ]
+        if invalid_capture_layers:
+            raise ValueError(
+                "Capture layers must be at or after the Steering layer and inside "
+                f"the model: {invalid_capture_layers}"
+            )
+        self.capture_layer_indices = capture_layers
+        self.hook_call_count = 0
+        self.applied_count = 0
+        self.h_before: torch.Tensor | None = None
+        self.h_after: torch.Tensor | None = None
+        self.captured_after: dict[int, torch.Tensor] = {}
+        self.activation_dtype: str | None = None
+        self._handle: Any | None = None
+        self._capture_handles: list[Any] = []
+
+    def _patch_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
+        self.hook_call_count += 1
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 3:
+            raise TypeError(
+                "Decoder block hidden activation must be rank 3, got "
+                f"{type(tensor)!r} shape={getattr(tensor, 'shape', None)}"
+            )
+        if int(tensor.shape[0]) < 1:
+            raise ValueError("Decoder block returned an empty batch")
+        if int(tensor.shape[2]) != self.modules.hidden_size:
+            raise ValueError(
+                f"Decoder hidden size {tensor.shape[2]} does not match "
+                f"{self.modules.hidden_size}"
+            )
+
+        # Cached decode steps normally have sequence length one.  Only the
+        # original full prompt is an eligible intervention target.
+        if (
+            self.applied_count > 0
+            or int(tensor.shape[1]) != self.prefill_sequence_length
+        ):
+            return tensor
+        if self.target_position >= int(tensor.shape[1]):
+            raise ValueError(
+                f"Steering position {self.target_position} is invalid for decoder "
+                f"output shape {tuple(tensor.shape)}"
+            )
+
+        patched = tensor.clone()
+        self.activation_dtype = str(tensor.dtype).removeprefix("torch.")
+        before = tensor[0, self.target_position, :].detach().float().cpu()
+        vector = self.steering_vector.to(device=patched.device, dtype=patched.dtype)
+        patched[0, self.target_position, :] = (
+            patched[0, self.target_position, :] + vector
+        )
+        after = patched[0, self.target_position, :].detach().float().cpu()
+        self.h_before = before
+        self.h_after = after
+        self.applied_count += 1
+        return patched
+
+    def _hook(self, _module: Any, _args: Any, output: Any) -> Any:
+        if isinstance(output, torch.Tensor):
+            tensor = output
+            trailing: tuple[Any, ...] | None = None
+        elif isinstance(output, tuple) and output:
+            tensor = output[0]
+            trailing = output[1:]
+        else:
+            raise TypeError(
+                "Decoder block returned unsupported steering output type: "
+                f"{type(output)!r}"
+            )
+        patched = self._patch_tensor(tensor)
+        if patched is tensor:
+            return output
+        if trailing is None:
+            return patched
+        return (patched, *trailing)
+
+    def _pre_hook(
+        self,
+        _module: Any,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        if args and isinstance(args[0], torch.Tensor):
+            patched = self._patch_tensor(args[0])
+            if patched is args[0]:
+                return args, kwargs
+            return (patched, *args[1:]), kwargs
+        hidden = kwargs.get("hidden_states")
+        if isinstance(hidden, torch.Tensor):
+            patched = self._patch_tensor(hidden)
+            if patched is hidden:
+                return args, kwargs
+            updated = dict(kwargs)
+            updated["hidden_states"] = patched
+            return args, updated
+        raise TypeError(
+            "Decoder block input hook could not find a hidden-state tensor in "
+            "args[0] or kwargs['hidden_states']"
+        )
+
+    def _capture_hook(self, layer_index: int, output: Any) -> None:
+        if layer_index in self.captured_after:
+            return
+        tensor = output[0] if isinstance(output, tuple) and output else output
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 3:
+            raise TypeError(
+                "Decoder block hidden output must be rank 3 for trajectory "
+                f"capture, got {type(tensor)!r} shape={getattr(tensor, 'shape', None)}"
+            )
+        if int(tensor.shape[1]) != self.prefill_sequence_length:
+            return
+        if int(tensor.shape[0]) < 1 or int(tensor.shape[2]) != self.modules.hidden_size:
+            raise ValueError(
+                f"Invalid trajectory hidden shape at layer {layer_index}: "
+                f"{tuple(tensor.shape)}"
+            )
+        self.captured_after[layer_index] = (
+            tensor[0, self.target_position, :].detach().float().cpu().clone()
+        )
+
+    def __enter__(self) -> "AdditiveActivationHook":
+        if self._handle is not None:
+            raise RuntimeError("AdditiveActivationHook cannot be entered twice")
+        target_layer = self.modules.language_layers[self.layer_index]
+        if self.injection_site == "block_output":
+            self._handle = target_layer.register_forward_hook(self._hook)
+        else:
+            self._handle = target_layer.register_forward_pre_hook(
+                self._pre_hook,
+                with_kwargs=True,
+            )
+        for layer_index in self.capture_layer_indices:
+            if (
+                layer_index == self.layer_index
+                and self.injection_site == "block_output"
+            ):
+                continue
+            handle = self.modules.language_layers[layer_index].register_forward_hook(
+                lambda _module, _args, output, index=layer_index: self._capture_hook(
+                    index, output
+                )
+            )
+            self._capture_handles.append(handle)
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        if self._handle is not None:
+            self._handle.remove()
+            self._handle = None
+        for handle in self._capture_handles:
+            handle.remove()
+        self._capture_handles.clear()
+
+    def validate_applied_once(self) -> None:
+        if self.applied_count != 1:
+            raise RuntimeError(
+                f"Steering hook for layer {self.layer_index} applied "
+                f"{self.applied_count} times; expected 1"
+            )
+        if self.h_before is None or self.h_after is None:
+            raise RuntimeError("Steering hook did not capture before/after activations")
+        implicitly_captured = (
+            {self.layer_index} if self.injection_site == "block_output" else set()
+        )
+        missing = set(self.capture_layer_indices).difference(
+            implicitly_captured, self.captured_after
+        )
+        if missing:
+            raise RuntimeError(
+                f"Steering trajectory did not capture layer(s): {sorted(missing)}"
+            )
+
+    def trajectory_hidden(self) -> dict[int, torch.Tensor]:
+        self.validate_applied_once()
+        assert self.h_after is not None
+        return {
+            layer_index: (
+                self.h_after.clone()
+                if layer_index == self.layer_index
+                and self.injection_site == "block_output"
+                else self.captured_after[layer_index].clone()
+            )
+            for layer_index in self.capture_layer_indices
+        }
+
+    def diagnostics(self) -> dict[str, Any]:
+        self.validate_applied_once()
+        assert self.h_before is not None and self.h_after is not None
+        return {
+            "hook_call_count": int(self.hook_call_count),
+            "steering_applied_count": int(self.applied_count),
+            "activation_dtype": self.activation_dtype,
+            "injection_site": self.injection_site,
+            "trajectory_capture_layers": list(self.capture_layer_indices),
+            "injection_l2": float(
+                torch.linalg.vector_norm(self.h_after - self.h_before).item()
+            ),
+        }
+
+
+class _ActivationHookView:
+    """One layer of a multi-layer hook, shaped like AdditiveActivationHook."""
+
+    def __init__(self, owner: "ReinjectingActivationHook", layer_index: int) -> None:
+        self._owner = owner
+        self._layer_index = layer_index
+        self.h_before = owner.h_before_by_layer[layer_index]
+        self.h_after = owner.h_after_by_layer[layer_index]
+        self.steering_vector = owner.steering_vectors[layer_index]
+        self.activation_dtype = owner.activation_dtype_by_layer[layer_index]
+
+    def diagnostics(self) -> dict[str, Any]:
+        self._owner.validate_applied_once()
+        return {
+            "hook_call_count": self._owner.hook_call_counts[self._layer_index],
+            "steering_applied_count": self._owner.applied_counts[self._layer_index],
+            "activation_dtype": self.activation_dtype,
+            "injection_site": "block_output",
+            "intervention_mode": "reinject",
+            "injection_l2": float(
+                torch.linalg.vector_norm(self.h_after - self.h_before).item()
+            ),
+        }
+
+
+class ReinjectingActivationHook:
+    """Inject a layer-specific vector at every requested decoder block output."""
+
+    injection_site = "block_output"
+    intervention_mode = "reinject"
+
+    def __init__(
+        self,
+        modules: LanguageModules,
+        *,
+        primary_layer_index: int,
+        target_position: int,
+        steering_vectors: dict[int, torch.Tensor],
+        prefill_sequence_length: int,
+    ) -> None:
+        layers = tuple(sorted(int(index) for index in steering_vectors))
+        if not layers or primary_layer_index not in layers:
+            raise ValueError("Reinjecting hook requires its primary layer vector")
+        if layers[0] != int(primary_layer_index):
+            raise ValueError("Reinjecting hook layers must start at the primary layer")
+        if any(index < 0 or index >= modules.num_hidden_layers for index in layers):
+            raise ValueError(f"Reinjecting hook layer is outside the model: {layers}")
+        if prefill_sequence_length < 1:
+            raise ValueError("prefill_sequence_length must be positive")
+        if target_position < 0 or target_position >= prefill_sequence_length:
+            raise ValueError("Reinjecting target position is outside the prefill")
+        normalized: dict[int, torch.Tensor] = {}
+        for index in layers:
+            vector = steering_vectors[index].detach().reshape(-1)
+            if vector.numel() != modules.hidden_size or not bool(
+                torch.isfinite(vector).all()
+            ):
+                raise ValueError(
+                    f"Invalid reinjection vector at layer {index}: {tuple(vector.shape)}"
+                )
+            normalized[index] = vector
+        self.modules = modules
+        self.layer_index = int(primary_layer_index)
+        self.target_position = int(target_position)
+        self.prefill_sequence_length = int(prefill_sequence_length)
+        self.steering_vectors = normalized
+        self.capture_layer_indices = layers
+        self.hook_call_counts = {index: 0 for index in layers}
+        self.applied_counts = {index: 0 for index in layers}
+        self.h_before_by_layer: dict[int, torch.Tensor] = {}
+        self.h_after_by_layer: dict[int, torch.Tensor] = {}
+        self.activation_dtype_by_layer: dict[int, str] = {}
+        self._handles: list[Any] = []
+
+    @property
+    def h_before(self) -> torch.Tensor | None:
+        return self.h_before_by_layer.get(self.layer_index)
+
+    @property
+    def h_after(self) -> torch.Tensor | None:
+        return self.h_after_by_layer.get(self.layer_index)
+
+    @property
+    def steering_vector(self) -> torch.Tensor:
+        return self.steering_vectors[self.layer_index]
+
+    @property
+    def activation_dtype(self) -> str | None:
+        return self.activation_dtype_by_layer.get(self.layer_index)
+
+    @property
+    def hook_call_count(self) -> int:
+        return self.hook_call_counts[self.layer_index]
+
+    @property
+    def applied_count(self) -> int:
+        return self.applied_counts[self.layer_index]
+
+    def _hook(self, layer_index: int, output: Any) -> Any:
+        self.hook_call_counts[layer_index] += 1
+        if isinstance(output, torch.Tensor):
+            tensor = output
+            trailing: tuple[Any, ...] | None = None
+        elif isinstance(output, tuple) and output:
+            tensor = output[0]
+            trailing = output[1:]
+        else:
+            raise TypeError(f"Unsupported decoder output at layer {layer_index}")
+        if tensor.ndim != 3 or tensor.shape[0] < 1:
+            raise TypeError(f"Invalid decoder output shape at layer {layer_index}")
+        if tensor.shape[2] != self.modules.hidden_size:
+            raise ValueError(f"Hidden-size mismatch at reinjection layer {layer_index}")
+        if (
+            self.applied_counts[layer_index] > 0
+            or int(tensor.shape[1]) != self.prefill_sequence_length
+        ):
+            return output
+        patched = tensor.clone()
+        before = tensor[0, self.target_position, :].detach().float().cpu()
+        vector = self.steering_vectors[layer_index].to(
+            device=patched.device,
+            dtype=patched.dtype,
+        )
+        patched[0, self.target_position, :] += vector
+        after = patched[0, self.target_position, :].detach().float().cpu()
+        self.h_before_by_layer[layer_index] = before
+        self.h_after_by_layer[layer_index] = after
+        self.activation_dtype_by_layer[layer_index] = str(tensor.dtype).removeprefix(
+            "torch."
+        )
+        self.applied_counts[layer_index] += 1
+        if trailing is None:
+            return patched
+        return (patched, *trailing)
+
+    def __enter__(self) -> "ReinjectingActivationHook":
+        if self._handles:
+            raise RuntimeError("ReinjectingActivationHook cannot be entered twice")
+        for layer_index in self.capture_layer_indices:
+            self._handles.append(
+                self.modules.language_layers[layer_index].register_forward_hook(
+                    lambda _module, _args, output, index=layer_index: self._hook(
+                        index, output
+                    )
+                )
+            )
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        for handle in self._handles:
+            handle.remove()
+        self._handles.clear()
+
+    def validate_applied_once(self) -> None:
+        bad = {
+            index: count
+            for index, count in self.applied_counts.items()
+            if count != 1
+        }
+        if bad:
+            raise RuntimeError(f"Reinjection did not apply exactly once: {bad}")
+
+    def trajectory_hidden(self) -> dict[int, torch.Tensor]:
+        self.validate_applied_once()
+        return {
+            index: self.h_after_by_layer[index].clone()
+            for index in self.capture_layer_indices
+        }
+
+    def layer_view(self, layer_index: int) -> _ActivationHookView:
+        self.validate_applied_once()
+        if layer_index not in self.steering_vectors:
+            raise KeyError(layer_index)
+        return _ActivationHookView(self, layer_index)
+
+    def diagnostics(self) -> dict[str, Any]:
+        return self.layer_view(self.layer_index).diagnostics() | {
+            "reinjected_layers": list(self.capture_layer_indices),
+        }
 
 
 def _selected_logits_kwargs(

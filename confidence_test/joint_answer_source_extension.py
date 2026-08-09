@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, ContextManager, Sequence
 
 import torch
 
@@ -60,6 +61,34 @@ class JointAnswerSourceGenerator:
         self.processor = inference.processor
         self.tokenizer = getattr(self.processor, "tokenizer", self.processor)
 
+    def prepare_inputs(
+        self,
+        prompt: str,
+        image_path: str | None,
+        *,
+        assistant_text: str = ASSISTANT_ANSWER_PREFILL,
+    ) -> tuple[list[dict[str, Any]], str, Any]:
+        """Build the exact joint conversation inputs used by generation."""
+        messages = [
+            {"role": "user", "content": _user_content(prompt, image_path)},
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": assistant_text}],
+            },
+        ]
+        rendered = render_continued_assistant(
+            self.processor,
+            messages,
+            assistant_text,
+        )
+        inputs = prepare_multimodal_inputs(
+            self.processor,
+            messages,
+            rendered,
+            device=self.inference._get_inputs_device(),
+        )
+        return messages, rendered, inputs
+
     def generate(
         self,
         prompt: str,
@@ -67,29 +96,23 @@ class JointAnswerSourceGenerator:
         image_path: str | None,
         max_new_tokens: int = 32,
         source_classes: Sequence[str] = SOURCE_ATTRIBUTION_CLASSES,
+        generation_context_factory: (
+            Callable[[Any, str], ContextManager[Any]] | None
+        ) = None,
     ) -> JointAnswerSourceGenerationResult:
         started = time.perf_counter()
         result = JointAnswerSourceGenerationResult(candidate_count=len(answer_classes))
         try:
-            messages = [
-                {"role": "user", "content": _user_content(prompt, image_path)},
-                {
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": ASSISTANT_ANSWER_PREFILL}],
-                },
-            ]
-            rendered = render_continued_assistant(
-                self.processor,
-                messages,
-                ASSISTANT_ANSWER_PREFILL,
+            _messages, rendered, inputs = self.prepare_inputs(
+                prompt,
+                image_path,
             )
-            inputs = prepare_multimodal_inputs(
-                self.processor,
-                messages,
-                rendered,
-                device=self.inference._get_inputs_device(),
+            generation_context = (
+                nullcontext()
+                if generation_context_factory is None
+                else generation_context_factory(inputs, rendered)
             )
-            with torch.inference_mode():
+            with generation_context, torch.inference_mode():
                 generated = self.model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,

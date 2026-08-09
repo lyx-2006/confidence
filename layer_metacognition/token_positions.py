@@ -50,15 +50,30 @@ def locate_marker_in_assistant(
     name: str,
     position_map: dict[int, int] | None = None,
     processed_ids: list[int] | None = None,
+    assistant_occurrence: str = "unique",
 ) -> dict[str, Any]:
-    """Locate a marker inside the unique complete teacher-forced assistant."""
+    """Locate a marker in a unique assistant output or final generation suffix."""
 
     assistant_ids = encode_without_special_tokens(tokenizer, assistant_text)
-    assistant_start, assistant_end = unique_subsequence(
-        token_ids,
-        assistant_ids,
-        name=f"{name} assistant output",
-    )
+    if assistant_occurrence == "unique":
+        assistant_start, assistant_end = unique_subsequence(
+            token_ids,
+            assistant_ids,
+            name=f"{name} assistant output",
+        )
+    elif assistant_occurrence == "final_suffix":
+        assistant_end = len(token_ids)
+        assistant_start = assistant_end - len(assistant_ids)
+        if assistant_start < 0 or token_ids[assistant_start:assistant_end] != assistant_ids:
+            raise ValueError(
+                f"Expected {name} assistant output to be the final token suffix; "
+                f"pattern={assistant_ids}, sequence_length={len(token_ids)}"
+            )
+    else:
+        raise ValueError(
+            "assistant_occurrence must be 'unique' or 'final_suffix', got "
+            f"{assistant_occurrence!r}"
+        )
     marker_ids = encode_without_special_tokens(tokenizer, marker)
     local_start, local_end = unique_subsequence(
         assistant_ids,
