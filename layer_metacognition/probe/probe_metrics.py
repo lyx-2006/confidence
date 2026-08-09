@@ -10,7 +10,7 @@ from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
     f1_score,
-    log_loss,
+    roc_auc_score,
 )
 
 from . import EASY_CONDITIONS
@@ -72,7 +72,9 @@ def _empty_metrics(majority_class: str, selected_C: float | None) -> dict[str, A
         "balanced_accuracy": None,
         "macro_f1": None,
         "cross_entropy": None,
+        "roc_auc": None,
         "sample_count": 0,
+        "class_counts": {},
         "item_count": 0,
         "majority_class": majority_class,
         "majority_baseline_accuracy": None,
@@ -116,15 +118,33 @@ def compute_metrics(
         if len(set(str(value) for value in true)) == 1
         else float(balanced_accuracy_score(true, predicted))
     )
+    class_counts = Counter(str(value) for value in true)
+    class_to_index = {str(label): index for index, label in enumerate(classes)}
+    unknown = sorted(set(class_counts) - set(class_to_index))
+    if unknown:
+        raise ValueError(f"True labels are absent from probability columns: {unknown}")
+    true_indices = np.asarray(
+        [class_to_index[str(value)] for value in true], dtype=np.int64
+    )
+    true_probabilities = probability_values[np.arange(len(true)), true_indices]
+    cross_entropy = float(
+        -np.mean(np.log(np.clip(true_probabilities, np.finfo(np.float64).tiny, 1.0)))
+    )
+    roc_auc = None
+    if len(classes) == 2 and len(class_counts) == 2:
+        binary_true = np.asarray(
+            [str(value) == str(classes[1]) for value in true], dtype=np.int64
+        )
+        roc_auc = float(roc_auc_score(binary_true, probability_values[:, 1]))
     return {
         "status": "valid",
         "accuracy": float(accuracy_score(true, predicted)),
         "balanced_accuracy": balanced_accuracy,
         "macro_f1": float(f1_score(true, predicted, average="macro", zero_division=0)),
-        "cross_entropy": float(
-            log_loss(true, probability_values, labels=list(classes))
-        ),
+        "cross_entropy": cross_entropy,
+        "roc_auc": roc_auc,
         "sample_count": int(len(true)),
+        "class_counts": dict(sorted(class_counts.items())),
         "item_count": len({str(value) for value in item_ids}),
         "majority_class": majority_class,
         "majority_baseline_accuracy": float(

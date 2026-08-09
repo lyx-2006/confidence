@@ -46,6 +46,33 @@ def _same_list(left: Any, right: Any) -> bool:
     return [str(value) for value in left or []] == [str(value) for value in right or []]
 
 
+def decision_side_fields(
+    *,
+    condition: str,
+    text_answer: str | None,
+    image_answer: str | None,
+    current_answer: str,
+) -> tuple[str | None, bool, str | None, str]:
+    """Derive the behavioral arbitration label without using condition as target."""
+
+    pair_key = (
+        "||".join(sorted((text_answer, image_answer)))
+        if text_answer is not None and image_answer is not None
+        else None
+    )
+    if condition not in {"conflict_easy", "conflict_hard"}:
+        return None, False, pair_key, "not_conflict_condition"
+    if text_answer is None or image_answer is None:
+        return None, False, pair_key, "missing_unimodal_label"
+    if text_answer == image_answer:
+        return None, False, pair_key, "text_equals_image"
+    if current_answer == text_answer:
+        return "follows_text", True, pair_key, "eligible"
+    if current_answer == image_answer:
+        return "follows_image", True, pair_key, "eligible"
+    return None, False, pair_key, "follows_neither"
+
+
 def validate_hidden_reference(
     case_id: str,
     reference: dict[str, Any],
@@ -142,6 +169,14 @@ def build_manifest(
             conflict_label = (
                 "consistent" if condition.startswith("consistent_") else "conflict"
             )
+        decision_side, decision_eligible, answer_pair_key, decision_reason = (
+            decision_side_fields(
+                condition=condition,
+                text_answer=text_answer,
+                image_answer=image_answer,
+                current_answer=current_answer,
+            )
+        )
         row = {
             "case_id": case_id,
             "item_id": item_id,
@@ -163,6 +198,9 @@ def build_manifest(
             "eligible_image_probe": image_answer is not None,
             "conflict_label": conflict_label,
             "eligible_conflict_probe": conflict_label is not None,
+            "decision_side": decision_side,
+            "eligible_decision_side_probe": decision_eligible,
+            "unordered_answer_pair_key": answer_pair_key,
             "hidden_state_reference": dict(reference),
         }
         manifest.append(row)
@@ -206,6 +244,48 @@ def build_manifest(
         "image_hard_excluded_count": 0,
         "image_null_irr_excluded_count": sum(
             row["condition"] in {"null", "irr"} for row in manifest
+        ),
+        "eligible_decision_side_probe_count": sum(
+            bool(row["eligible_decision_side_probe"]) for row in manifest
+        ),
+        "decision_side_counts": dict(
+            sorted(
+                Counter(
+                    str(row["decision_side"])
+                    for row in manifest
+                    if row["eligible_decision_side_probe"]
+                ).items()
+            )
+        ),
+        "decision_side_condition_counts": dict(
+            sorted(
+                Counter(
+                    str(row["condition"])
+                    for row in manifest
+                    if row["eligible_decision_side_probe"]
+                ).items()
+            )
+        ),
+        "decision_side_exclusion_counts": dict(
+            sorted(
+                Counter(
+                    decision_side_fields(
+                        condition=str(row["condition"]),
+                        text_answer=row.get("text_only_answer"),
+                        image_answer=row.get("image_only_answer"),
+                        current_answer=str(row["current_answer"]),
+                    )[3]
+                    for row in manifest
+                    if not row["eligible_decision_side_probe"]
+                ).items()
+            )
+        ),
+        "decision_side_answer_pair_count": len(
+            {
+                str(row["unordered_answer_pair_key"])
+                for row in manifest
+                if row["eligible_decision_side_probe"]
+            }
         ),
         "hidden_state_definition": HIDDEN_STATE_DEFINITION,
     }

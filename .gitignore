@@ -58,3 +58,7 @@ layer_metacognition/output/revised_prompt
 
 # Generated datasets (kept locally, excluded from git)
 generate dataset/datasets/
+
+layer_metacognition/output/Final_v4_1
+
+layer_metacognition/output/Final_v4_val

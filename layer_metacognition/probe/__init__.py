@@ -14,6 +14,8 @@ PROBE_CONDITIONS = (
 )
 DEFAULT_PROBE_CONDITIONS = ("consistent_easy", "conflict_easy")
 DEFAULT_PROBE_LOCATIONS = ("ac", "panl")
+DECISION_SIDE_LOCATIONS = ("ptnl", "ac", "panl")
+DECISION_SIDE_LABELS = ("follows_text", "follows_image")
 EASY_CONDITIONS = frozenset({"consistent_easy", "conflict_easy"})
 HIDDEN_STATE_DEFINITION = "decoder_block_output_pre_final_norm"
 VERSION_SETTINGS = {
@@ -40,6 +42,7 @@ def normalize_ordered_choices(
 def build_probe_tasks(
     answer_locations: Iterable[str],
     conflict_locations: Iterable[str],
+    decision_side_locations: Iterable[str] = (),
 ) -> dict[str, tuple[str, str]]:
     tasks: dict[str, tuple[str, str]] = {}
     for position in normalize_ordered_choices(
@@ -51,6 +54,12 @@ def build_probe_tasks(
         conflict_locations, POSITION_NAMES, "conflict Probe location"
     ):
         tasks[f"{position}_conflict"] = (position, "conflict_label")
+    for position in normalize_ordered_choices(
+        decision_side_locations,
+        DECISION_SIDE_LOCATIONS,
+        "Decision-Side Probe location",
+    ):
+        tasks[f"{position}_decision_side"] = (position, "decision_side")
     return tasks
 
 
@@ -63,6 +72,8 @@ __all__ = [
     "C_GRID",
     "DEFAULT_PROBE_CONDITIONS",
     "DEFAULT_PROBE_LOCATIONS",
+    "DECISION_SIDE_LABELS",
+    "DECISION_SIDE_LOCATIONS",
     "EASY_CONDITIONS",
     "HIDDEN_STATE_DEFINITION",
     "POSITION_NAMES",

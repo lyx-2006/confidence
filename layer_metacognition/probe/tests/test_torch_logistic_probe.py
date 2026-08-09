@@ -99,3 +99,15 @@ def test_cuda_smoke_when_available() -> None:
     )
     assert model.diagnostics["device"] == "cuda"
     assert model.predict_proba(X).shape == (len(y), 2)
+
+
+def test_binary_positive_probability_is_always_class_one() -> None:
+    X, y = _classification_data(2)
+    model = fit_torch_logistic_probe(
+        X, y, C=1.0, device="cpu", binary_single_logit=True
+    )
+    logits = model._logits(X)[:, 0]
+    probabilities = model.predict_proba(X)
+    order = np.argsort(logits)
+    assert np.all(np.diff(probabilities[order, 1]) >= 0)
+    np.testing.assert_allclose(probabilities[:, 0], 1.0 - probabilities[:, 1])

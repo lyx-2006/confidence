@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import gc
 import json
 import os
+import shutil
 import tempfile
 import time
-from collections import Counter
+from collections import Counter, OrderedDict
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -20,6 +23,8 @@ from layer_metacognition.hidden_state_store import atomic_write_json
 
 from . import (
     C_GRID,
+    DECISION_SIDE_LABELS,
+    DECISION_SIDE_LOCATIONS,
     DEFAULT_PROBE_CONDITIONS,
     DEFAULT_PROBE_LOCATIONS,
     HIDDEN_STATE_DEFINITION,
@@ -39,10 +44,22 @@ from .probe_models import (
 )
 from .provenance import canonical_fingerprint, validate_manifest_provenance
 from .split_utils import (
+    load_or_create_answer_pair_split_assignments,
     load_or_create_split_assignments,
     permute_labels_by_unique_key,
+    rows_for_answer_pair_outer_fold,
     rows_for_outer_fold,
 )
+
+
+def _trim_process_memory() -> None:
+    """Return freed native arrays to the allocator in memory-constrained runs."""
+
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (AttributeError, OSError):  # pragma: no cover - non-glibc platforms
+        pass
 
 
 def filter_task_records(
@@ -56,6 +73,7 @@ def filter_task_records(
         "text_only_answer": "eligible_text_probe",
         "image_only_answer": "eligible_image_probe",
         "conflict_label": "eligible_conflict_probe",
+        "decision_side": "eligible_decision_side_probe",
     }
     eligibility = eligibility_fields.get(target_field)
     if eligibility is None:
@@ -80,7 +98,20 @@ def validate_outer_labels(
         return None, {"type": "EmptyOuterTest", "message": "No outer-test records"}
     train_labels = [str(record[target_field]) for record in train_records]
     test_labels = [str(record[target_field]) for record in test_records]
-    encoder = LabelEncoder().fit(train_labels)
+    if target_field == "decision_side":
+        invalid = sorted(
+            (set(train_labels) | set(test_labels)) - set(DECISION_SIDE_LABELS)
+        )
+        if invalid:
+            return None, {
+                "type": "InvalidDecisionSideClass",
+                "message": "Decision-Side labels are outside the fixed class space",
+                "invalid_classes": invalid,
+            }
+        encoder = LabelEncoder()
+        encoder.classes_ = np.asarray(DECISION_SIDE_LABELS, dtype=object)
+    else:
+        encoder = LabelEncoder().fit(train_labels)
     if len(encoder.classes_) < 2:
         return None, {
             "type": "SingleClassOuterTrain",
@@ -125,12 +156,16 @@ class FeatureMatrixCache:
         *,
         experiment_fingerprint: str,
         manifest_fingerprint: str,
+        max_matrices: int = 1,
     ):
         self.loader = loader
         self.manifest = list(manifest)
         self.experiment_fingerprint = experiment_fingerprint
         self.manifest_fingerprint = manifest_fingerprint
-        self._matrices: dict[tuple[Any, ...], np.ndarray] = {}
+        if max_matrices < 1:
+            raise ValueError("Feature matrix cache size must be positive")
+        self.max_matrices = int(max_matrices)
+        self._matrices: OrderedDict[tuple[Any, ...], np.ndarray] = OrderedDict()
         self._ordinal = {
             str(record["case_id"]): index for index, record in enumerate(self.manifest)
         }
@@ -147,6 +182,10 @@ class FeatureMatrixCache:
             int(layer),
         )
         if key not in self._matrices:
+            while len(self._matrices) >= self.max_matrices:
+                _key, evicted = self._matrices.popitem(last=False)
+                del evicted
+                _trim_process_memory()
             started = time.perf_counter()
             self._matrices[key] = _features(
                 self.loader,
@@ -156,6 +195,8 @@ class FeatureMatrixCache:
             )
             self.feature_loading_seconds += time.perf_counter() - started
             self.matrix_load_count += 1
+        else:
+            self._matrices.move_to_end(key)
         return self._matrices[key]
 
     def rows(
@@ -202,7 +243,7 @@ def _prediction_record(
 ) -> dict[str, Any]:
     raw_field = f"{target_field}_raw"
     memberships = subset_membership(record)
-    return {
+    output = {
         "case_id": record["case_id"],
         "item_id": record["item_id"],
         "prior_index": record["prior_index"],
@@ -225,6 +266,62 @@ def _prediction_record(
             for index, label in enumerate(classes)
         },
         "subsets": [name for name, included in memberships.items() if included],
+    }
+    if target_field == "decision_side":
+        label_to_id = {label: index for index, label in enumerate(classes)}
+        output.update(
+            {
+                "true_label_id": int(label_to_id[str(record[target_field])]),
+                "predicted_label_id": int(label_to_id[str(predicted_label)]),
+                "P(follows_text)": float(probabilities[0]),
+                "P(follows_image)": float(probabilities[1]),
+            }
+        )
+    return output
+
+
+def _decision_direction_arrays(model: Any, backend: str) -> dict[str, np.ndarray]:
+    if backend == "torch":
+        scaler = model.scaler
+        weight = np.asarray(model.weight, dtype=np.float64).reshape(-1)
+        intercept = float(np.asarray(model.intercept, dtype=np.float64).reshape(-1)[0])
+    else:
+        scaler = model.named_steps["scaler"]
+        classifier = model.named_steps["classifier"]
+        weight = np.asarray(classifier.coef_, dtype=np.float64).reshape(-1)
+        intercept = float(np.asarray(classifier.intercept_, dtype=np.float64)[0])
+    mean = np.asarray(scaler.mean_, dtype=np.float64)
+    scale = np.asarray(scaler.scale_, dtype=np.float64)
+    d_raw = weight / scale
+    norm = float(np.linalg.norm(d_raw))
+    if not np.isfinite(norm) or norm <= 0:
+        raise ValueError("Decision-Side direction has zero or non-finite norm")
+    d_K = d_raw / norm
+    raw_intercept = intercept - float(np.dot(d_raw, mean))
+    if float(np.dot(d_raw, d_K)) <= 0:
+        raise AssertionError("+d_K does not point toward follows_image")
+    return {
+        "scaler_mean": mean,
+        "scaler_scale": scale,
+        "weight": weight,
+        "intercept": np.asarray([intercept], dtype=np.float64),
+        "d_raw": d_raw,
+        "d_K": d_K,
+        "raw_intercept": np.asarray([raw_intercept], dtype=np.float64),
+    }
+
+
+def _fit_diagnostics(model: Any, backend: str) -> dict[str, Any] | None:
+    if backend == "torch":
+        return dict(model.diagnostics)
+    classifier = model.named_steps["classifier"]
+    iterations = int(np.max(np.asarray(classifier.n_iter_, dtype=np.int64)))
+    max_iterations = int(classifier.max_iter)
+    return {
+        "backend": "sklearn",
+        "iterations": iterations,
+        "max_iterations": max_iterations,
+        "converged": iterations < max_iterations,
     }
 
 
@@ -354,6 +451,22 @@ def _parser() -> argparse.ArgumentParser:
         default=list(DEFAULT_PROBE_LOCATIONS),
     )
     parser.add_argument(
+        "--decision-side-probe-location",
+        nargs="+",
+        choices=list(DECISION_SIDE_LOCATIONS),
+    )
+    parser.add_argument(
+        "--split-mode", choices=("item", "answer_pair"), default="item"
+    )
+    parser.add_argument(
+        "--decision-side-only",
+        action="store_true",
+        help=(
+            "Train only requested Decision-Side tasks. This is optional for item "
+            "splits and implicit for answer_pair splits."
+        ),
+    )
+    parser.add_argument(
         "--version-settings",
         nargs="+",
         choices=list(VERSION_SETTINGS),
@@ -375,6 +488,14 @@ def _validate_args(args: argparse.Namespace) -> tuple[list[int], tuple[str, ...]
         raise ValueError("--permutations must be non-negative")
     if args.shard_cache_size < 1:
         raise ValueError("--shard-cache-size must be positive")
+    if args.split_mode == "answer_pair" and not args.decision_side_probe_location:
+        raise ValueError(
+            "--split-mode answer_pair requires --decision-side-probe-location"
+        )
+    if args.decision_side_only and not args.decision_side_probe_location:
+        raise ValueError(
+            "--decision-side-only requires --decision-side-probe-location"
+        )
     if args.fixed_c is not None and (
         not np.isfinite(args.fixed_c) or args.fixed_c <= 0
     ):
@@ -412,8 +533,10 @@ def _protected_output_paths(output_dir: Path) -> tuple[Path, ...]:
     return (
         output_dir / "run_config.json",
         output_dir / "split_assignments.json",
+        output_dir / "decision_side_pair_split_assignments.json",
         output_dir / "layer_probe_metrics.json",
         output_dir / "layer_probe_predictions.jsonl",
+        output_dir / "decision_directions",
     )
 
 
@@ -481,7 +604,17 @@ def main(argv: list[str] | None = None) -> int:
     conflict_locations = normalize_ordered_choices(
         args.conflict_probe_location, POSITION_NAMES, "--conflict-probe-location"
     )
-    probe_tasks = build_probe_tasks(answer_locations, conflict_locations)
+    decision_locations = normalize_ordered_choices(
+        args.decision_side_probe_location or (),
+        DECISION_SIDE_LOCATIONS,
+        "--decision-side-probe-location",
+    )
+    if args.split_mode == "answer_pair" or args.decision_side_only:
+        probe_tasks = build_probe_tasks((), (), decision_locations)
+    else:
+        probe_tasks = build_probe_tasks(
+            answer_locations, conflict_locations, decision_locations
+        )
     selected_settings = {
         name: VERSION_SETTINGS[name] for name in selected_setting_names
     }
@@ -502,7 +635,8 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("Probe manifest is empty")
     requested_positions = tuple(
         position for position in POSITION_NAMES
-        if position in set(answer_locations).union(conflict_locations)
+        if position
+        in set(answer_locations).union(conflict_locations).union(decision_locations)
     )
     requested_versions = tuple(
         version
@@ -542,6 +676,14 @@ def main(argv: list[str] | None = None) -> int:
         "probe_conditions": list(probe_conditions),
         "answer_probe_locations": list(answer_locations),
         "conflict_probe_locations": list(conflict_locations),
+        "decision_side_probe_locations": list(decision_locations),
+        "decision_side_label_mapping": {
+            label: index for index, label in enumerate(DECISION_SIDE_LABELS)
+        },
+        "split_mode": args.split_mode,
+        "decision_side_only": bool(
+            args.decision_side_only or args.split_mode == "answer_pair"
+        ),
         "backend": args.backend,
         "fixed_C": args.fixed_c,
         "device": args.resolved_device,
@@ -553,6 +695,7 @@ def main(argv: list[str] | None = None) -> int:
         "permutation_seeds": permutation_seeds,
         "permutation_C_policy": "reuse_hidden_state_probe_selected_C",
         "shard_cache_size": args.shard_cache_size,
+        "feature_matrix_cache_size": 1,
         "hidden_state_definition": HIDDEN_STATE_DEFINITION,
         "sklearn_version": sklearn.__version__,
         "numpy_version": np.__version__,
@@ -576,22 +719,49 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     atomic_write_json(output_dir / "run_config.json", run_config)
-    assignment = load_or_create_split_assignments(
-        output_dir / "split_assignments.json",
-        selected_manifest,
-        n_splits=args.n_splits,
-        seed=args.seed,
-    )
-    item_to_fold = {
-        str(key): int(value) for key, value in assignment["item_to_fold"].items()
-    }
+    item_to_fold: dict[str, int] | None = None
+    pair_to_fold: dict[str, int] | None = None
+    if args.split_mode == "item":
+        assignment = load_or_create_split_assignments(
+            output_dir / "split_assignments.json",
+            selected_manifest,
+            n_splits=args.n_splits,
+            seed=args.seed,
+        )
+        item_to_fold = {
+            str(key): int(value) for key, value in assignment["item_to_fold"].items()
+        }
+    else:
+        decision_records = filter_task_records(
+            manifest, "decision_side", probe_conditions=probe_conditions
+        )
+        assignment = load_or_create_answer_pair_split_assignments(
+            output_dir / "decision_side_pair_split_assignments.json",
+            decision_records,
+            n_splits=args.n_splits,
+            seed=args.seed,
+        )
+        pair_to_fold = {
+            str(key): int(value) for key, value in assignment["pair_to_fold"].items()
+        }
 
     loader = HiddenStateLoader(experiment_dir, cache_size=args.shard_cache_size)
+    feature_case_ids = {
+        str(record["case_id"])
+        for _task, (_position, target) in probe_tasks.items()
+        for record in filter_task_records(
+            manifest, target, probe_conditions=probe_conditions
+        )
+    }
+    feature_manifest = [
+        record for record in manifest if str(record["case_id"]) in feature_case_ids
+    ]
     feature_cache = FeatureMatrixCache(
         loader,
-        manifest,
+        feature_manifest,
         experiment_fingerprint=provenance["hidden_state_index_fingerprint"],
         manifest_fingerprint=provenance["manifest_fingerprint"],
+        max_matrices=1,
     )
     model_cache: dict[tuple[Any, ...], Any] = {}
     model_error_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
@@ -604,6 +774,10 @@ def main(argv: list[str] | None = None) -> int:
     gpu_transfer_seconds = 0.0
     torch_iterations: list[int] = []
     non_converged_count = 0
+    direction_index: list[dict[str, Any]] = []
+    direction_temp_dir = Path(
+        tempfile.mkdtemp(prefix=f".decision_directions.{os.getpid()}.", dir=output_dir)
+    )
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".layer_probe_predictions.{os.getpid()}.",
         suffix=".jsonl.tmp",
@@ -618,13 +792,27 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 for setting, (train_version, test_version) in selected_settings.items():
                     for fold in range(args.n_splits):
-                        train_records, test_records = rows_for_outer_fold(
-                            task_records,
-                            item_to_fold,
-                            fold=fold,
-                            train_version=train_version,
-                            test_version=test_version,
-                        )
+                        split_audit = None
+                        if args.split_mode == "answer_pair":
+                            assert pair_to_fold is not None
+                            train_records, test_records, split_audit = (
+                                rows_for_answer_pair_outer_fold(
+                                    task_records,
+                                    pair_to_fold,
+                                    fold=fold,
+                                    train_version=train_version,
+                                    test_version=test_version,
+                                )
+                            )
+                        else:
+                            assert item_to_fold is not None
+                            train_records, test_records = rows_for_outer_fold(
+                                task_records,
+                                item_to_fold,
+                                fold=fold,
+                                train_version=train_version,
+                                test_version=test_version,
+                            )
                         encoder, invalid_reason = validate_outer_labels(
                             train_records, test_records, target_field
                         )
@@ -688,7 +876,10 @@ def main(argv: list[str] | None = None) -> int:
                         test_labels = [str(record[target_field]) for record in test_records]
                         majority = majority_label(train_labels)
 
-                        if position == "panl" and target_field != "conflict_label":
+                        if position == "panl" and target_field in {
+                            "text_only_answer",
+                            "image_only_answer",
+                        }:
                             baseline_key = (
                                 "current_answer_only_baseline",
                                 *train_context,
@@ -776,7 +967,6 @@ def main(argv: list[str] | None = None) -> int:
                                     )
                                     + "\n"
                                 )
-
                         for layer in layers:
                             train_X = feature_cache.rows(
                                 train_records, layer=layer, position=position
@@ -828,6 +1018,22 @@ def main(argv: list[str] | None = None) -> int:
                             )
                             if model_key not in model_cache and model_key not in model_error_cache:
                                 encoded_train = encoder.transform(train_labels)
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "probe_fit_started",
+                                            "task": task,
+                                            "position": position,
+                                            "layer": int(layer),
+                                            "fold": int(fold),
+                                            "version_setting": setting,
+                                            "backend": args.backend,
+                                            "split_mode": args.split_mode,
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
                                 started = time.perf_counter()
                                 try:
                                     if args.backend == "torch":
@@ -843,7 +1049,8 @@ def main(argv: list[str] | None = None) -> int:
                                             device=args.resolved_device,
                                             seed=args.seed,
                                             binary_single_logit=(
-                                                target_field == "conflict_label"
+                                            target_field == "conflict_label"
+                                                or target_field == "decision_side"
                                             ),
                                         )
                                     else:
@@ -879,6 +1086,25 @@ def main(argv: list[str] | None = None) -> int:
                                     )
                                     if not diagnostics.get("converged", False):
                                         non_converged_count += 1
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "probe_fit_finished",
+                                            "task": task,
+                                            "position": position,
+                                            "layer": int(layer),
+                                            "fold": int(fold),
+                                            "version_setting": setting,
+                                            "status": (
+                                                "invalid"
+                                                if model_key in model_error_cache
+                                                else "valid"
+                                            ),
+                                        },
+                                        ensure_ascii=False,
+                                    ),
+                                    flush=True,
+                                )
 
                             if model_key in model_error_cache:
                                 fold_results.append(
@@ -900,9 +1126,29 @@ def main(argv: list[str] | None = None) -> int:
                                 )
                                 continue
                             model = model_cache[model_key]
-                            fit_diagnostics = (
-                                dict(model.diagnostics) if args.backend == "torch" else None
-                            )
+                            if target_field == "decision_side":
+                                arrays = _decision_direction_arrays(model, args.backend)
+                                direction_name = (
+                                    f"{setting}__fold_{fold}__{position}__layer_{layer}.npz"
+                                )
+                                np.savez_compressed(
+                                    direction_temp_dir / direction_name, **arrays
+                                )
+                                direction_index.append(
+                                    {
+                                        "file": direction_name,
+                                        "task": task,
+                                        "position": position,
+                                        "layer": int(layer),
+                                        "fold": int(fold),
+                                        "version_setting": setting,
+                                        "backend": args.backend,
+                                        "class0": DECISION_SIDE_LABELS[0],
+                                        "class1": DECISION_SIDE_LABELS[1],
+                                        "positive_direction": "+d_K -> follows_image",
+                                    }
+                                )
+                            fit_diagnostics = _fit_diagnostics(model, args.backend)
                             try:
                                 evaluation_started = time.perf_counter()
                                 predicted, probabilities = _predict_model(
@@ -1010,6 +1256,13 @@ def main(argv: list[str] | None = None) -> int:
                                     "selected_C": selected_C,
                                     "c_selection": c_selection,
                                     "fit_diagnostics": fit_diagnostics,
+                                    "split_audit": split_audit,
+                                    "train_class_counts": dict(
+                                        sorted(Counter(train_labels).items())
+                                    ),
+                                    "test_class_counts": dict(
+                                        sorted(Counter(test_labels).items())
+                                    ),
                                     "subset_metrics": subset_metrics,
                                 }
                             )
@@ -1037,17 +1290,43 @@ def main(argv: list[str] | None = None) -> int:
                                     )
                                     + "\n"
                                 )
+                            del train_X, test_X
+                            _trim_process_memory()
             prediction_handle.flush()
             os.fsync(prediction_handle.fileno())
         predictions_path = output_dir / "layer_probe_predictions.jsonl"
         if predictions_path.exists():
             raise FileExistsError(f"Refusing to overwrite predictions: {predictions_path}")
         os.replace(temporary_name, predictions_path)
+        if direction_index:
+            atomic_write_json(
+                direction_temp_dir / "index.json",
+                {
+                    "format_version": 1,
+                    "split_mode": args.split_mode,
+                    "class_mapping": {
+                        label: index
+                        for index, label in enumerate(DECISION_SIDE_LABELS)
+                    },
+                    "direction_count": len(direction_index),
+                    "directions": direction_index,
+                },
+            )
+            direction_dir = output_dir / "decision_directions"
+            if direction_dir.exists():
+                raise FileExistsError(
+                    f"Refusing to overwrite directions: {direction_dir}"
+                )
+            os.replace(direction_temp_dir, direction_dir)
+        else:
+            shutil.rmtree(direction_temp_dir)
     except BaseException:
         try:
             os.unlink(temporary_name)
         except FileNotFoundError:
             pass
+        if direction_temp_dir.exists():
+            shutil.rmtree(direction_temp_dir)
         run_config["status"] = "failed"
         atomic_write_json(output_dir / "run_config.json", run_config)
         raise
@@ -1076,6 +1355,8 @@ def main(argv: list[str] | None = None) -> int:
         "probe_conditions": list(probe_conditions),
         "answer_probe_locations": list(answer_locations),
         "conflict_probe_locations": list(conflict_locations),
+        "decision_side_probe_locations": list(decision_locations),
+        "split_mode": args.split_mode,
         "fold_result_count": len(fold_results),
         "valid_result_count": sum(result["status"] == "valid" for result in fold_results),
         "invalid_result_count": sum(result["status"] == "invalid" for result in fold_results),

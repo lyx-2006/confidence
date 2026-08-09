@@ -88,13 +88,7 @@ class TorchLogisticProbe:
             positive[mask] = 1.0 / (1.0 + np.exp(-values[mask]))
             exp_values = np.exp(values[~mask])
             positive[~mask] = exp_values / (1.0 + exp_values)
-            # For Conflict Probe, sklearn's encoded class 1 is ``consistent``.
-            # Recover the semantic [consistent, conflict] pair first, then align
-            # it back to the existing LabelEncoder order [conflict, consistent].
-            p_consistent = positive
-            p_conflict = 1.0 - positive
-            semantic_probabilities = np.column_stack((p_consistent, p_conflict))
-            probabilities = semantic_probabilities[:, [1, 0]]
+            probabilities = np.column_stack((1.0 - positive, positive))
         else:
             shifted = logits - np.max(logits, axis=1, keepdims=True)
             exponentials = np.exp(shifted)

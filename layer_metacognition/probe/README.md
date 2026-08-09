@@ -14,6 +14,89 @@ index 或 shard。标签生成是唯一可能加载 Qwen 模型的步骤；训�
 
 > Linear Probe 只说明信息可以被线性解码，不足以证明这些信息被模型因果使用。
 
+## Phase 1：Decision-Side / Arbitration Probe
+
+Decision-Side target 只从模型实际行为生成。对 `conflict_easy` / `conflict_hard`
+case，当 text-only 与 image-only answer 都有效且不同时：joint current answer 等于
+text-only answer 记为 `follows_text`，等于 image-only answer 记为
+`follows_image`。`follows_neither`、相同 unimodal answer 和缺失 label 均不参与。
+Manifest 保留字符串 label；训练时固定 `follows_text -> 0`、
+`follows_image -> 1`，所以 `P(class1)` 和 `+d_K` 始终指向 image-side。
+
+训练入口新增：
+
+```text
+--decision-side-probe-location ptnl ac panl
+--split-mode item|answer_pair
+--decision-side-only
+```
+
+不传 `--decision-side-probe-location` 时不创建 Decision-Side task。`item` 是默认
+模式，原 tasks 与 Decision-Side tasks 复用既有 item-grouped folds。
+`answer_pair` 模式只训练 Decision-Side：先按无序 answer pair 分 test fold，再从
+train 清除 test items，同时保证 pair 和 item 均无泄漏。该模式使用独立的
+`decision_side_pair_split_assignments.json`，不会复用或替换旧 item assignments。
+已有 R_T/R_I/C OOF 时，item run 可显式传 `--decision-side-only`，只训练新增
+Decision-Side tasks；该开关不改变未传时的旧默认行为。
+
+每个 Decision-Side outer-fold test case 保存 OOF `P(follows_text)` 与
+`P(follows_image)`。每个 fold × position × layer 还在 `decision_directions/` 保存
+scaler、标准化 weight/intercept、原空间 `d_raw`、raw intercept 和单位向量
+`d_K`。这些方向供后续阶段使用；本阶段不执行 steering。
+
+### 正式 Phase 1 运行
+
+```bash
+cd /root/autodl-tmp
+
+python -u -m layer_metacognition.probe.build_probe_manifest \
+  --experiment-dir layer_metacognition/output/Final_v4_run/answer_basis_9 \
+  --output-dir layer_metacognition/output/Final_v4_run/answer_basis_9/extended_probe
+
+python -u -m layer_metacognition.probe.train_layer_probes \
+  --experiment-dir layer_metacognition/output/Final_v4_run/answer_basis_9 \
+  --output-dir layer_metacognition/output/Final_v4_run/answer_basis_9/stage1_metacognition/item_split \
+  --manifest-path layer_metacognition/output/Final_v4_run/answer_basis_9/extended_probe/probe_manifest.jsonl \
+  --layers 12 14 16 18 20 22 24 26 27 \
+  --n-splits 5 --seed 42 \
+  --probe-conditions consistent_easy consistent_hard conflict_easy conflict_hard \
+  --decision-side-probe-location ptnl ac panl \
+  --decision-side-only \
+  --version-settings v4_to_v4 --split-mode item \
+  --backend torch --fixed-c 1.0 --device cuda --permutations 0
+
+python -u -m layer_metacognition.probe.train_layer_probes \
+  --experiment-dir layer_metacognition/output/Final_v4_run/answer_basis_9 \
+  --output-dir layer_metacognition/output/Final_v4_run/answer_basis_9/stage1_metacognition/answer_pair_split \
+  --manifest-path layer_metacognition/output/Final_v4_run/answer_basis_9/extended_probe/probe_manifest.jsonl \
+  --layers 12 14 16 18 20 22 24 26 27 \
+  --n-splits 5 --seed 42 \
+  --probe-conditions consistent_easy consistent_hard conflict_easy conflict_hard \
+  --decision-side-probe-location ptnl ac panl \
+  --version-settings v4_to_v4 --split-mode answer_pair \
+  --backend torch --fixed-c 1.0 --device cuda --permutations 0
+```
+
+Trajectory 复用现有 text/image/conflict OOF 和 SAC Semantic readout：
+
+```bash
+python -u -m layer_metacognition.probe.analyze_stage1_trajectory \
+  --experiment-dir layer_metacognition/output/Final_v4_run/answer_basis_9 \
+  --manifest-path layer_metacognition/output/Final_v4_run/answer_basis_9/extended_probe/probe_manifest.jsonl \
+  --probe-results-dir layer_metacognition/output/Final_v4_run/answer_basis_9/extended_probe_torch_manual \
+  --decision-item-results-dir layer_metacognition/output/Final_v4_run/answer_basis_9/stage1_metacognition/item_split \
+  --decision-answer-pair-results-dir layer_metacognition/output/Final_v4_run/answer_basis_9/stage1_metacognition/answer_pair_split \
+  --output-dir layer_metacognition/output/Final_v4_run/answer_basis_9/stage1_metacognition \
+  --layers 12 14 16 18 20 22 24 26 27 \
+  --decision-side-probe-location ptnl ac panl
+```
+
+`R_I_preliminary` 只有 PTNL/AC/PANL 基础 readout。当前没有保存
+post-image-token hidden state，因此它不能回答 image candidate 的完整形成时间，
+也不能比较 text/image candidate 谁更早形成。PANL 是 answer 生成后的 token；
+PANL 上高 K 不证明 pre-answer arbitration。Phase 1 只报告线性可解码性、预测、
+跨 unseen answer-pair 泛化及相关关系，不作 `K causes Answer/SA` 等因果结论。
+
 ## 1. 目录与依赖
 
 所有实现、测试与文档均位于：

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -67,6 +68,13 @@ def test_train_pools_conditions_and_writes_to_custom_output(
                         "eligible_text_probe": True,
                         "eligible_image_probe": True,
                         "eligible_conflict_probe": True,
+                        "decision_side": (
+                            "follows_text" if item % 2 == 0 else "follows_image"
+                        ),
+                        "eligible_decision_side_probe": True,
+                        "unordered_answer_pair_key": (
+                            "blue||yellow" if item < 4 else "green||red"
+                        ),
                         "hidden_state_reference": manifest_reference,
                     }
                 )
@@ -257,3 +265,52 @@ def test_train_pools_conditions_and_writes_to_custom_output(
     assert analyze_main(
         ["--experiment-dir", str(experiment), "--output-dir", str(torch_output)]
     ) == 0
+
+    pair_output = tmp_path / "answer-pair-probe"
+    assert main(
+        [
+            "--experiment-dir",
+            str(experiment),
+            "--output-dir",
+            str(pair_output),
+            "--manifest-path",
+            str(output / "probe_manifest.jsonl"),
+            "--layers",
+            "3",
+            "--n-splits",
+            "2",
+            "--probe-conditions",
+            "consistent_easy",
+            "conflict_easy",
+            "--version-settings",
+            "v4_to_v4",
+            "--decision-side-probe-location",
+            "ac",
+            "--split-mode",
+            "answer_pair",
+            "--backend",
+            "torch",
+            "--fixed-c",
+            "1.0",
+            "--device",
+            "cpu",
+            "--permutations",
+            "0",
+        ]
+    ) == 0
+    pair_config = json.loads((pair_output / "run_config.json").read_text())
+    assert set(pair_config["probe_tasks"]) == {"ac_decision_side"}
+    assert not (pair_output / "split_assignments.json").exists()
+    assert (pair_output / "decision_side_pair_split_assignments.json").is_file()
+    direction_index = json.loads(
+        (pair_output / "decision_directions" / "index.json").read_text()
+    )
+    assert direction_index["direction_count"] == 2
+    direction_path = (
+        pair_output
+        / "decision_directions"
+        / direction_index["directions"][0]["file"]
+    )
+    with np.load(direction_path) as direction:
+        assert np.linalg.norm(direction["d_K"]) == pytest.approx(1.0)
+        assert float(np.dot(direction["d_raw"], direction["d_K"])) > 0

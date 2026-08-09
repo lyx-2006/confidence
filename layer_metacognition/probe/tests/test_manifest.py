@@ -7,7 +7,10 @@ import pytest
 
 from confidence_test.dataset_utils import ConditionInput, EvaluationCase
 from layer_metacognition.probe import HIDDEN_STATE_DEFINITION
-from layer_metacognition.probe.build_probe_manifest import build_manifest
+from layer_metacognition.probe.build_probe_manifest import (
+    build_manifest,
+    decision_side_fields,
+)
 from layer_metacognition.probe.generate_unimodal_labels import (
     extract_existing_text_labels,
 )
@@ -169,3 +172,52 @@ def test_manifest_rejects_hidden_reference_disagreement(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="offset"):
         build_manifest(experiment)
+
+
+@pytest.mark.parametrize(
+    ("condition", "text", "image", "current", "label", "eligible", "reason"),
+    [
+        ("conflict_easy", "yellow", "blue", "yellow", "follows_text", True, "eligible"),
+        ("conflict_hard", "yellow", "blue", "blue", "follows_image", True, "eligible"),
+        ("conflict_easy", "yellow", "blue", "red", None, False, "follows_neither"),
+        ("conflict_easy", "blue", "blue", "blue", None, False, "text_equals_image"),
+        ("conflict_easy", "blue", None, "blue", None, False, "missing_unimodal_label"),
+        ("consistent_easy", "yellow", "blue", "blue", None, False, "not_conflict_condition"),
+    ],
+)
+def test_decision_side_is_derived_from_behavior(
+    condition: str,
+    text: str | None,
+    image: str | None,
+    current: str,
+    label: str | None,
+    eligible: bool,
+    reason: str,
+) -> None:
+    actual, actual_eligible, pair, actual_reason = decision_side_fields(
+        condition=condition,
+        text_answer=text,
+        image_answer=image,
+        current_answer=current,
+    )
+    assert actual == label
+    assert actual_eligible is eligible
+    assert actual_reason == reason
+    if text is not None and image is not None:
+        assert pair == "||".join(sorted((text, image)))
+
+
+def test_unordered_answer_pair_is_direction_invariant() -> None:
+    left = decision_side_fields(
+        condition="conflict_easy",
+        text_answer="yellow",
+        image_answer="blue",
+        current_answer="yellow",
+    )[2]
+    right = decision_side_fields(
+        condition="conflict_easy",
+        text_answer="blue",
+        image_answer="yellow",
+        current_answer="yellow",
+    )[2]
+    assert left == right == "blue||yellow"

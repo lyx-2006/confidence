@@ -37,6 +37,8 @@ The previous answer is not fixed. You may keep it or replace it.
 
 {source_classes}
 
+Do not choose class 4 merely because both sources were shown. Choose it only if you believe you relied on both sources to a similar extent.
+
 Output exactly:
 
 **Answer**: <your new answer>
@@ -58,6 +60,8 @@ Then report what you believe your answer was mainly based on.
 Source attribution asks what you believe your answer was based on: the text clue, the image, or both. Report which source you relied on more when selecting your answer.
 
 {source_classes}
+
+Do not choose class 4 merely because both sources were shown. Choose it only if you believe you relied on both sources to a similar extent.
 
 Output exactly:
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from layer_metacognition.probe import (
+    DECISION_SIDE_LABELS,
     PROBE_CONDITIONS,
     PROBE_TASKS,
     build_probe_tasks,
@@ -10,8 +11,10 @@ from layer_metacognition.probe import (
 )
 from layer_metacognition.probe.probe_models import build_current_answer_baseline
 from layer_metacognition.probe.split_utils import (
+    create_answer_pair_split_assignments,
     create_split_assignments,
     permute_labels_by_unique_key,
+    rows_for_answer_pair_outer_fold,
     rows_for_outer_fold,
 )
 from layer_metacognition.probe.train_layer_probes import (
@@ -151,3 +154,48 @@ def test_current_answer_only_baseline_and_default_task_contract() -> None:
     assert predicted.shape == (2,)
     assert probabilities.shape == (2, 2)
     np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+
+
+def test_decision_tasks_and_fixed_class_direction() -> None:
+    tasks = build_probe_tasks(("ac",), ("panl",), ("ptnl", "ac"))
+    assert tasks["ptnl_decision_side"] == ("ptnl", "decision_side")
+    assert tasks["ac_decision_side"] == ("ac", "decision_side")
+    train = [{"decision_side": "follows_image"}, {"decision_side": "follows_text"}]
+    test = [{"decision_side": "follows_text"}]
+    encoder, reason = validate_outer_labels(train, test, "decision_side")
+    assert reason is None
+    assert encoder is not None
+    assert tuple(encoder.classes_) == DECISION_SIDE_LABELS
+    assert encoder.transform(["follows_text", "follows_image"]).tolist() == [0, 1]
+
+
+def test_answer_pair_split_has_no_pair_or_item_leakage() -> None:
+    records = []
+    for item in range(8):
+        for pair in ("blue||yellow", "green||red"):
+            records.append(
+                {
+                    "case_id": f"{item}-{pair}",
+                    "item_id": str(item),
+                    "version": "v4",
+                    "unordered_answer_pair_key": pair,
+                }
+            )
+    assignment = create_answer_pair_split_assignments(records, n_splits=2, seed=42)
+    for fold in range(2):
+        train, test, audit = rows_for_answer_pair_outer_fold(
+            records,
+            assignment["pair_to_fold"],
+            fold=fold,
+            train_version="v4",
+            test_version="v4",
+        )
+        assert {row["item_id"] for row in train}.isdisjoint(
+            {row["item_id"] for row in test}
+        )
+        assert {row["unordered_answer_pair_key"] for row in train}.isdisjoint(
+            {row["unordered_answer_pair_key"] for row in test}
+        )
+        assert audit["item_overlap_count"] == 0
+        assert audit["answer_pair_overlap_count"] == 0
+    rows_for_answer_pair_outer_fold,

@@ -28,6 +28,7 @@ AGGREGATE_METRICS = (
     "balanced_accuracy",
     "macro_f1",
     "cross_entropy",
+    "roc_auc",
     "majority_baseline_accuracy",
     "permuted_label_accuracy_mean",
 )

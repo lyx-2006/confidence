@@ -144,6 +144,141 @@ def rows_for_outer_fold(
     return train, test
 
 
+def create_answer_pair_split_assignments(
+    records: Sequence[dict[str, Any]],
+    *,
+    n_splits: int = 5,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Assign answer pairs to test folds; item overlap is purged from train later."""
+
+    pairs = sorted({str(record["unordered_answer_pair_key"]) for record in records})
+    if n_splits < 2:
+        raise ValueError("n_splits must be at least 2")
+    if len(pairs) < n_splits:
+        raise ValueError(
+            f"Need at least {n_splits} answer-pair groups, found {len(pairs)}"
+        )
+    values = np.arange(len(pairs), dtype=np.int64).reshape(-1, 1)
+    groups = np.asarray(pairs, dtype=object)
+    splitter = GroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    pair_to_fold: dict[str, int] = {}
+    for fold, (_train, test) in enumerate(splitter.split(values, groups=groups)):
+        for index in test:
+            pair_to_fold[pairs[int(index)]] = fold
+    assignment = {
+        "format_version": 1,
+        "n_splits": int(n_splits),
+        "seed": int(seed),
+        "group_key": "unordered_answer_pair_key",
+        "item_overlap_policy": "purge_test_items_from_train",
+        "answer_pair_count": len(pairs),
+        "pair_to_fold": pair_to_fold,
+    }
+    validate_answer_pair_split_assignments(records, assignment)
+    assignment["fold_audits"] = [
+        rows_for_answer_pair_outer_fold(
+            records,
+            pair_to_fold,
+            fold=fold,
+            train_version=None,
+            test_version=None,
+        )[2]
+        for fold in range(n_splits)
+    ]
+    return assignment
+
+
+def validate_answer_pair_split_assignments(
+    records: Sequence[dict[str, Any]], assignment: dict[str, Any]
+) -> None:
+    pair_to_fold = assignment.get("pair_to_fold")
+    n_splits = int(assignment.get("n_splits", 0))
+    if not isinstance(pair_to_fold, dict) or n_splits < 2:
+        raise ValueError("Invalid answer-pair split assignment structure")
+    record_pairs = {str(record["unordered_answer_pair_key"]) for record in records}
+    if record_pairs != set(pair_to_fold):
+        raise ValueError("Answer-pair split assignment coverage mismatch")
+    if set(pair_to_fold.values()) != set(range(n_splits)):
+        raise ValueError("Answer-pair assignments do not cover every fold")
+
+
+def rows_for_answer_pair_outer_fold(
+    records: Sequence[dict[str, Any]],
+    pair_to_fold: dict[str, int],
+    *,
+    fold: int,
+    train_version: str | None,
+    test_version: str | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    def version_matches(record: dict[str, Any], version: str | None) -> bool:
+        return version is None or str(record["version"]) == version
+
+    test = [
+        record
+        for record in records
+        if version_matches(record, test_version)
+        and int(pair_to_fold[str(record["unordered_answer_pair_key"])]) == fold
+    ]
+    pre_purge_train = [
+        record
+        for record in records
+        if version_matches(record, train_version)
+        and int(pair_to_fold[str(record["unordered_answer_pair_key"])]) != fold
+    ]
+    test_items = {str(record["item_id"]) for record in test}
+    train = [
+        record
+        for record in pre_purge_train
+        if str(record["item_id"]) not in test_items
+    ]
+    train_items = {str(record["item_id"]) for record in train}
+    train_pairs = {str(record["unordered_answer_pair_key"]) for record in train}
+    test_pairs = {str(record["unordered_answer_pair_key"]) for record in test}
+    if train_items.intersection(test_items):
+        raise AssertionError(f"Train/test item leakage in answer-pair fold {fold}")
+    if train_pairs.intersection(test_pairs):
+        raise AssertionError(f"Train/test answer-pair leakage in fold {fold}")
+    audit = {
+        "fold": int(fold),
+        "pre_purge_train_sample_count": len(pre_purge_train),
+        "train_sample_count": len(train),
+        "purged_train_sample_count": len(pre_purge_train) - len(train),
+        "test_sample_count": len(test),
+        "train_item_count": len(train_items),
+        "test_item_count": len(test_items),
+        "train_answer_pair_count": len(train_pairs),
+        "test_answer_pair_count": len(test_pairs),
+        "item_overlap_count": 0,
+        "answer_pair_overlap_count": 0,
+    }
+    return train, test, audit
+
+
+def load_or_create_answer_pair_split_assignments(
+    path: str | Path,
+    records: Sequence[dict[str, Any]],
+    *,
+    n_splits: int = 5,
+    seed: int = 42,
+) -> dict[str, Any]:
+    destination = Path(path)
+    if destination.is_file():
+        assignment = json.loads(destination.read_text(encoding="utf-8"))
+        if (
+            int(assignment.get("n_splits", -1)) != n_splits
+            or int(assignment.get("seed", -1)) != seed
+        ):
+            raise ValueError("Existing answer-pair split configuration differs")
+        validate_answer_pair_split_assignments(records, assignment)
+        return assignment
+    assignment = create_answer_pair_split_assignments(
+        records, n_splits=n_splits, seed=seed
+    )
+    atomic_write_json(destination, assignment)
+    return assignment
+
+
 def label_key(record: dict[str, Any], target_field: str) -> tuple[Any, ...]:
     if target_field == "text_only_answer":
         return str(record["item_id"]), int(record["prior_index"])
@@ -151,6 +286,8 @@ def label_key(record: dict[str, Any], target_field: str) -> tuple[Any, ...]:
         return str(record["item_id"]), str(record["condition"])
     if target_field == "conflict_label":
         return str(record["item_id"]), str(record["condition"])
+    if target_field == "decision_side":
+        return (str(record["case_id"]),)
     raise ValueError(f"Unsupported behavior-label field: {target_field!r}")
 
 
