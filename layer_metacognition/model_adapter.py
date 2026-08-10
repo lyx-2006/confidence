@@ -28,6 +28,205 @@ class HookedForwardResult:
     logits_by_position: dict[int, torch.Tensor]
 
 
+@dataclass(frozen=True)
+class HiddenStateReplacement:
+    """One exact decoder-output replacement at a token or ordered span."""
+
+    name: str
+    layer_index: int
+    target_positions: tuple[int, ...]
+    source_hidden: torch.Tensor
+
+
+class HiddenStateReplacementHook:
+    """Replace decoder block outputs during one full prefill.
+
+    Replacements are expressed with recipient positions and already-sliced donor
+    activations.  This deliberately keeps donor and recipient token location
+    independent: callers locate both contexts first, then order-align equal-length
+    spans.  Cached generation steps are observed but never modified.
+    """
+
+    def __init__(
+        self,
+        modules: LanguageModules,
+        *,
+        replacements: Sequence[HiddenStateReplacement],
+        prefill_sequence_length: int,
+    ) -> None:
+        if prefill_sequence_length < 1:
+            raise ValueError("prefill_sequence_length must be positive")
+        if not replacements:
+            raise ValueError("At least one hidden-state replacement is required")
+        self.modules = modules
+        self.prefill_sequence_length = int(prefill_sequence_length)
+        self.replacements = tuple(replacements)
+        grouped: dict[int, list[HiddenStateReplacement]] = {}
+        occupied: dict[int, set[int]] = {}
+        names: set[str] = set()
+        for replacement in self.replacements:
+            if not replacement.name or replacement.name in names:
+                raise ValueError(
+                    f"Replacement names must be non-empty and distinct: "
+                    f"{replacement.name!r}"
+                )
+            names.add(replacement.name)
+            layer_index = int(replacement.layer_index)
+            if layer_index < 0 or layer_index >= modules.num_hidden_layers:
+                raise ValueError(
+                    f"Replacement layer {layer_index} is outside "
+                    f"[0, {modules.num_hidden_layers - 1}]"
+                )
+            positions = tuple(int(value) for value in replacement.target_positions)
+            if not positions or len(positions) != len(set(positions)):
+                raise ValueError(
+                    f"{replacement.name}: target_positions must be non-empty "
+                    "and distinct"
+                )
+            if any(
+                position < 0 or position >= self.prefill_sequence_length
+                for position in positions
+            ):
+                raise ValueError(
+                    f"{replacement.name}: positions are outside prefill length "
+                    f"{self.prefill_sequence_length}: {positions}"
+                )
+            source = replacement.source_hidden.detach()
+            if source.ndim == 1:
+                source = source.unsqueeze(0)
+            if source.ndim != 2:
+                raise ValueError(
+                    f"{replacement.name}: source_hidden must have shape "
+                    "[tokens, hidden]"
+                )
+            if int(source.shape[0]) != len(positions):
+                raise ValueError(
+                    f"{replacement.name}: donor/recipient span length mismatch: "
+                    f"source={source.shape[0]} target={len(positions)}"
+                )
+            if int(source.shape[1]) != modules.hidden_size:
+                raise ValueError(
+                    f"{replacement.name}: source hidden size {source.shape[1]} "
+                    f"does not match model hidden size {modules.hidden_size}"
+                )
+            if not bool(torch.isfinite(source).all()):
+                raise ValueError(f"{replacement.name}: source_hidden is non-finite")
+            overlap = occupied.setdefault(layer_index, set()).intersection(positions)
+            if overlap:
+                raise ValueError(
+                    f"Layer {layer_index} has overlapping replacement positions: "
+                    f"{sorted(overlap)}"
+                )
+            occupied[layer_index].update(positions)
+            grouped.setdefault(layer_index, []).append(
+                HiddenStateReplacement(
+                    name=replacement.name,
+                    layer_index=layer_index,
+                    target_positions=positions,
+                    source_hidden=source,
+                )
+            )
+        self.by_layer = {
+            layer: tuple(values) for layer, values in sorted(grouped.items())
+        }
+        self.hook_call_count = {layer: 0 for layer in self.by_layer}
+        self.applied_count = {layer: 0 for layer in self.by_layer}
+        self.replacement_l2: dict[str, float] = {}
+        self._handles: list[Any] = []
+
+    def _hook(self, layer_index: int, output: Any) -> Any:
+        self.hook_call_count[layer_index] += 1
+        if isinstance(output, torch.Tensor):
+            tensor = output
+            trailing: tuple[Any, ...] | None = None
+        elif isinstance(output, tuple) and output:
+            tensor = output[0]
+            trailing = output[1:]
+        else:
+            raise TypeError(
+                "Decoder block returned unsupported replacement output type: "
+                f"{type(output)!r}"
+            )
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 3:
+            raise TypeError(
+                "Decoder block hidden output must be rank 3, got "
+                f"{type(tensor)!r} shape={getattr(tensor, 'shape', None)}"
+            )
+        if int(tensor.shape[0]) < 1 or int(tensor.shape[2]) != self.modules.hidden_size:
+            raise ValueError(
+                f"Invalid decoder hidden output at layer {layer_index}: "
+                f"{tuple(tensor.shape)}"
+            )
+        if (
+            self.applied_count[layer_index] > 0
+            or int(tensor.shape[1]) != self.prefill_sequence_length
+        ):
+            return output
+
+        patched = tensor.clone()
+        for replacement in self.by_layer[layer_index]:
+            positions = list(replacement.target_positions)
+            source = replacement.source_hidden.to(
+                device=patched.device,
+                dtype=patched.dtype,
+            )
+            before = tensor[0, positions, :]
+            patched[0, positions, :] = source
+            self.replacement_l2[replacement.name] = float(
+                torch.linalg.vector_norm(source.float() - before.float()).item()
+            )
+        self.applied_count[layer_index] += 1
+        if trailing is None:
+            return patched
+        return (patched, *trailing)
+
+    def __enter__(self) -> "HiddenStateReplacementHook":
+        if self._handles:
+            raise RuntimeError("HiddenStateReplacementHook cannot be entered twice")
+        for layer_index in self.by_layer:
+            handle = self.modules.language_layers[layer_index].register_forward_hook(
+                lambda _module, _args, output, index=layer_index: self._hook(
+                    index, output
+                )
+            )
+            self._handles.append(handle)
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        for handle in self._handles:
+            handle.remove()
+        self._handles.clear()
+
+    def validate_applied_once(self) -> None:
+        bad = {
+            layer: count
+            for layer, count in self.applied_count.items()
+            if count != 1
+        }
+        if bad:
+            raise RuntimeError(
+                f"Replacement hooks did not apply exactly once per layer: {bad}"
+            )
+        missing = [
+            replacement.name
+            for replacement in self.replacements
+            if replacement.name not in self.replacement_l2
+        ]
+        if missing:
+            raise RuntimeError(f"Replacement diagnostics are missing: {missing}")
+
+    def diagnostics(self) -> dict[str, Any]:
+        self.validate_applied_once()
+        return {
+            "prefill_sequence_length": self.prefill_sequence_length,
+            "layers": list(self.by_layer),
+            "hook_call_count": dict(self.hook_call_count),
+            "applied_count": dict(self.applied_count),
+            "replacement_l2": dict(self.replacement_l2),
+            "replacement_count": len(self.replacements),
+        }
+
+
 class AdditiveActivationHook:
     """Apply one additive decoder-output intervention during a model forward.
 

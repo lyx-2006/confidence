@@ -40,6 +40,7 @@ from layer_metacognition.token_spans import build_rendered_alignment
 
 STEERING_POSITIONS = ("ptnl", "ac", "panl")
 STEERING_SCALES = ("probe_logit", "unit")
+MEAN_DIFFERENCE_STEERING_SCALE = "mean_difference"
 INJECTION_SITES = ("block_output", "block_input")
 INTERVENTION_MODES = ("single", "reinject")
 DECISION_MAPPING = {"follows_text": 0, "follows_image": 1}
@@ -67,6 +68,8 @@ class DecisionDirection:
     d_raw: np.ndarray
     d_K: np.ndarray
     raw_intercept: float
+    steering_vector: np.ndarray | None = None
+    direction_kind: str = "decision_probe"
 
 
 @dataclass(frozen=True)
@@ -147,6 +150,12 @@ def build_steering_vector(
         vector = float(alpha) * direction.d_raw / squared_norm
     elif steering_scale == "unit":
         vector = float(alpha) * direction.d_K
+    elif steering_scale == MEAN_DIFFERENCE_STEERING_SCALE:
+        if direction.steering_vector is None:
+            raise ValueError(
+                "mean_difference Steering requires a direction steering_vector"
+            )
+        vector = float(alpha) * direction.steering_vector
     else:
         raise ValueError(f"Unknown steering scale: {steering_scale}")
     if not np.isfinite(vector).all():
@@ -841,7 +850,13 @@ def manipulation_diagnostics(
     expected_delta = (
         float(alpha)
         if steering_scale == "probe_logit"
-        else float(alpha) * float(np.linalg.norm(direction.d_raw))
+        else (
+            float(alpha)
+            * float(np.dot(direction.d_raw, direction.steering_vector))
+            if steering_scale == MEAN_DIFFERENCE_STEERING_SCALE
+            and direction.steering_vector is not None
+            else float(alpha) * float(np.linalg.norm(direction.d_raw))
+        )
     )
     requested_delta = float(
         np.dot(

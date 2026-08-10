@@ -240,3 +240,44 @@ fingerprint 不一致时拒绝恢复。输出包括 `run_config.json`、`results
 alpha=0 配对基线计算 `Delta AnswerMargin` 与 `Delta SA`。Steering 是对所选 Probe
 direction 的因果干预，但单次结果仍不等同于对所有 arbitration mechanism 的完整
 识别。
+
+## Teacher-Forced Source Attribution causal experiments
+
+独立入口固定使用 V4 `answer_basis_9` prompt，并以相同 forced Answer 的 clean
+Teacher-Forced SA 作为每次 replacement 的 causal baseline：
+
+```bash
+cd /root/autodl-tmp
+python -m layer_metacognition.run_teacher_forced_source_origin --smoke
+```
+
+去掉 `--smoke` 才会在默认目录 `stage2_teacher_forced_source_origin` 构建正式的
+100-case cohort；程序不会由 smoke 自动扩展到正式运行。默认干预层为
+L12/16/20/24/26，而 clean capture 始终覆盖全部 decoder layers。大 image/text
+state 在 Evidence Swap 后删除，小 AC/PANL/SAC state 在 State Swap 后删除；
+`precomputed_states/index.json` 保留各 context 的 layer、shape、dtype、位置和删除记录。
+中断恢复需使用完全相同的参数并追加 `--resume`。
+
+## Strong-SA mean-difference steering
+
+`run_sa_mean_steering` 从已完成的 V4 conflict baselines 中按
+`SA_soft_image_score` 选择 follows_image 最强 25 条与 follows_text 最强 25 条。
+每组只保留一个 case/item，两组不复用 item；evaluation 也与这 50 个 source item
+完全隔离。每个已保存 layer × AC/PANL 分别构造
+`mean(image) - mean(text)`，实际注入量为 `alpha * mean_difference`。正 alpha 为
+imageward，负 alpha 为 textward。
+
+最小 smoke：
+
+```bash
+cd /root/autodl-tmp
+python -u -m layer_metacognition.run_sa_mean_steering \
+  --layers 20 --positions ac panl --alphas -1 0 1 \
+  --max-cases 4 \
+  --output-dir layer_metacognition/output/Final_v4_run/answer_basis_9/stage2_sa_mean_steering_smoke
+```
+
+默认正式网格为 L20/L24 × AC/PANL × alpha `-1 -0.5 0 0.5 1`，held-out
+evaluation 为 follows_text/image 各 25 条。输出额外包含
+`source_cohort_manifest.json`、`evaluation_manifest.json` 和 `directions/`；中断后用
+完全相同参数追加 `--resume`。
