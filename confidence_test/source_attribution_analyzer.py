@@ -47,6 +47,18 @@ JOINT_SINGLE_LINE_PATTERN = re.compile(
     r"\*\*Answer\*\*:[ \t]+(.+?\S)[ \t]+"
     r"\*\*Source Attribution\*\*:[ \t]*([0-9])(?:\*\*)?[.]?\s*\Z"
 )
+JOINT_ANGLE_CLASS_PATTERN = re.compile(
+    r"\*\*Answer\*\*:[ \t]+([^\r\n]*?\S)[ \t]*\r?\n+"
+    r"[ \t]*\*\*Source Attribution\*\*:[ \t]*<([0-9])>?\s*\Z"
+)
+JOINT_BOLD_VALUE_PATTERN = re.compile(
+    r"\*\*Answer\*\*:[ \t]+([^\r\n]*?\S)[ \t]*\r?\n+"
+    r"[ \t]*\*\*Source Attribution\*\*:[ \t]*\*\*([0-9])\*\*[ \t]*\Z"
+)
+JOINT_ADD_CRITERION_FIELD_PATTERN = re.compile(
+    r"\*\*Answer\*\*:[ \t]+([^\r\n]*?\S)[ \t]*\r?\n+"
+    r"[ \t]*addCriterion\*\*:[ \t]*([0-9])(?:\*\*)?[ \t]*\Z"
+)
 JOINT_CODE_FENCE_PATTERN = re.compile(
     r"[ \t]*```(?:text|markdown)?[ \t]*\r?\n"
     r"(?P<body>.*?)\r?\n```[ \t]*\s*\Z",
@@ -59,6 +71,9 @@ JOINT_PARSE_PATTERNS = (
     JOINT_COLON_IN_BOLD_PATTERN,
     JOINT_PLAIN_FIELDS_PATTERN,
     JOINT_SINGLE_LINE_PATTERN,
+    JOINT_ANGLE_CLASS_PATTERN,
+    JOINT_BOLD_VALUE_PATTERN,
+    JOINT_ADD_CRITERION_FIELD_PATTERN,
 )
 
 

@@ -72,8 +72,10 @@ def render_continued_assistant(processor: Any, messages: list[dict[str, Any]], e
     except (TypeError, ValueError):
         rendered = None
     if not rendered or not rendered.endswith(expected_suffix):
+        if not messages or messages[-1].get("role") != "assistant":
+            raise ValueError("Continued-assistant rendering requires a final assistant message")
         rendered = processor.apply_chat_template(
-            messages[:1],
+            messages[:-1],
             tokenize=False,
             add_generation_prompt=True,
         ) + expected_suffix
