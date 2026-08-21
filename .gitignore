@@ -62,3 +62,7 @@ generate dataset/datasets/
 layer_metacognition/output/Final_v4_1
 
 layer_metacognition/output/Final_v4_val
+
+auto
+
+layer_metacognition/output/Final_v4_run_sa_prediction

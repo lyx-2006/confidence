@@ -56,7 +56,9 @@ from .stage_specs import stage_spec
 from .token_positions import (
     locate_field_value_span,
     locate_image_pad_span,
+    locate_last_answer_token,
     locate_marker_in_assistant,
+    locate_post_image_token,
     locate_text_clue_save_positions,
     locate_token_after_field,
 )
@@ -394,7 +396,9 @@ class V3V4SourceRunner:
         targets: list[str],
         values: dict[str, str],
         panl_field: tuple[str, str] | None,
+        answer_field: tuple[str, str] | None,
         capture_text_clue: bool,
+        capture_post_image: bool,
     ) -> dict[str, Any]:
         messages = [
             {"role": "user", "content": _image_content(prompt, image_path)},
@@ -470,6 +474,29 @@ class V3V4SourceRunner:
                 position_map=alignment.rendered_to_processed,
                 processed_ids=processed_ids,
             )
+        lat = None
+        if answer_field is not None and "lat" in self.save_hidden_state_positions:
+            lat_boundary = panl
+            if lat_boundary is None:
+                lat_boundary = locate_token_after_field(
+                    self.tokenizer,
+                    alignment.rendered_ids,
+                    answer_field[0],
+                    answer_field[1],
+                    name="lat_panl",
+                    position_map=alignment.rendered_to_processed,
+                    processed_ids=processed_ids,
+                )
+            lat = locate_last_answer_token(
+                self.tokenizer,
+                alignment.rendered_ids,
+                answer_field[0],
+                answer_field[1],
+                panl_position=int(lat_boundary["position"]),
+                name="lat",
+                position_map=alignment.rendered_to_processed,
+                processed_ids=processed_ids,
+            )
         hidden_positions = {
             target: dict(positions[target])
             for target in targets
@@ -477,6 +504,8 @@ class V3V4SourceRunner:
         }
         if panl is not None and "panl" in self.save_hidden_state_positions:
             hidden_positions["panl"] = dict(panl)
+        if lat is not None:
+            hidden_positions["lat"] = dict(lat)
         if capture_text_clue and any(
             name in self.save_hidden_state_positions for name in ("ltt", "ptnl")
         ):
@@ -488,6 +517,16 @@ class V3V4SourceRunner:
             for target in ("ltt", "ptnl"):
                 if target in self.save_hidden_state_positions:
                     hidden_positions[target] = text_positions[target]
+        if capture_post_image and "pit" in self.save_hidden_state_positions:
+            image_grid_thw = inputs.get("image_grid_thw")
+            if image_grid_thw is None:
+                raise ValueError("PIT capture requires image_grid_thw")
+            hidden_positions["pit"] = locate_post_image_token(
+                self.tokenizer,
+                self.processor,
+                alignment,
+                image_grid_thw,
+            )
         return {
             "name": name,
             "prompt": prompt,
@@ -495,6 +534,7 @@ class V3V4SourceRunner:
             "inputs": inputs,
             "positions": positions,
             "panl": panl,
+            "lat": lat,
             "hidden_positions": hidden_positions,
             "target_sources": target_sources,
         }
@@ -557,11 +597,13 @@ class V3V4SourceRunner:
         attention: dict[str, Any] = {}
         token_positions = {
             "ac": None,
+            "lat": None,
             "panl": None,
             "cc": None,
             "sac": None,
             "ltt": None,
             "ptnl": None,
+            "pit": None,
         }
         token_position_stages: dict[str, str] = {}
         token_position_records: dict[str, dict[str, Any]] = {}
@@ -612,6 +654,27 @@ class V3V4SourceRunner:
                 and generated_source is not None
                 and "class_probabilities" not in generated_source
             )
+            if self.skip_layer_readout and self.save_hidden_state:
+                hidden_only_positions = {
+                    name: int(detail["position"])
+                    for name, detail in stage["hidden_positions"].items()
+                }
+                if hidden_only_positions:
+                    forward = run_hooked_forward(
+                        self.inference.model,
+                        inputs,
+                        self.modules,
+                        hidden_only_positions,
+                        logits_positions=list(target_positions.values()),
+                    )
+                    reference_logits = forward.logits_by_position
+                    for layer_index in self.save_hidden_state:
+                        capture_target_layer_hidden_states(
+                            forward.hidden_by_name,
+                            layer_index,
+                            saved_hidden_states[layer_index],
+                            self.save_hidden_state_positions,
+                        )
             if not self.skip_layer_readout:
                 hooked_positions = dict(target_positions)
                 if self.save_hidden_state:
@@ -821,7 +884,7 @@ class V3V4SourceRunner:
                             validation_state=validation,
                         )
                     del reconstructed
-            elif needs_joint_source_score:
+            elif needs_joint_source_score and forward is None:
                 reference_logits = run_logits_forward(
                     self.inference.model,
                     inputs,
@@ -949,11 +1012,13 @@ class V3V4SourceRunner:
             ),
             "token_positions": {
                 "ac": None,
+                "lat": None,
                 "panl": None,
                 "cc": None,
                 "sac": None,
                 "ltt": None,
                 "ptnl": None,
+                "pit": None,
             },
             "token_position_stages": {},
             "token_position_records": {},
@@ -1170,7 +1235,9 @@ class V3V4SourceRunner:
                         targets=["ac", "sac"],
                         values=values,
                         panl_field=("**Answer**:", current_answer),
+                        answer_field=("**Answer**:", current_answer),
                         capture_text_clue=True,
+                        capture_post_image=True,
                     )
                 )
             else:
@@ -1180,7 +1247,12 @@ class V3V4SourceRunner:
                         prompt=answer_prompt,
                         assistant_text=(
                             f"{ASSISTANT_ANSWER_PREFILL} {current_answer}"
-                            + ("\n" if self.skip_confidence else "")
+                            + (
+                                "\n"
+                                if self.skip_confidence
+                                or "lat" in self.save_hidden_state_positions
+                                else ""
+                            )
                         ),
                         image_path=image_path,
                         version=version,
@@ -1191,7 +1263,9 @@ class V3V4SourceRunner:
                             if self.skip_confidence
                             else None
                         ),
+                        answer_field=("**Answer**:", current_answer),
                         capture_text_clue=True,
+                        capture_post_image=True,
                     )
                 )
                 if self.mode == "parallel":
@@ -1209,7 +1283,9 @@ class V3V4SourceRunner:
                             targets=["sac"],
                             values=values,
                             panl_field=None,
+                            answer_field=None,
                             capture_text_clue=False,
+                            capture_post_image=False,
                         )
                     )
             if not self.skip_confidence:
@@ -1231,7 +1307,9 @@ class V3V4SourceRunner:
                         targets=["cc"],
                         values=values,
                         panl_field=confidence_panl,
+                        answer_field=None,
                         capture_text_clue=False,
+                        capture_post_image=False,
                     )
                 )
 

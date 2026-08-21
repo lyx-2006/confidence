@@ -223,7 +223,15 @@ class HiddenStateStore:
 class TargetLayerHiddenStateStore:
     """Atomically store selected decoder layers' named position vectors."""
 
-    SUPPORTED_POSITION_NAMES = ("ac", "panl", "ltt", "ptnl", "sac")
+    SUPPORTED_POSITION_NAMES = (
+        "ac",
+        "lat",
+        "panl",
+        "ltt",
+        "ptnl",
+        "pit",
+        "sac",
+    )
     FORMAT_VERSION = 2
     HIDDEN_STATE_DEFINITION = "decoder_block_output_pre_final_norm"
 

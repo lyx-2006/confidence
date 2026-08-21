@@ -316,6 +316,67 @@ def locate_token_after_field(
     return record
 
 
+def locate_last_answer_token(
+    tokenizer: Any,
+    token_ids: list[int],
+    field_prefix: str,
+    value: str,
+    *,
+    panl_position: int,
+    separator: str = " ",
+    name: str = "lat",
+    position_map: dict[int, int] | None = None,
+    processed_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Locate the last answer token, shifting before PANL on token fusion."""
+
+    field = locate_field_value_span(
+        tokenizer,
+        token_ids,
+        field_prefix,
+        value,
+        separator=separator,
+        name=f"{name} answer field",
+        position_map=position_map,
+        processed_ids=processed_ids,
+    )
+    raw_position = int(field["span"][1]) - 1
+    position = raw_position
+    adjustment = None
+    if position == int(panl_position):
+        position = int(panl_position) - 1
+        adjustment = {
+            "type": "LATShiftedBeforePANL",
+            "reason": "last answer token is fused with the PANL token",
+            "original_position": raw_position,
+            "adjusted_position": position,
+            "panl_position": int(panl_position),
+        }
+    output_ids = processed_ids or token_ids
+    if position < 0 or position >= len(output_ids) or position >= int(panl_position):
+        raise ValueError(
+            f"{name} position {position} is invalid relative to PANL "
+            f"{panl_position}"
+        )
+    record = {
+        "position": position,
+        "token_id": int(output_ids[position]),
+        "token_text": tokenizer.decode(
+            [output_ids[position]],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        ),
+        "answer_span": list(field["span"]),
+        "preceding_field_span": list(field["field_span"]),
+        "panl_position": int(panl_position),
+        "validation_context": _token_context(tokenizer, output_ids, position),
+        "validation_status": "adjusted" if adjustment is not None else "passed",
+    }
+    if adjustment is not None:
+        record["position_adjustment"] = adjustment
+    return record
+
+
 def locate_image_pad_span(
     tokenizer: Any,
     processed_ids: list[int],
@@ -336,6 +397,39 @@ def locate_image_pad_span(
         "token_text": "<|image_pad|>",
         "validation_context": _token_context(tokenizer, processed_ids, positions[0], radius=2),
     }
+
+
+def locate_post_image_token(
+    tokenizer: Any,
+    processor: Any,
+    alignment: RenderedTokenAlignment,
+    image_grid_thw: Any,
+    *,
+    name: str = "pit",
+) -> dict[str, Any]:
+    """Return the first processed token after the complete vision span."""
+
+    image = locate_image_span(tokenizer, processor, alignment, image_grid_thw)
+    position = int(image["end_position"]) + 1
+    if position >= len(alignment.processed_ids):
+        raise ValueError(f"{name} has no token after the image span")
+    record = token_position_record(tokenizer, alignment, position)
+    record.update(
+        {
+            "image_span": [
+                int(image["start_position"]),
+                int(image["end_position"]),
+            ],
+            "image_token_span": [
+                int(image["image_token_start"]),
+                int(image["image_token_end"]),
+            ],
+            "image_token_count": int(image["image_token_count"]),
+            "definition": "complete_image_span_end_plus_one",
+            "validation_status": "passed",
+        }
+    )
+    return record
 
 
 def _token_context(tokenizer: Any, ids: list[int], position: int, radius: int = 8) -> str:

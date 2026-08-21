@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Iterable
 
 C_GRID = [0.01, 0.1, 1.0, 10.0]
-POSITION_NAMES = ("ac", "panl", "ltt", "ptnl", "sac")
+POSITION_NAMES = ("ac", "lat", "panl", "ltt", "ptnl", "pit", "sac")
 PROBE_CONDITIONS = (
     "consistent_easy",
     "consistent_hard",

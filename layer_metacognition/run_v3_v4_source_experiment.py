@@ -73,7 +73,15 @@ DEFAULT_DATASET_PATH = ROOT / "datasets" / "datasets.json"
 DEFAULT_OUTPUT_DIR = ROOT / "layer_metacognition" / "output" / "v3_v4_source"
 ATTRIBUTION_MODES = ("none", "parallel", "joint")
 ANALYSIS_MODE_ORDER = ("LMhead", "Identity", "Semantic")
-HIDDEN_STATE_POSITION_ORDER = ("ac", "panl", "ltt", "ptnl", "sac")
+HIDDEN_STATE_POSITION_ORDER = (
+    "ac",
+    "lat",
+    "panl",
+    "ltt",
+    "ptnl",
+    "pit",
+    "sac",
+)
 FORMAT_VERSION = 2
 
 
@@ -212,10 +220,7 @@ def validate_save_hidden_state(
 ) -> None:
     if not layer_indices:
         return
-    if skip_layer_readout:
-        raise ValueError(
-            "--save_hidden_state cannot be used with --skip-layer-readout"
-        )
+    del skip_layer_readout
     invalid = (
         []
         if num_hidden_layers is None
@@ -615,7 +620,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=["ac", "panl"],
         help=(
             "Hidden-state positions to save. Duplicates are removed and output "
-            "order is always ac, panl, ltt, ptnl, sac. (default: ac panl)"
+            "order is always ac, lat, panl, ltt, ptnl, pit, sac. "
+            "(default: ac panl)"
         ),
     )
     parser.add_argument("--max-answer-tokens", type=int, default=24)

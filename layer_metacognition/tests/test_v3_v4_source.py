@@ -115,7 +115,9 @@ from layer_metacognition.source_patchscope_prompts import (
 from layer_metacognition.token_positions import (
     encode_without_special_tokens,
     locate_field_value_span,
+    locate_last_answer_token,
     locate_marker_in_assistant,
+    locate_post_image_token,
     locate_text_clue_save_positions,
     unique_subsequence,
 )
@@ -164,6 +166,20 @@ class SimpleTokenizer:
     ) -> str:
         del skip_special_tokens, clean_up_tokenization_spaces
         return "".join(chr(value) for value in ids)
+
+
+class VisualTokenizer:
+    token_ids = {
+        "<|vision_start|>": 1,
+        "<|image_pad|>": 2,
+        "<|vision_end|>": 3,
+    }
+
+    def convert_tokens_to_ids(self, token: str) -> int:
+        return self.token_ids[token]
+
+    def decode(self, ids, **_kwargs) -> str:
+        return "".join({1: "<vs>", 2: "<image>", 3: "<ve>", 4: " first"}.get(int(value), "?") for value in ids)
 
 
 class SourceSchemaTests(unittest.TestCase):
@@ -673,6 +689,65 @@ class RealQwenTokenizerTests(unittest.TestCase):
 
 
 class TokenAndAttentionTests(unittest.TestCase):
+    def test_lat_is_last_answer_token(self) -> None:
+        tokenizer = SimpleTokenizer()
+        rendered = "Prompt\n**Answer**: blue\n**Source Attribution**:6"
+        ids = tokenizer.encode(rendered)
+        panl = rendered.index("\n", rendered.index("**Answer**:"))
+        located = locate_last_answer_token(
+            tokenizer,
+            ids,
+            "**Answer**:",
+            "blue",
+            panl_position=panl,
+        )
+        self.assertEqual(located["token_text"], "e")
+        self.assertEqual(located["position"], panl - 1)
+        self.assertEqual(located["validation_status"], "passed")
+
+    def test_lat_collision_shifts_before_panl(self) -> None:
+        tokenizer = SimpleTokenizer()
+        ids = tokenizer.encode("abcdefghi")
+        with patch(
+            "layer_metacognition.token_positions.locate_field_value_span",
+            return_value={"span": [4, 7], "field_span": [0, 7]},
+        ):
+            located = locate_last_answer_token(
+                tokenizer,
+                ids,
+                "**Answer**:",
+                "x",
+                panl_position=6,
+            )
+        self.assertEqual(located["position"], 5)
+        self.assertEqual(located["validation_status"], "adjusted")
+        self.assertEqual(
+            located["position_adjustment"]["type"],
+            "LATShiftedBeforePANL",
+        )
+
+    def test_pit_is_first_token_after_vision_end(self) -> None:
+        tokenizer = VisualTokenizer()
+        alignment = RenderedTokenAlignment(
+            rendered="",
+            rendered_ids=[],
+            processed_ids=[1, 2, 2, 3, 4],
+            offsets=[],
+            rendered_to_processed={},
+        )
+        processor = SimpleNamespace(
+            image_processor=SimpleNamespace(merge_size=2)
+        )
+        located = locate_post_image_token(
+            tokenizer,
+            processor,
+            alignment,
+            torch.tensor([[1, 2, 4]]),
+        )
+        self.assertEqual(located["position"], 4)
+        self.assertEqual(located["token_text"], " first")
+        self.assertEqual(located["image_span"], [0, 3])
+
     def test_ltt_and_ptnl_use_character_alignment_and_keep_punctuation(self) -> None:
         tokenizer = SimpleTokenizer()
         rendered = "Question:\nQ\n\nText clue:\nClue?   \n\nNext section"
@@ -1009,11 +1084,10 @@ class PersistenceAndResumeTests(unittest.TestCase):
             "non-negative integer",
         ):
             parse_save_hidden_state("last")
-        with self.assertRaisesRegex(ValueError, "skip-layer-readout"):
-            validate_save_hidden_state(
-                (23,),
-                skip_layer_readout=True,
-            )
+        validate_save_hidden_state(
+            (23,),
+            skip_layer_readout=True,
+        )
         with self.assertRaises(SystemExit):
             run_source_experiment(
                 [
@@ -1461,18 +1535,18 @@ class PersistenceAndResumeTests(unittest.TestCase):
             )
             self.assertEqual(payload["dtype"], "float16")
 
-    def test_five_position_store_round_trip_and_schema_guard(self) -> None:
+    def test_seven_position_store_round_trip_and_schema_guard(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)
             results_path = output_dir / "results.jsonl"
-            names = ["ac", "panl", "ltt", "ptnl", "sac"]
+            names = ["ac", "lat", "panl", "ltt", "ptnl", "pit", "sac"]
             store = TargetLayerHiddenStateStore(
                 output_dir,
                 layer_index=7,
                 position_names=names,
                 shard_size=1,
             )
-            tensor = torch.arange(15, dtype=torch.float32).reshape(5, 3)
+            tensor = torch.arange(21, dtype=torch.float32).reshape(7, 3)
             result = {"case_id": "all", "status": "completed"}
             store.add(
                 "all",
@@ -1558,6 +1632,60 @@ class PersistenceAndResumeTests(unittest.TestCase):
             ["ltt"],
         )
         self.assertEqual(set(selected), {"ltt"})
+
+    def test_skip_layer_readout_still_captures_requested_hidden_states(self) -> None:
+        runner = object.__new__(V3V4SourceRunner)
+        runner.answer_val = False
+        runner.save_hidden_state = [0]
+        runner.save_hidden_state_positions = [
+            "ac", "lat", "panl", "ltt", "ptnl", "pit", "sac"
+        ]
+        runner.skip_layer_readout = True
+        runner.skip_attention = True
+        runner.tokenizer = SimpleTokenizer()
+        runner.inference = SimpleNamespace(model=object())
+        runner.modules = SimpleNamespace()
+        runner.source_analyzer = SimpleNamespace()
+        stage = {
+            "name": "joint_answer_source",
+            "inputs": {"input_ids": torch.tensor([[1, 2, 3]])},
+            "positions": {"ac": {"position": 1}, "sac": {"position": 2}},
+            "panl": {"position": 3},
+            "hidden_positions": {
+                name: {"position": index}
+                for index, name in enumerate(runner.save_hidden_state_positions)
+            },
+            "target_sources": {},
+        }
+        hidden = {
+            name: {0: torch.tensor([float(index), float(index + 1)])}
+            for index, name in enumerate(runner.save_hidden_state_positions)
+        }
+        forward = SimpleNamespace(
+            hidden_by_name=hidden,
+            logits_by_position={1: torch.zeros(3), 2: torch.zeros(3)},
+        )
+        with patch(
+            "layer_metacognition.v3_v4_source_runner.build_first_token_collision_report",
+            return_value={
+                "collisions": [],
+                "labels": {"red": {"first_token_variants": [1]}},
+            },
+        ), patch(
+            "layer_metacognition.v3_v4_source_runner.run_hooked_forward",
+            return_value=forward,
+        ) as hooked:
+            result = runner._analyze_stages(
+                stages=[stage],
+                answer_classes=["red"],
+                case=SimpleNamespace(),
+                current_answer="red",
+                generated_source={"class_probabilities": [1.0]},
+            )
+        hooked.assert_called_once()
+        stored = result[-1]
+        self.assertEqual(tuple(stored.shape), (7, 2))
+        self.assertTrue(torch.equal(stored[1], torch.tensor([1.0, 2.0]).half()))
 
     def test_resume_rejects_legacy_format_and_accepts_current_format(self) -> None:
         with self.assertRaisesRegex(
