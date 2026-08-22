@@ -60,6 +60,7 @@ from .token_positions import (
     locate_marker_in_assistant,
     locate_post_image_token,
     locate_text_clue_save_positions,
+    locate_answer_panl_position,
     locate_token_after_field,
 )
 from .token_spans import build_rendered_alignment
@@ -465,7 +466,7 @@ class V3V4SourceRunner:
             }
         panl = None
         if panl_field is not None:
-            panl = locate_token_after_field(
+            panl = locate_answer_panl_position(
                 self.tokenizer,
                 alignment.rendered_ids,
                 panl_field[0],

@@ -1,5 +1,93 @@
 # Layer Metacognition 参数列表
 
+## Conflict-only No-SA early-signal Probe
+
+该实验只保存和分析 `conflict_easy`、`conflict_hard`。joint V4
+`answer_basis_9` 只提供最终 SA target；feature 完全来自 V4 `none/baseline`
+answer-only hidden-state shards。no-SA prompt 和 assistant wire 不包含 Source
+Attribution，SAC 不是本实验位置。
+
+先做少量真实模型 PANL 预检（这里使用 2 个 item、L27）：
+
+```bash
+cd /root/autodl-tmp
+python -u -m layer_metacognition.run_v3_v4_source_experiment \
+  --output-dir layer_metacognition/output/Final_v4_run_no_sa_preflight \
+  --versions v4 \
+  --attribution-mode none \
+  --source-prompt-variant baseline \
+  --conditions conflict_easy conflict_hard \
+  --analysis_mode LMhead \
+  --skip-attention --skip-layer-readout --skip_confidence \
+  --max-items 2 \
+  --save_hidden_state 27 \
+  --save_hidden_state_positions ptnl pit ac lat panl
+python -u -m layer_metacognition.probe_sa_no_prompt.panl_preflight \
+  --experiment-dir layer_metacognition/output/Final_v4_run_no_sa_preflight/baseline \
+  --layers 27 --expected-items 2
+```
+
+PANL 必须是 Answer 后的 newline-bearing token；如果 tokenizer 将答案末 token
+与换行融合，locator 会记录 fusion 并把 LAT 放到 PANL 之前。预检失败时不能用
+EOS、SAC 或其他位置替代，需先修复 locator 并重新预检。
+
+正式 no-SA capture：
+
+```bash
+python -u -m layer_metacognition.run_v3_v4_source_experiment \
+  --output-dir layer_metacognition/output/Final_v4_run_no_sa \
+  --versions v4 --attribution-mode none --source-prompt-variant baseline \
+  --conditions conflict_easy conflict_hard --analysis_mode LMhead \
+  --skip-attention --skip-layer-readout --skip_confidence \
+  --save_hidden_state 10 12 14 16 18 20 22 24 26 27 \
+  --save_hidden_state_positions ptnl pit ac lat panl
+```
+
+Probe smoke：
+
+```bash
+python -u -m layer_metacognition.probe_sa_no_prompt.run_no_sa_prediction_probe \
+  --joint-experiment-dir layer_metacognition/output/Final_v4_run_sa_prediction/answer_basis_9 \
+  --no-sa-experiment-dir layer_metacognition/output/Final_v4_run_no_sa/baseline \
+  --split-assignments layer_metacognition/output/Final_v4_run_sa_prediction/answer_basis_9/stage_sa_prediction_probe/split_assignments.json \
+  --output-dir layer_metacognition/output/Final_v4_run_no_sa/baseline/stage_no_sa_prediction_probe_smoke \
+  --layers 10 --positions ac --max-samples 25 --bootstrap-repeats 100 --device auto
+```
+
+正式 Probe：
+
+```bash
+python -u -m layer_metacognition.probe_sa_no_prompt.run_no_sa_prediction_probe \
+  --joint-experiment-dir layer_metacognition/output/Final_v4_run_sa_prediction/answer_basis_9 \
+  --no-sa-experiment-dir layer_metacognition/output/Final_v4_run_no_sa/baseline \
+  --split-assignments layer_metacognition/output/Final_v4_run_sa_prediction/answer_basis_9/stage_sa_prediction_probe/split_assignments.json \
+  --output-dir layer_metacognition/output/Final_v4_run_no_sa/baseline/stage_no_sa_prediction_probe \
+  --device auto
+```
+
+Hard 主指标是 pooled OOF accuracy；训练仍使用 class-balanced logistic
+regression。Hard onset 比较 Probe accuracy 与 outer-train 多数类 OOF baseline，要求
+accuracy 差值的 bootstrap 95% CI 下界连续两层大于 0。Soft 主指标是 Spearman。
+所有 bootstrap 以 `item_id` 为抽样单位；balanced accuracy 保留为诊断指标。
+
+测试：
+
+```bash
+python -m pytest -q layer_metacognition/tests/test_no_sa_prediction_probe.py
+```
+
+正式实验的 nohup 串行脚本会先验证 PANL preflight，再顺序运行 conflict-only
+capture、smoke Probe 和正式 Probe；上一阶段非零退出或产物状态异常时停止。可用：
+
+```bash
+setsid nohup bash layer_metacognition/probe_sa_no_prompt/run_conflict_only_pipeline.sh \
+  > layer_metacognition/output/Final_v4_run_no_sa/nohup.launch.log 2>&1 &
+```
+
+恢复时追加 `--resume` 的等价命令必须保持所有 immutable 参数、输入 fingerprint
+和 split assignment 不变。阳性结果只表示 no-SA hidden state 已含与最终 SA 相关的
+可线性解码信息，不表示该位置因果决定或完成形成 SA。
+
 ## `run_main_experiment.py`
 
 | 参数 | 类型 | 默认值 | 可选值或格式 | 作用 |

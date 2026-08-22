@@ -316,6 +316,70 @@ def locate_token_after_field(
     return record
 
 
+def locate_answer_panl_position(
+    tokenizer: Any,
+    token_ids: list[int],
+    field_prefix: str,
+    value: str,
+    *,
+    separator: str = " ",
+    name: str = "panl",
+    position_map: dict[int, int] | None = None,
+    processed_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Locate the answer-following newline, including answer/newline fusion.
+
+    Some tokenizers encode the final answer characters and the following newline
+    as one token.  In that case the fused token is the only truthful PANL
+    representation; LAT is shifted before it by ``locate_last_answer_token``.
+    """
+
+    field = locate_field_value_span(
+        tokenizer,
+        token_ids,
+        field_prefix,
+        value,
+        separator=separator,
+        name=f"{name} preceding field",
+        position_map=position_map,
+        processed_ids=processed_ids,
+    )
+    output_ids = processed_ids or token_ids
+    mapping = position_map or {index: index for index in range(len(token_ids))}
+    candidates: list[int] = []
+    following = field.get("following_token_position")
+    if following is not None:
+        candidates.append(int(following))
+    # The final value token may itself contain the newline (BPE fusion).
+    if field.get("span"):
+        candidates.append(int(field["span"][-1]) - 1)
+    for position in candidates:
+        if position < 0 or position >= len(output_ids):
+            continue
+        token_text = tokenizer.decode(
+            [output_ids[position]],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        )
+        if "\n" not in token_text:
+            continue
+        record = {
+            "position": position,
+            "token_id": int(output_ids[position]),
+            "token_text": token_text,
+            "preceding_field_span": list(field["field_span"]),
+            "validation_context": _token_context(tokenizer, output_ids, position),
+            "validation_status": "fused" if position == int(field["span"][-1]) - 1 and following != position else "passed",
+        }
+        if record["validation_status"] == "fused":
+            record["position_adjustment"] = {
+                "type": "PANLFusedWithAnswer",
+                "reason": "answer-final token contains the following newline",
+            }
+        return record
+    raise ValueError(f"{name} token after answer is not a newline, including fused-token fallback: {field}")
+
+
 def locate_last_answer_token(
     tokenizer: Any,
     token_ids: list[int],
