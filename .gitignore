@@ -70,3 +70,9 @@ layer_metacognition/output/Final_v4_run_sa_prediction
 layer_metacognition/output/Final_v4_run_no_sa
 
 dp_SA/outputs
+
+dp_SA/attention_block/outputs
+
+dp_SA/attention_block/minimal_prompt_check/outputs
+
+dp_SA/patching/outputs
