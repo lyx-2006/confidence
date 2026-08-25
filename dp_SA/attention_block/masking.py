@@ -174,4 +174,9 @@ class AttentionBlockContext:
         missing = sorted(set(self.layer_indices) - set(self._diagnostics)) if self.validate_weights else []
         if missing:
             raise RuntimeError(f"Missing attention diagnostics for layers: {missing}")
+        repeated = {layer: self._calls[layer] for layer in self.layer_indices if self._calls[layer] != 1}
+        if repeated:
+            raise RuntimeError(f"Attention hook must be hit exactly once per layer: {repeated}")
+        for layer in self.layer_indices:
+            self._diagnostics[layer]["hook_call_count"] = self._calls[layer]
         return {"layers": list(self.layer_indices), "by_layer": {str(k): v for k, v in self._diagnostics.items()}}

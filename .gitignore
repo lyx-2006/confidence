@@ -76,3 +76,9 @@ dp_SA/attention_block/outputs
 dp_SA/attention_block/minimal_prompt_check/outputs
 
 dp_SA/patching/outputs
+
+dp_SA/attention_block/delayed_sac_source_block/outputs
+
+dp_SA/attention_block/direct_panl_bridge/outputs
+
+dp_SA/attention_block/staged_panl_bridge/outputs
