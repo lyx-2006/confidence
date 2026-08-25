@@ -82,3 +82,5 @@ dp_SA/attention_block/delayed_sac_source_block/outputs
 dp_SA/attention_block/direct_panl_bridge/outputs
 
 dp_SA/attention_block/staged_panl_bridge/outputs
+
+dp_SA/activation_swap/outputs
