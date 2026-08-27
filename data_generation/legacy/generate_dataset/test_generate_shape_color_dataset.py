@@ -14,7 +14,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]  # data_generation/legacy/generate_dataset -> repo root
 SCRIPT = Path(__file__).with_name("generate_shape_color_dataset.py")
 SPEC = importlib.util.spec_from_file_location("generate_shape_color_dataset", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None

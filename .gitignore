@@ -34,7 +34,7 @@ confidence_test/output
 output.log
 
 # Large generated files
-generate color pool/output/color_prior_prompt_history.json
+data_generation/legacy/generate_color_pool/output/color_prior_prompt_history.json
 
 layer_metacognition/output/v3_v4_all
 
@@ -57,7 +57,7 @@ layer_metacognition/output/revised_datasets
 layer_metacognition/output/revised_prompt
 
 # Generated datasets (kept locally, excluded from git)
-generate dataset/datasets/
+data_generation/legacy/generate_dataset/datasets/
 
 layer_metacognition/output/Final_v4_1
 

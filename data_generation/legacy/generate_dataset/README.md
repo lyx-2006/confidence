@@ -187,3 +187,21 @@ build_manifest()
 父进程收到同一 item 的两个 branch 结果后:
   └── 按 manifest 顺序原子写入 output dataset
 ```
+
+## V2 入口与输出
+
+本脚本不传 `--recreate`/`--legacy`/`--dry-run` 时即走 V2 图像 producer
+（`_run_v2_cli`），默认输出到 `generation_v2_outputs/formal/image/`；旧目录
+只读且不会被覆盖。V2 默认 `--branches conflict`，可显式启用
+`conflict,consistent`；每个 difficulty 由 `--images-per-difficulty`（1–32）
+及 conflict easy/hard 覆盖控制，hard 数量不能大于 easy。每个分支的 easy/hard
+均为 variant 数组，artifact 文件名为 `{id}_{branch}_{difficulty}({variant_index}).*`。
+
+图像 producer 默认保持 `--workers`（1–64，默认 16）个分支 worker 进程并行，
+每个进程负责一个 manifest item 的 easy→hard；与文本颜色池入口共用
+`generation_runtime.py` 的 Qwen batch 运行时——所有生成进程通过持久化队列
+共享父进程中唯一的 Qwen 实例，scheduler 任意时刻只执行一个 batch。
+DINOv2 默认要求本地 `--similarity-model-path`，只有显式
+`--download-similarity-model` 才下载到隔离目录。`--resume` 会校验完整配置；
+旧 split/refine/recreate 工具遇到 `shape_color_dataset.v2` 会直接报 schema guard
+错误。

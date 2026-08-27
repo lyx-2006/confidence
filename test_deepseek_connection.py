@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
-MODEL = "glm5.2"
+MODEL = "deepseek-v4-flash-aistar"
 
 
 def _load_config() -> dict:

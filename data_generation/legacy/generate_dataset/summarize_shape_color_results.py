@@ -16,19 +16,25 @@ def _compact_calibration(calibration: dict[str, Any]) -> dict[str, Any]:
     for run in calibration.get("runs", []):
         runs.append(
             {
-                "answer": run.get("top1_answer"),
+                "answer": run.get("top1_answer", run.get("normalized_answer", run.get("answer"))),
                 "ground_truth_answer": run.get("ground_truth_answer"),
                 "entropy": run.get("entropy"),
+                "raw_entropy": run.get("raw_entropy", run.get("raw_answer_entropy")),
+                "entropy_score": run.get("entropy_score"),
                 "normalized_entropy": run.get("normalized_entropy"),
+                "restricted_top1": run.get("restricted_top1"),
                 "parse_success": run.get("parse_success"),
                 "error": run.get("error"),
             }
         )
-    return {
-        "answer": calibration.get("top1_answer"),
+    result = {
+        "answer": calibration.get("top1_answer", calibration.get("normalized_answer", calibration.get("answer"))),
         "ground_truth_answer": calibration.get("ground_truth_answer"),
         "entropy": calibration.get("entropy"),
+        "raw_entropy": calibration.get("raw_entropy", calibration.get("raw_answer_entropy")),
+        "entropy_score": calibration.get("entropy_score"),
         "normalized_entropy": calibration.get("normalized_entropy"),
+        "restricted_top1": calibration.get("restricted_top1"),
         "correct_count": calibration.get("correct_count"),
         "all_correct": calibration.get("all_correct"),
         "parse_success": calibration.get("parse_success"),
@@ -36,10 +42,36 @@ def _compact_calibration(calibration: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_summary(dataset: list[dict[str, Any]], source: str) -> dict[str, Any]:
-    if len(dataset) != 1 or not isinstance(dataset[0], dict):
-        raise ValueError("dataset must contain one category object")
-    items = dataset[0].get("items")
+def _compact_v2_variant(variant: dict[str, Any]) -> dict[str, Any]:
+    calibration = variant.get("calibration")
+    value = {
+        "variant_index": variant.get("variant_index", 1),
+        "image": variant.get("image"),
+        "layout": variant.get("layout"),
+        "target_mask": variant.get("target_mask"),
+        "occluder_mask": variant.get("occluder_mask"),
+        "seed": variant.get("seed"),
+        "rotation": variant.get("rotation"),
+        "artifact_sha256": variant.get("artifact_sha256"),
+        "similarity_check": variant.get("similarity_check"),
+    }
+    if isinstance(calibration, dict):
+        value.update(_compact_calibration(calibration))
+    if isinstance(variant.get("entropy_check"), dict):
+        value["entropy_check"] = variant["entropy_check"]
+    return value
+
+
+def build_summary(dataset: Any, source: str) -> dict[str, Any]:
+    is_v2 = isinstance(dataset, dict) and dataset.get("schema_version") == "shape_color_dataset.v2"
+    if is_v2:
+        items = dataset.get("items")
+        category = dataset.get("category", "colour")
+    elif isinstance(dataset, list) and len(dataset) == 1 and isinstance(dataset[0], dict):
+        items = dataset[0].get("items")
+        category = dataset[0].get("category", "colour")
+    else:
+        raise ValueError("dataset must contain one category object or a shape_color_dataset.v2 object")
     if not isinstance(items, list):
         raise ValueError("dataset category has no items list")
 
@@ -49,21 +81,21 @@ def build_summary(dataset: list[dict[str, Any]], source: str) -> dict[str, Any]:
         if not isinstance(clues, dict):
             raise ValueError(f"item {item.get('id')} has no image_clue object")
         groups: dict[str, Any] = {}
-        for branch in ("consistent", "conflict"):
+        branches = tuple(dataset.get("branches", ("consistent", "conflict"))) if is_v2 else ("consistent", "conflict")
+        for branch in branches:
             branch_data = clues.get(branch)
             if not isinstance(branch_data, dict):
-                raise ValueError(f"item {item.get('id')} is missing {branch} branch")
+                continue
             for difficulty in ("easy", "hard"):
+                raw = branch_data.get(difficulty)
+                if is_v2 and isinstance(raw, list):
+                    groups[f"{branch}_{difficulty}"] = [_compact_v2_variant(value) for value in raw if isinstance(value, dict)]
+                    continue
                 calibration = branch_data.get(f"{difficulty}_calibration")
-                image = branch_data.get(difficulty)
+                image = raw
                 if not isinstance(calibration, dict) or not isinstance(image, str):
-                    raise ValueError(
-                        f"item {item.get('id')} is missing {branch}/{difficulty} result"
-                    )
-                groups[f"{branch}_{difficulty}"] = {
-                    "image": image,
-                    **_compact_calibration(calibration),
-                }
+                    raise ValueError(f"item {item.get('id')} is missing {branch}/{difficulty} result")
+                groups[f"{branch}_{difficulty}"] = {"image": image, **_compact_calibration(calibration)}
         question = item.get("question")
         if isinstance(question, dict):
             question = question.get("text", question)
@@ -72,7 +104,7 @@ def build_summary(dataset: list[dict[str, Any]], source: str) -> dict[str, Any]:
                 "id": item.get("id"),
                 "question": question,
                 "answer": item.get("answer"),
-                "conflict_answer": item.get("conflict_ans"),
+                "conflict_answer": item.get("conflict_ans", item.get("conflict_answer")),
                 "groups": groups,
             }
         )
@@ -80,9 +112,16 @@ def build_summary(dataset: list[dict[str, Any]], source: str) -> dict[str, Any]:
         "source_dataset": source,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "item_count": len(result_items),
-        "group_count": len(result_items) * 4,
+        "group_count": sum(
+            len(value) if isinstance(value, list) else 1
+            for item in result_items for value in item.get("groups", {}).values()
+        ),
+        "category": category,
         "items": result_items,
     }
+    if is_v2:
+        result["schema_version"] = "shape_color_dataset.summary.v2"
+    return result
 
 
 def main() -> None:

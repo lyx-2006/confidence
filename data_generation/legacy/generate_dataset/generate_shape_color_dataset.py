@@ -39,7 +39,7 @@ from typing import Any, Iterable, Sequence
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[3]  # data_generation/legacy/generate_dataset -> repo root
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -1493,7 +1493,7 @@ class DeepSeekAgents:
         base_url = str(config.get("base_url", ""))
         if not self.api_key or not base_url:
             raise RuntimeError("api_config.json must contain api_key and base_url")
-        self.client = OpenAI(api_key=self.api_key, base_url=base_url, timeout=120.0, max_retries=0)
+        self.client = OpenAI(api_key=self.api_key, base_url=base_url, timeout=150.0, max_retries=0)
 
     def call(
         self,
@@ -3262,6 +3262,8 @@ class RecreateDatasetGenerator:
     def _validate_summary_dataset(payload: Any, name: str) -> None:
         if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
             raise ValueError(f"{name} recreate dataset must be an object with an items array")
+        if str(payload.get("schema_version", "")).startswith("shape_color_dataset."):
+            raise ValueError("Legacy split/refine/recreate tools cannot process shape_color_dataset.v2")
         ids = [str(item.get("id")) for item in payload["items"] if isinstance(item, dict)]
         if len(ids) != len(payload["items"]) or len(ids) != len(set(ids)):
             raise ValueError(f"{name} recreate dataset item IDs must be present and unique")
@@ -3749,14 +3751,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate a resumable standalone shape × text-colour image dataset"
     )
-    parser.add_argument("--input-dataset", default="datasets/dataset_test.json")
-    parser.add_argument("--prior-pool", default="datasets/color_prior_pool.json")
-    parser.add_argument("--output-dataset", default="generate dataset/datasets/generated_shape_color_dataset.json")
-    parser.add_argument("--image-dir", default="generate dataset/datasets/generated_shape_color_images")
+    parser.add_argument("--input-dataset", default=str(ROOT_DIR / "datasets/dataset_test.json"))
+    parser.add_argument("--prior-pool", default=str(ROOT_DIR / "datasets/color_prior_pool.json"))
+    parser.add_argument("--output-dataset", default=str(ROOT_DIR / "generation_v2_outputs/formal/image/shape_color_dataset.json"))
+    parser.add_argument("--image-dir", default=str(ROOT_DIR / "generation_v2_outputs/formal/image/images"))
     parser.add_argument(
         "--model-path",
-        default="qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct",
+        default=str(ROOT_DIR / "qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct"),
     )
+    parser.add_argument("--api-config-path", default=str(ROOT_DIR / "api_config.json"))
     parser.add_argument("--seed", type=int)
     parser.add_argument(
         "--workers", "--processes",
@@ -3788,6 +3791,27 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run one real temporary DeepSeek + Qwen smoke case without persisting outputs",
     )
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Use the legacy confidence/prior-pool generator instead of the V2 image producer",
+    )
+    parser.add_argument("--branches", default="conflict", help="V2 branches: conflict or conflict,consistent")
+    parser.add_argument("--images-per-difficulty", type=int, default=1)
+    parser.add_argument("--conflict-easy-count", type=int)
+    parser.add_argument("--conflict-hard-count", type=int)
+    parser.add_argument("--target-rotation-mode", choices=("safe", "range", "none"), default="safe")
+    parser.add_argument("--target-rotation-min", type=float, default=-30.0)
+    parser.add_argument("--target-rotation-max", type=float, default=30.0)
+    parser.add_argument("--distractor-rotation-min", type=float, default=0.0)
+    parser.add_argument("--distractor-rotation-max", type=float, default=360.0)
+    parser.add_argument("--similarity-model-path")
+    parser.add_argument("--download-similarity-model", action="store_true")
+    parser.add_argument("--old-image-dataset", default=str(ROOT_DIR / "generate dataset/datasets/generated_shape_color_dataset.json"))
+    parser.add_argument("--old-image-root", default=str(ROOT_DIR / "generate dataset/datasets/generated_shape_color_images"))
+    parser.add_argument("--qwen-batch-size", type=int, default=8)
+    parser.add_argument("--qwen-batch-wait-ms", type=int, default=500)
+    parser.add_argument("--qwen-wait-timeout", type=float, default=86400.0)
     args = parser.parse_args(argv)
     if args.seed is not None and args.seed < 0:
         parser.error("--seed must be non-negative")
@@ -3799,14 +3823,152 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--resume and --dry-run cannot be combined")
     if args.recreate and args.dry_run:
         parser.error("--recreate and --dry-run cannot be combined")
+    branches = [part.strip().casefold() for part in str(args.branches).split(",") if part.strip()]
+    if branches not in (["conflict"], ["conflict", "consistent"]):
+        parser.error("--branches must be conflict or conflict,consistent")
+    args.branches = branches
+    if not 1 <= args.images_per_difficulty <= 32:
+        parser.error("--images-per-difficulty must be between 1 and 32")
+    for name in ("conflict_easy_count", "conflict_hard_count"):
+        value = getattr(args, name)
+        if value is not None and not 1 <= value <= 32:
+            parser.error(f"--{name.replace('_', '-')} must be between 1 and 32")
+    easy = args.conflict_easy_count or args.images_per_difficulty
+    hard = args.conflict_hard_count or args.images_per_difficulty
+    if hard > easy:
+        parser.error("conflict hard count cannot exceed conflict easy count")
+    if args.target_rotation_min > args.target_rotation_max:
+        parser.error("target rotation min cannot exceed max")
+    if args.distractor_rotation_min > args.distractor_rotation_max:
+        parser.error("distractor rotation min cannot exceed max")
+    if not 1 <= args.qwen_batch_size <= 64 or args.qwen_batch_wait_ms < 0:
+        parser.error("invalid Qwen batch size/wait")
+    if args.qwen_wait_timeout <= 0:
+        parser.error("--qwen-wait-timeout must be positive")
     return args
+
+
+def _resolve_similarity_model(args: argparse.Namespace, run_root: Path) -> Path | None:
+    """Resolve the DINOv2 model path (inlined from the removed joint pipeline)."""
+    skip_validation = bool(getattr(args, "skip_similarity_validation", False))
+    selected_modes = sum(
+        bool(value)
+        for value in (
+            args.similarity_model_path,
+            args.download_similarity_model,
+            skip_validation,
+        )
+    )
+    if selected_modes > 1:
+        raise ValueError(
+            "--similarity-model-path, --download-similarity-model, and "
+            "--skip-similarity-validation are mutually exclusive"
+        )
+    if skip_validation:
+        return None
+    if args.download_similarity_model:
+        try:
+            from huggingface_hub import snapshot_download
+        except ImportError as exc:
+            raise RuntimeError("--download-similarity-model requires huggingface_hub") from exc
+        destination = ROOT_DIR / "generation_v2_outputs" / "models" / "facebook-dinov2-base"
+        destination.mkdir(parents=True, exist_ok=True)
+        try:
+            revision = snapshot_download("facebook/dinov2-base", local_dir=str(destination), local_dir_use_symlinks=False)
+        except TypeError:
+            revision = snapshot_download("facebook/dinov2-base", local_dir=str(destination))
+        if revision:
+            (destination / "v2_revision.txt").write_text(str(revision), encoding="utf-8")
+        return destination.resolve()
+    if args.similarity_model_path is None:
+        raise ValueError(
+            "Provide --similarity-model-path, explicitly enable --download-similarity-model, "
+            "or explicitly enable --skip-similarity-validation"
+        )
+    path = args.similarity_model_path.expanduser().resolve()
+    if not path.is_dir():
+        raise FileNotFoundError(f"DINOv2 model path does not exist: {path}")
+    return path
+
+
+def _run_v2_cli(args: argparse.Namespace) -> None:
+    """Run the isolated V2 image producer while keeping legacy classes intact."""
+    from generation_runtime import PersistentQwenQueue, QwenBatchScheduler, ensure_isolated_root
+    from generation_v2 import ImageDatasetV2Producer
+
+    output_path = Path(args.output_dataset).expanduser().resolve()
+    image_dir = Path(args.image_dir).expanduser().resolve()
+    run_root = output_path.parent.parent
+    ensure_isolated_root(
+        run_root,
+        (
+            ROOT_DIR / "datasets",
+            ROOT_DIR / "data_generation" / "legacy" / "generate_color_pool" / "output",
+            ROOT_DIR / "data_generation" / "legacy" / "generate_dataset" / "datasets",
+        ),
+    )
+    formal_root = ROOT_DIR / "generation_v2_outputs" / "formal"
+    if run_root == formal_root and run_root.exists() and any(run_root.iterdir()) and not args.resume and not args.dry_run:
+        raise ValueError(f"V2 output root already contains files; use --resume: {run_root}")
+    run_root.mkdir(parents=True, exist_ok=True)
+    if args.download_similarity_model:
+        model_path = _resolve_similarity_model(
+            argparse.Namespace(similarity_model_path=None, download_similarity_model=True), run_root
+        )
+    elif args.similarity_model_path:
+        model_path = Path(args.similarity_model_path).expanduser().resolve()
+    else:
+        raise ValueError("Provide --similarity-model-path or explicitly enable --download-similarity-model")
+    runtime_dir = run_root / "runtime"
+    queue = PersistentQwenQueue(runtime_dir / "qwen_jobs.json")
+    from confidence_test.inference_extension import ExtendedQwenVLInference
+    inference = ExtendedQwenVLInference(model_path=str(Path(args.model_path).expanduser().resolve()))
+    stop = threading.Event()
+    scheduler_errors: list[BaseException] = []
+
+    def consume() -> None:
+        try:
+            QwenBatchScheduler(queue, inference, args.qwen_batch_size, args.qwen_batch_wait_ms).run(stop)
+        except BaseException as exc:
+            queue.fail_unfinished({"type": type(exc).__name__, "message": str(exc)})
+            scheduler_errors.append(exc)
+
+    scheduler = threading.Thread(target=consume, name="qwen-v2-image-scheduler", daemon=True)
+    scheduler.start()
+    try:
+        producer = ImageDatasetV2Producer(
+            input_path=Path(args.input_dataset), output_path=output_path, image_dir=image_dir,
+            state_path=output_path.with_suffix(".state.json"), queue=queue,
+            api_config_path=Path(args.api_config_path), old_image_dataset=Path(args.old_image_dataset),
+            old_image_root=Path(args.old_image_root), similarity_model_path=model_path,
+            similarity_cache=runtime_dir / "dinov2_embeddings.pt", branches=args.branches,
+            seed=args.seed if args.seed is not None else 42,
+            images_per_difficulty=args.images_per_difficulty,
+            conflict_easy_count=args.conflict_easy_count, conflict_hard_count=args.conflict_hard_count,
+            target_rotation_mode=args.target_rotation_mode, target_rotation_min=args.target_rotation_min,
+            target_rotation_max=args.target_rotation_max,
+            distractor_rotation_min=args.distractor_rotation_min,
+            distractor_rotation_max=args.distractor_rotation_max, qwen_timeout=args.qwen_wait_timeout,
+        )
+        producer.run()
+    finally:
+        stop.set()
+        scheduler.join(timeout=120)
+        if scheduler.is_alive():
+            queue.fail_unfinished({"type": "SchedulerShutdown", "message": "scheduler did not stop"})
+            raise RuntimeError("Qwen scheduler did not stop")
+    if scheduler_errors:
+        raise RuntimeError(f"Qwen scheduler failed: {scheduler_errors[0]}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        generator = RecreateDatasetGenerator(args) if args.recreate else DatasetGenerator(args)
-        generator.run()
+        if args.recreate or args.legacy or args.dry_run:
+            generator = RecreateDatasetGenerator(args) if args.recreate else DatasetGenerator(args)
+            generator.run()
+        else:
+            _run_v2_cli(args)
     except KeyboardInterrupt:
         message = (
             "[WARN] Recreate interrupted; completed attempts and published items are recoverable with "

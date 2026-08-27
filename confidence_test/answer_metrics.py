@@ -71,6 +71,12 @@ class AnswerMetricResult:
     answer_metric_status: str
     candidate_count: int
     error: dict[str, str] | None = None
+    # V2 aliases.  ``answer_entropy`` remains the historical normalized
+    # 0--1 value used by the confidence experiments; the generation pipeline
+    # consumes the explicit 0--100 score below.
+    entropy_score: float | None = None
+    raw_entropy: float | None = None
+    restricted_top1: str | None = None
 
 
 def failed_answer_metrics(
@@ -86,6 +92,9 @@ def failed_answer_metrics(
         answer_class_probabilities={},
         answer_metric_status="failed",
         candidate_count=candidate_count,
+        entropy_score=None,
+        raw_entropy=None,
+        restricted_top1=None,
         error={"type": error_type, "message": message},
     )
 
@@ -118,6 +127,7 @@ def compute_answer_metrics(
         probability_map = {
             label: float(probabilities[index].item()) for index, label in enumerate(labels)
         }
+        restricted_top1 = labels[int(torch.argmax(class_logits).item())]
         answer_probability = probability_map.get(normalized_answer or "")
         status = "completed" if answer_probability is not None else "failed"
         error = None
@@ -135,6 +145,9 @@ def compute_answer_metrics(
             answer_metric_status=status,
             candidate_count=candidate_count,
             error=error,
+            entropy_score=float(normalized_entropy * 100.0),
+            raw_entropy=float(raw_entropy),
+            restricted_top1=restricted_top1,
         )
     except Exception as exc:
         return failed_answer_metrics(len(labels), type(exc).__name__, str(exc))

@@ -81,6 +81,8 @@ def main():
         valid_old = json.load(f)
     with open(INVALID_JSON) as f:
         invalid_old = json.load(f)
+    if str(valid_old.get("schema_version", "")).startswith("shape_color_dataset.") or str(invalid_old.get("schema_version", "")).startswith("shape_color_dataset."):
+        raise ValueError("Legacy refine tool cannot process shape_color_dataset.v2; use V2 consumers")
 
     # Split valid
     valid_keep, valid_move = [], []

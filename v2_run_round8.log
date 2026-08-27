@@ -1,0 +1,289 @@
+The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. Note that this behavior will be extended to all models in a future release.
+`torch_dtype` is deprecated! Use `dtype` instead!
+[INFO] Loading processor from /root/autodl-tmp/qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct ...
+[INFO] Processor loaded.
+[INFO] Loading model from /root/autodl-tmp/qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct ...
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:00<00:03,  1.02it/s]Loading checkpoint shards:  40%|████      | 2/5 [00:01<00:02,  1.06it/s]Loading checkpoint shards:  60%|██████    | 3/5 [00:02<00:01,  1.07it/s]Loading checkpoint shards:  80%|████████  | 4/5 [00:03<00:00,  1.07it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:04<00:00,  1.45it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:04<00:00,  1.25it/s]
+[INFO] Model loaded. dtype=bfloat16, device_map=auto
+[INFO] Model device_map: {'': 0}
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:05] [INFO]   DeepSeek planner attempt 1/3
+[07:51:24] [INFO]   DeepSeek planner attempt 1/3 ok (18.5s)
+[07:51:24] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:24] [INFO]   DeepSeek planner attempt 1/3 ok (18.8s)
+[07:51:24] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:25] [INFO]   DeepSeek planner attempt 1/3 ok (19.7s)
+[07:51:25] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:28] [INFO]   DeepSeek planner attempt 1/3 ok (22.8s)
+[07:51:28] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:28] [INFO]   DeepSeek planner attempt 1/3 ok (23.0s)
+[07:51:28] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:28] [INFO]   DeepSeek planner attempt 1/3 ok (23.3s)
+[07:51:28] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:28] [INFO]   DeepSeek planner attempt 1/3 ok (23.4s)
+[07:51:28] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:29] [INFO]   DeepSeek planner attempt 1/3 ok (23.5s)
+[07:51:29] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:29] [INFO]   DeepSeek planner attempt 1/3 ok (23.6s)
+[07:51:29] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:30] [INFO]   DeepSeek planner attempt 1/3 ok (24.6s)
+[07:51:30] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:30] [INFO]   DeepSeek planner attempt 1/3 ok (24.9s)
+[07:51:30] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:30] [INFO]   DeepSeek planner attempt 1/3 ok (25.2s)
+[07:51:30] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:30] [INFO]   DeepSeek planner attempt 1/3 ok (25.3s)
+[07:51:30] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:31] [INFO]   DeepSeek planner attempt 1/3 ok (25.7s)
+[07:51:31] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:33] [INFO]   DeepSeek planner attempt 1/3 ok (27.7s)
+[07:51:33] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:33] [INFO]   DeepSeek planner attempt 1/3 ok (27.9s)
+[07:51:33] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:33] [INFO]   DeepSeek planner attempt 1/3 ok (28.2s)
+[07:51:33] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:34] [INFO]   DeepSeek planner attempt 1/3 ok (29.1s)
+[07:51:34] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:34] [INFO]   DeepSeek planner attempt 1/3 ok (29.3s)
+[07:51:34] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:35] [INFO]   DeepSeek analyzer attempt 1/3 ok (11.8s)
+[07:51:35] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:36] [INFO]   DeepSeek planner attempt 1/3 ok (30.5s)
+[07:51:36] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:36] [INFO]   DeepSeek planner attempt 1/3 ok (30.5s)
+[07:51:36] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:37] [INFO]   DeepSeek planner attempt 1/3 ok (31.7s)
+[07:51:37] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:38] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.7s)
+[07:51:38] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:38] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.9s)
+[07:51:38] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:39] [INFO]   DeepSeek planner attempt 1/3 ok (33.8s)
+[07:51:39] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:39] [INFO]   DeepSeek analyzer attempt 1/3 ok (10.7s)
+[07:51:39] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:39] [INFO]   DeepSeek analyzer attempt 1/3 ok (11.2s)
+[07:51:39] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:40] [INFO]   DeepSeek analyzer attempt 1/3 ok (11.5s)
+[07:51:40] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:41] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.8s)
+[07:51:41] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:41] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.5s)
+[07:51:41] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:42] [INFO]   DeepSeek planner attempt 1/3 ok (36.6s)
+[07:51:42] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:42] [INFO]   DeepSeek planner attempt 1/3 ok (36.7s)
+[07:51:42] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:42] [INFO]   DeepSeek planner attempt 1/3 ok (37.3s)
+[07:51:42] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:43] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.1s)
+[07:51:43] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:43] [INFO]   DeepSeek planner attempt 1/3 ok (37.9s)
+[07:51:43] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:44] [INFO]   DeepSeek planner attempt 1/3 ok (39.3s)
+[07:51:44] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:45] [INFO]   DeepSeek analyzer attempt 1/3 ok (16.1s)
+[07:51:45] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:47] [INFO]   DeepSeek analyzer attempt 1/3 ok (16.7s)
+[07:51:47] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:47] [INFO]   DeepSeek planner attempt 1/3 ok (42.0s)
+[07:51:47] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:47] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.3s)
+[07:51:47] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:48] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.8s)
+[07:51:49] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.4s)
+[07:51:49] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:50] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.7s)
+[07:51:50] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.7s)
+[07:51:50] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:52] [INFO]   DeepSeek analyzer attempt 1/3 ok (17.3s)
+[07:51:52] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:52] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.1s)
+[07:51:53] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.4s)
+[07:51:53] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:53] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.5s)
+[07:51:54] [INFO]   DeepSeek analyzer attempt 1/3 ok (10.9s)
+[07:51:54] [INFO]   DeepSeek analyzer attempt 1/3 ok (16.6s)
+[07:51:54] [INFO]   DeepSeek planner attempt 1/3 ok (49.2s)
+[07:51:54] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:54] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.3s)
+[07:51:54] [INFO]   DeepSeek analyzer attempt 1/3 ok (24.2s)
+[07:51:54] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:55] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.6s)
+[07:51:55] [INFO]   DeepSeek planner attempt 1/3 ok (49.8s)
+[07:51:55] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:55] [INFO]   DeepSeek analyzer attempt 1/3 ok (22.4s)
+[07:51:55] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:56] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.5s)
+[07:51:56] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:56] [INFO]   DeepSeek planner attempt 1/3 ok (51.3s)
+[07:51:56] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:56] [INFO]   DeepSeek planner attempt 1/3 ok (51.3s)
+[07:51:56] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:57] [INFO]   DeepSeek planner attempt 1/3 ok (51.9s)
+[07:51:57] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:58] [INFO]   DeepSeek analyzer attempt 1/3 ok (11.1s)
+[07:51:58] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.2s)
+[07:51:58] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.3s)
+[07:51:58] [INFO]   DeepSeek analyzer attempt 1/3
+[07:51:59] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.7s)
+[07:51:59] [INFO]   DeepSeek analyzer attempt 1/3 ok (23.4s)
+[07:51:59] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:00] [INFO]   DeepSeek analyzer attempt 1/3 ok (26.6s)
+[07:52:00] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:00] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.0s)
+[07:52:00] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:00] [INFO]   DeepSeek analyzer attempt 1/3 ok (11.2s)
+[07:52:00] [INFO]   DeepSeek planner attempt 1/3 ok (55.0s)
+[07:52:01] [INFO]   DeepSeek analyzer attempt 1/3 ok (25.1s)
+[07:52:01] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:01] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.2s)
+[07:52:01] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:03] [INFO]   DeepSeek planner attempt 1/3 ok (58.3s)
+[07:52:03] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:03] [INFO]   DeepSeek analyzer attempt 1/3 ok (21.6s)
+[07:52:03] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:04] [INFO]   DeepSeek planner attempt 1/3 ok (59.0s)
+[07:52:04] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:05] [INFO]   DeepSeek analyzer attempt 1/3 ok (11.9s)
+[07:52:05] [INFO]   DeepSeek planner attempt 1/3 ok (59.5s)
+[07:52:05] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:06] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.3s)
+[07:52:07] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.7s)
+[07:52:07] [INFO]   DeepSeek analyzer attempt 1/3 ok (25.0s)
+[07:52:07] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:08] [INFO]   DeepSeek planner attempt 1/3 ok (62.5s)
+[07:52:08] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:08] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.5s)
+[07:52:08] [INFO]   DeepSeek analyzer attempt 1/3 ok (23.6s)
+[07:52:08] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:09] [INFO]   DeepSeek analyzer attempt 1/3 ok (22.4s)
+[07:52:09] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:11] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.8s)
+[07:52:11] [INFO]   DeepSeek analyzer attempt 1/3 ok (14.8s)
+[07:52:11] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.5s)
+[07:52:12] [INFO]   DeepSeek planner attempt 1/3 ok (66.4s)
+[07:52:12] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:12] [INFO]   DeepSeek analyzer attempt 1/3 ok (10.8s)
+[07:52:12] [INFO]   DeepSeek planner attempt 1/3 ok (66.5s)
+[07:52:12] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:13] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.7s)
+[07:52:13] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.2s)
+[07:52:13] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:13] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.5s)
+[07:52:13] [INFO]   DeepSeek analyzer attempt 1/3 ok (14.3s)
+[07:52:13] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.8s)
+[07:52:15] [INFO]   DeepSeek planner attempt 1/3 ok (69.7s)
+[07:52:15] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:15] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.5s)
+[07:52:15] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:15] [INFO]   DeepSeek planner attempt 1/3 ok (70.0s)
+[07:52:15] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:17] [INFO]   DeepSeek analyzer attempt 1/3 ok (17.4s)
+[07:52:18] [INFO]   DeepSeek analyzer attempt 1/3 ok (17.0s)
+[07:52:19] [INFO]   DeepSeek planner attempt 1/3 ok (74.2s)
+[07:52:19] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:20] [INFO]   DeepSeek analyzer attempt 1/3 ok (23.3s)
+[07:52:20] [INFO]   DeepSeek analyzer attempt 1/3 ok (16.4s)
+[07:52:20] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.6s)
+[07:52:20] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.3s)
+[07:52:22] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.4s)
+[07:52:22] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.5s)
+[07:52:22] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:23] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.4s)
+[07:52:23] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:23] [INFO]   DeepSeek planner attempt 1/3 ok (78.2s)
+[07:52:23] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:24] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.8s)
+[07:52:24] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.8s)
+[07:52:26] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.3s)
+[07:52:28] [INFO]   DeepSeek planner attempt 1/3 ok (82.4s)
+[07:52:28] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:29] [INFO]   DeepSeek analyzer attempt 1/3 ok (24.5s)
+[07:52:29] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:29] [INFO]   DeepSeek analyzer attempt 1/3 ok (31.8s)
+[07:52:29] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:30] [INFO]   DeepSeek planner attempt 1/3 ok (84.6s)
+[07:52:30] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:30] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.4s)
+[07:52:30] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:30] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.1s)
+[07:52:31] [INFO]   DeepSeek analyzer attempt 1/3 ok (16.7s)
+[07:52:31] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:32] [INFO]   DeepSeek analyzer attempt 1/3 ok (17.5s)
+[07:52:34] [INFO]   DeepSeek planner attempt 1/3 ok (88.8s)
+[07:52:34] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:36] [INFO]   DeepSeek planner attempt 1/3 ok (91.1s)
+[07:52:36] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:36] [INFO]   DeepSeek analyzer attempt 1/3 ok (14.6s)
+[07:52:39] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.3s)
+[07:52:39] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:39] [INFO]   DeepSeek analyzer attempt 1/3 ok (19.4s)
+[07:52:39] [INFO]   DeepSeek analyzer attempt 1/3
+[07:52:41] [INFO]   DeepSeek analyzer attempt 1/3 ok (12.0s)
+[07:52:43] [INFO]   DeepSeek analyzer attempt 1/3 ok (20.0s)
+[07:52:44] [INFO]   DeepSeek analyzer attempt 1/3 ok (14.4s)
+[07:52:45] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.7s)
+[07:52:46] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.8s)
+[07:52:46] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.8s)
+[07:52:50] [INFO]   DeepSeek analyzer attempt 1/3 ok (15.9s)
+[07:52:51] [INFO]   DeepSeek analyzer attempt 1/3 ok (21.9s)
+[07:52:53] [INFO]   DeepSeek analyzer attempt 1/3 ok (14.4s)
+[07:52:56] [INFO]   DeepSeek analyzer attempt 1/3 ok (17.5s)
+[07:52:57] [INFO]   DeepSeek analyzer attempt 1/3 ok (20.5s)
+[07:53:05] [INFO]   DeepSeek planner attempt 1/3 ok (119.6s)
+[07:53:05] [INFO]   DeepSeek analyzer attempt 1/3
+[07:53:23] [INFO]   DeepSeek analyzer attempt 1/3 ok (18.4s)
+[07:53:23] [INFO]   DeepSeek analyzer attempt 1/3
+[07:53:36] [INFO]   DeepSeek analyzer attempt 1/3 ok (13.3s)
+The following generation flags are not valid and may be ignored: ['temperature']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+[TextEntropy] color=yellow bin=0 round=1/1 accepted=2/5 (+1 this round)
+[TextEntropy] color=yellow bin=1 round=1/1 accepted=0/5 (+0 this round)

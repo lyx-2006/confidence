@@ -35,9 +35,9 @@ MAX_PRIORS_PER_BIN = 3
 
 BASE_DIR = "/root/autodl-tmp"
 OLD_DATASET_PATH = os.path.join(BASE_DIR, "datasets/dataset_with_images.json")
-NEW_DATASET_PATH = os.path.join(BASE_DIR, "generate dataset/datasets/valid_datasets/generated_shape_color_dataset.json")
-NEW_POOL_PATH = os.path.join(BASE_DIR, "new_color_prior_pool.json")
-SRC_IMAGES_DIR = os.path.join(BASE_DIR, "generate dataset/datasets/valid_datasets/images")
+NEW_DATASET_PATH = os.path.join(BASE_DIR, "generation_v2_outputs/formal/image/shape_color_dataset.json")
+NEW_POOL_PATH = os.path.join(BASE_DIR, "generation_v2_outputs/formal/text/text_entropy_pool.json")
+SRC_IMAGES_DIR = os.path.join(BASE_DIR, "generation_v2_outputs/formal/image/images")
 DST_IMAGES_DIR = os.path.join(BASE_DIR, "datasets/images")
 OUTPUT_PATH = os.path.join(BASE_DIR, "datasets/datasets.json")
 
@@ -75,7 +75,39 @@ def load_old_items():
 def load_new_items():
     """Load valid dataset items."""
     data = load_json(NEW_DATASET_PATH)
-    items = data["items"]
+    if isinstance(data, dict) and data.get("schema_version") == "shape_color_dataset.v2":
+        items = data.get("items", [])
+    elif isinstance(data, dict):
+        items = data.get("items", [])
+    else:
+        raise ValueError("New dataset must be an object with items; V2 arrays are unsupported")
+    normalized = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        value = dict(item)
+        question = value.get("question")
+        if isinstance(question, dict):
+            value["question"] = question.get("text", "")
+        if "conflict_answer" not in value and "conflict_ans" in value:
+            value["conflict_answer"] = value["conflict_ans"]
+        if isinstance(value.get("image_clue"), dict):
+            v2_images = {}
+            for branch in ("consistent", "conflict"):
+                branch_value = value["image_clue"].get(branch, {})
+                if not isinstance(branch_value, dict):
+                    continue
+                for difficulty in ("easy", "hard"):
+                    variants = branch_value.get(difficulty)
+                    if isinstance(variants, list) and variants:
+                        first = variants[0]
+                        raw = first.get("image") if isinstance(first, dict) else first
+                        if isinstance(raw, str):
+                            v2_images[f"{branch}_{difficulty}"] = raw
+            if v2_images:
+                value["_v2_images"] = v2_images
+        normalized.append(value)
+    items = normalized
     print(f"New items: {len(items)}")
     return items
 
@@ -88,15 +120,25 @@ def build_prior_lookup():
     data = load_json(NEW_POOL_PATH)
     prior_clues = defaultdict(lambda: defaultdict(list))
 
-    for color_obj in data:
+    if isinstance(data, dict) and data.get("schema_version") == "text_entropy_pool.v2":
+        color_objects = data.get("colors", [])
+    elif isinstance(data, list):
+        color_objects = data
+    else:
+        raise ValueError("Expected text_entropy_pool.v2 or legacy confidence pool")
+
+    for color_obj in color_objects:
         color = color_obj["color"]
         if color not in BASIC_COLORS_SET:
             continue
-        for level in color_obj["prior_levels"]:
-            bin_id = level["bin_id"]
-            for prior in level["priors"]:
+        levels = color_obj.get("entropy_bins", color_obj.get("prior_levels", []))
+        for level in levels:
+            bin_id = level.get("entropy_bin_id", level.get("bin_id"))
+            for prior in level.get("priors", []):
                 if prior.get("accepted", False):
-                    prior_clues[color][bin_id].append(prior["text_clue"])
+                    clue = prior.get("text_clue", prior.get("clue"))
+                    if isinstance(clue, str) and clue.strip():
+                        prior_clues[color][int(bin_id)].append(clue)
 
     # Print summary
     print("\nPrior pool summary (accepted priors only):")
@@ -125,10 +167,20 @@ def copy_images(new_items):
         old_id = item["id"]  # e.g., "001"
         new_id = str(NEW_ITEM_START_ID + i)  # e.g., "121"
 
+        v2_images = item.get("_v2_images", {})
         for suffix in ["consist_easy", "consist_hard", "conflict_easy", "conflict_hard"]:
+            if v2_images:
+                branch = "consistent" if suffix.startswith("consist") else "conflict"
+                difficulty = "easy" if suffix.endswith("easy") else "hard"
+                raw = v2_images.get(f"{branch}_{difficulty}")
+                src_path = raw if isinstance(raw, str) else None
+                if src_path and not os.path.isabs(src_path):
+                    src_path = os.path.join(os.path.dirname(NEW_DATASET_PATH), src_path)
+                src_path = src_path or os.path.join(SRC_IMAGES_DIR, "__missing__.png")
+            else:
+                src_path = os.path.join(SRC_IMAGES_DIR, f"{old_id}_{suffix}.png")
             src_filename = f"{old_id}_{suffix}.png"
             dst_filename = f"{new_id}_{suffix}.png"
-            src_path = os.path.join(SRC_IMAGES_DIR, src_filename)
             dst_path = os.path.join(DST_IMAGES_DIR, dst_filename)
 
             if os.path.exists(src_path):

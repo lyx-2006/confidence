@@ -22,6 +22,7 @@ class ExperimentCase:
     image_target: str | None
     image_condition: str
     difficulty: str | None
+    variant_index: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,12 +83,26 @@ def _resolve_image_path(raw_path: str, dataset_path: Path, image_dir: Path | Non
     return next(iter(existing))
 
 
-def _image_variants(item: dict[str, Any]) -> Iterable[tuple[str, str | None, str, str | None]]:
+def _branch_variants(value: Any) -> list[tuple[int, str]]:
+    if isinstance(value, str):
+        return [(1, value)]
+    if not isinstance(value, list):
+        return []
+    result: list[tuple[int, str]] = []
+    for position, entry in enumerate(value, start=1):
+        raw = entry.get("image") if isinstance(entry, dict) else entry
+        if isinstance(raw, str) and raw.strip():
+            index = int(entry.get("variant_index", position)) if isinstance(entry, dict) else position
+            result.append((index, raw))
+    return result
+
+
+def _image_variants(item: dict[str, Any], allow_missing: bool = False) -> Iterable[tuple[str, str | None, str, str | None, int]]:
     image_clue = item.get("image_clue")
     if not isinstance(image_clue, dict):
         raise ValueError(f"Item {item.get('id')!r} has no image_clue mapping")
     answer = normalize_label(item.get("answer") or item.get("text_ans"))
-    conflict = normalize_label(item.get("conflict_ans"))
+    conflict = normalize_label(item.get("conflict_ans", item.get("conflict_answer")))
     specifications = [
         ("consistent", "easy", answer),
         ("consistent", "hard", answer),
@@ -96,15 +111,20 @@ def _image_variants(item: dict[str, Any]) -> Iterable[tuple[str, str | None, str
     ]
     for condition, difficulty, target in specifications:
         branch = image_clue.get(condition)
-        raw_path = branch.get(difficulty) if isinstance(branch, dict) else None
-        if not isinstance(raw_path, str):
+        raw_paths = _branch_variants(branch.get(difficulty) if isinstance(branch, dict) else None)
+        if not raw_paths:
+            if allow_missing:
+                continue
             raise ValueError(f"Item {item.get('id')!r} lacks {condition}/{difficulty} image")
-        yield condition, difficulty, raw_path, target
-    irrelevant = image_clue.get("irrelevant")
+        for variant_index, raw_path in raw_paths:
+            yield condition, difficulty, raw_path, target, variant_index
+    irrelevant = image_clue.get("irrelevant", item.get("irr", item.get("irrelevant")))
     raw_irrelevant = irrelevant.get("image") if isinstance(irrelevant, dict) else irrelevant
     if not isinstance(raw_irrelevant, str):
+        if allow_missing:
+            return
         raise ValueError(f"Item {item.get('id')!r} lacks irrelevant image")
-    yield "irrelevant", None, raw_irrelevant, None
+    yield "irrelevant", None, raw_irrelevant, None, 1
 
 
 def load_experiment_cases(
@@ -116,9 +136,16 @@ def load_experiment_cases(
     dataset_path = Path(dataset).resolve()
     image_root = Path(image_dir).resolve() if image_dir is not None else None
     payload = json.loads(dataset_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError("Dataset root must be an array")
-    items = [item for group in payload if isinstance(group, dict) for item in group.get("items", [])]
+    if isinstance(payload, dict):
+        if not isinstance(payload.get("items"), list):
+            raise ValueError("Dataset object root must contain an items array")
+        items = [item for item in payload["items"] if isinstance(item, dict)]
+        is_v2 = payload.get("schema_version") == "shape_color_dataset.v2"
+    elif isinstance(payload, list):
+        items = [item for group in payload if isinstance(group, dict) for item in group.get("items", [])]
+        is_v2 = False
+    else:
+        raise ValueError("Dataset root must be an array or V2 object")
     if max_items is not None:
         if max_items < 1:
             raise ValueError("--max-items must be positive")
@@ -134,15 +161,20 @@ def load_experiment_cases(
         text_target = normalize_label(item.get("text_ans"))
         priors = item.get("selected_text_priors")
         if not isinstance(priors, list):
-            raise ValueError(f"Item {item_id!r} has no selected_text_priors")
-        variants = list(_image_variants(item))
+            if is_v2:
+                direct_clue = item.get("text_clue", item.get("clue", ""))
+                priors = [{"clue": direct_clue if isinstance(direct_clue, str) else ""}]
+            else:
+                raise ValueError(f"Item {item_id!r} has no selected_text_priors")
+        variants = list(_image_variants(item, allow_missing=is_v2))
         for prior_index, prior in enumerate(priors):
             clue = prior.get("clue") if isinstance(prior, dict) else None
-            if not isinstance(clue, str) or not clue.strip():
+            if not isinstance(clue, str) or (not clue.strip() and not is_v2):
                 raise ValueError(f"Item {item_id!r} prior {prior_index} has no clue")
-            for condition, difficulty, raw_image, image_target in variants:
+            for condition, difficulty, raw_image, image_target, variant_index in variants:
                 suffix = condition if difficulty is None else f"{condition}_{difficulty}"
-                stable_id = f"{item_id}__prior_{prior_index}__{suffix}"
+                variant_suffix = f"__variant_{variant_index}" if is_v2 else ""
+                stable_id = f"{item_id}__prior_{prior_index}{variant_suffix}__{suffix}"
                 if case_id is not None and stable_id != case_id:
                     continue
                 image_path = _resolve_image_path(raw_image, dataset_path, image_root)
@@ -159,6 +191,7 @@ def load_experiment_cases(
                         image_target=image_target,
                         image_condition=condition,
                         difficulty=difficulty,
+                        variant_index=variant_index,
                     )
                 )
     if case_id is not None and not cases:

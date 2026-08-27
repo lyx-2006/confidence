@@ -47,6 +47,7 @@ class EvaluationCase:
     text_clue: str
     record_key: str
     conditions: dict[str, ConditionInput]
+    variant_index: int = 1
 
 
 def question_text(item: dict[str, Any]) -> str:
@@ -60,8 +61,16 @@ def question_text(item: dict[str, Any]) -> str:
 
 
 def iter_dataset_items(payload: Any) -> Iterable[tuple[dict[str, Any], dict[str, Any]]]:
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise ValueError("Dataset object root must contain an items array")
+        for item in items:
+            if isinstance(item, dict):
+                yield payload, item
+        return
     if not isinstance(payload, list):
-        raise ValueError("Dataset root must be an array")
+        raise ValueError("Dataset root must be an array or V2 object")
     for group in payload:
         if not isinstance(group, dict):
             continue
@@ -77,21 +86,44 @@ def _raw_condition_path(
     group: dict[str, Any],
     item: dict[str, Any],
     condition: str,
+    variant_index: int = 1,
 ) -> str | None:
     image_clue = item.get("image_clue")
     if not isinstance(image_clue, dict):
         image_clue = {}
     if condition == "null":
-        raw = image_clue.get("null", group.get("null_image"))
+        raw = image_clue.get("null", item.get("null", group.get("null_image")))
     elif condition == "irr":
-        raw = image_clue.get("irr", image_clue.get("irrelevant"))
+        raw = image_clue.get("irr", item.get("irr", image_clue.get("irrelevant", item.get("irrelevant"))))
     else:
         branch_name, difficulty = condition.split("_", 1)
         branch = image_clue.get(branch_name)
         raw = branch.get(difficulty) if isinstance(branch, dict) else None
+        if isinstance(raw, list):
+            selected = next(
+                (value for value in raw if isinstance(value, dict) and int(value.get("variant_index", 1)) == variant_index),
+                None,
+            )
+            if selected is None and 1 <= variant_index <= len(raw):
+                selected = raw[variant_index - 1]
+            raw = selected
     if isinstance(raw, dict):
         raw = raw.get("image")
     return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
+
+def _variant_count(item: dict[str, Any]) -> int:
+    image_clue = item.get("image_clue")
+    if not isinstance(image_clue, dict):
+        return 1
+    count = 1
+    for branch in image_clue.values():
+        if not isinstance(branch, dict):
+            continue
+        for value in branch.values():
+            if isinstance(value, list):
+                count = max(count, len(value))
+    return count
 
 
 def _resolve_condition(
@@ -161,6 +193,7 @@ def load_evaluation_cases(
         _atomic_create_white_image(fallback)
 
     cases: list[EvaluationCase] = []
+    is_v2 = isinstance(payload, dict) and payload.get("schema_version") == "shape_color_dataset.v2"
     null_paths: list[Path] = []
     null_sources: set[str] = set()
     for item_order, (group, item) in enumerate(records):
@@ -176,45 +209,56 @@ def load_evaluation_cases(
             class_error = {"type": type(exc).__name__, "message": str(exc)}
         priors = item.get("selected_text_priors")
         if not isinstance(priors, list):
-            raise ValueError(f"Item {item_id!r} has no selected_text_priors array")
+            # V2 deliberately leaves text clues for a post-hoc merge.  Keep
+            # image-only records loadable with an explicit empty clue; legacy
+            # datasets retain their strict selected_text_priors guard.
+            if isinstance(payload, dict) and payload.get("schema_version") == "shape_color_dataset.v2":
+                direct_clue = item.get("text_clue", item.get("clue", ""))
+                priors = [{"clue": direct_clue if isinstance(direct_clue, str) else "", "variant_index": 1}]
+            else:
+                raise ValueError(f"Item {item_id!r} has no selected_text_priors array")
         selected_priors = priors[:prior_limit] if prior_limit is not None else priors
-        condition_map: dict[str, ConditionInput] = {}
-        for condition in CONDITIONS:
-            raw_path = _raw_condition_path(group, item, condition)
-            if condition == "null" and raw_path is None and fallback is not None:
-                raw_path = str(fallback)
-                null_sources.add("generated_fallback")
-            elif condition == "null":
-                null_sources.add("dataset")
-            resolved = _resolve_condition(condition, raw_path, dataset_path)
-            condition_map[condition] = resolved
-            if condition == "null" and resolved.resolved_image_path:
-                null_paths.append(Path(resolved.resolved_image_path))
-        for prior_index, prior in enumerate(selected_priors):
-            if not isinstance(prior, dict):
-                raise ValueError(f"Item {item_id!r} prior {prior_index} is not an object")
-            clue = prior.get("clue")
-            if not isinstance(clue, str) or not clue.strip():
-                raise ValueError(f"Item {item_id!r} prior {prior_index} has no clue")
-            cases.append(
-                EvaluationCase(
+        for variant_index in range(1, _variant_count(item) + 1):
+            condition_map: dict[str, ConditionInput] = {}
+            for condition in CONDITIONS:
+                raw_path = _raw_condition_path(group, item, condition, variant_index)
+                if condition == "null" and raw_path is None and fallback is not None:
+                    raw_path = str(fallback)
+                    null_sources.add("generated_fallback")
+                elif condition == "null":
+                    null_sources.add("dataset")
+                resolved = _resolve_condition(condition, raw_path, dataset_path)
+                condition_map[condition] = resolved
+                if condition == "null" and resolved.resolved_image_path:
+                    null_paths.append(Path(resolved.resolved_image_path))
+            for prior_index, prior in enumerate(selected_priors):
+                if not isinstance(prior, dict):
+                    raise ValueError(f"Item {item_id!r} prior {prior_index} is not an object")
+                clue = prior.get("clue", prior.get("text_clue", ""))
+                if not isinstance(clue, str) or (not clue.strip() and not (isinstance(payload, dict) and payload.get("schema_version") == "shape_color_dataset.v2")):
+                    raise ValueError(f"Item {item_id!r} prior {prior_index} has no clue")
+                record_key = (
+                    f"{item_id}::{prior_index}::variant_{variant_index}"
+                    if is_v2 else f"{item_id}::{prior_index}"
+                )
+                cases.append(EvaluationCase(
                     item_id=item_id,
                     item_order=item_order,
                     ground_truth_answer=normalize_answer(item.get("answer")),
                     text_answer=normalize_answer(item.get("text_ans")),
-                    conflict_answer=normalize_answer(item.get("conflict_ans")),
+                    conflict_answer=normalize_answer(item.get("conflict_ans", item.get("conflict_answer"))),
                     question=question,
                     answer_classes=answer_classes,
                     answer_class_error=class_error,
                     prior_index=prior_index,
-                    prior_bin=str(prior.get("confidence_bin")).strip()
-                    if prior.get("confidence_bin") is not None
+                    prior_bin=str(prior.get("confidence_bin", prior.get("measured_entropy_bin", prior.get("entropy_bin_id")))).strip()
+                    if prior.get("confidence_bin", prior.get("measured_entropy_bin", prior.get("entropy_bin_id"))) is not None
                     else None,
                     text_clue=clue.strip(),
-                    record_key=f"{item_id}::{prior_index}",
+                    record_key=record_key,
                     conditions=dict(condition_map),
-                )
-            )
+                    variant_index=variant_index,
+                ))
 
     unique_nulls = list(dict.fromkeys(path.resolve() for path in null_paths))
     null_metadata: dict[str, Any] = {

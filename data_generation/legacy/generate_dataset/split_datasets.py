@@ -100,6 +100,8 @@ def main():
         summary = json.load(f)
     with open(FLAGGED_PATH) as f:
         flagged = json.load(f)
+    if str(summary.get("schema_version", "")).startswith("shape_color_dataset.") or str(flagged.get("schema_version", "")).startswith("shape_color_dataset."):
+        raise ValueError("Legacy split tool cannot process shape_color_dataset.v2; use V2 consumers")
 
     # Get flagged (invalid) IDs
     flagged_ids = set(item["id"] for item in flagged["items"])

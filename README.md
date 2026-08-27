@@ -8,10 +8,17 @@ Attention Sink 使用说明见：[layer_metacognition/README.md](/root/autodl-tm
 新增脚本：
 
 - [confidence_analysis.py](/root/autodl-tmp/confidence_analysis.py)：独立执行 Stage 2 confidence 分析。
-- [generate_color_pool.py](</root/autodl-tmp/generate color pool/generate_color_pool.py>)：执行 prior 筛选、DeepSeek 候选生成、稳定性测试和颜色池保存。
+- [generate_color_pool.py](/root/autodl-tmp/data_generation/legacy/generate_color_pool/generate_color_pool.py)：执行 prior 筛选、DeepSeek 候选生成、稳定性测试和颜色池保存。
 - [test_deepseek_connection.py](/root/autodl-tmp/test_deepseek_connection.py)：低并发独立诊断 DeepSeek API 超时。
 
-不会修改 `qwen-2.5-vl/inference.py`。
+数据集生成代码统一放在 [data_generation/](/root/autodl-tmp/data_generation/)：共享的
+V2 producer 与运行时（`generation_v2.py`、`generation_runtime.py`）、测试
+（`tests/`）以及 legacy 生成器（`legacy/generate_dataset/`、
+`legacy/generate_color_pool/`）。
+
+不会修改 `qwen-2.5-vl/inference.py`（right-padding 修复只在
+`confidence_test/inference_extension.py` 的扩展推理类中设置
+`tokenizer.padding_side = "left"`）。
 
 ## 环境准备
 
@@ -20,6 +27,40 @@ Attention Sink 使用说明见：[layer_metacognition/README.md](/root/autodl-tm
 ```text
 qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct
 ```
+
+## Generation V2
+
+V2 已拆为两个独立入口，共享同一个 Qwen batch 运行时
+（`generation_runtime.py`：父进程唯一模型实例、逐 batch 串行、按 run root
+哈希命名的持久化临时队列）：
+
+- 文本（五档 entropy 颜色池）：`data_generation/legacy/generate_color_pool/generate_color_pool.py`，
+  见下方「颜色池运行（V2 Entropy 单入口）」。
+- 图像（shape-color 数据集）：`data_generation/legacy/generate_dataset/generate_shape_color_dataset.py`，
+  不传 `--recreate`/`--legacy`/`--dry-run` 时即走 V2 图像 producer。
+
+文本池 schema 为 `text_entropy_pool.v2`，五档 entropy score 为 0–100；每条
+候选固定进行三次 text-only Qwen 测试。图像数据 schema 为
+`shape_color_dataset.v2`，每个 easy/hard 结果都是带 `variant_index` 的数组，
+文件名形如 `{id}_{branch}_{difficulty}({variant_index})`。正式产物固定写入
+`generation_v2_outputs/formal/`（text/ 与 image/ 两个子目录）；中间文件
+（Qwen job 队列等）写入按 run root 哈希命名的系统临时目录，不落输出目录。
+Qwen 单次 batch 默认 `4` 个测试 job（`--qwen-batch-size`），避免 24 GB 显存
+OOM。
+
+图像入口示例（`--similarity-model-path` 与 `--download-similarity-model`
+二选一）：
+
+```bash
+python data_generation/legacy/generate_dataset/generate_shape_color_dataset.py \
+  --similarity-model-path /path/to/facebook-dinov2-base
+# 或显式下载：--download-similarity-model
+```
+
+DINOv2 默认要求本地 `--similarity-model-path`；只有显式指定
+`--download-similarity-model` 才下载 `facebook/dinov2-base` 到
+`generation_v2_outputs/models/facebook-dinov2-base`。恢复运行必须使用
+`--resume`，并保持 branch、数量、旋转、旧图及模型配置一致。
 
 安装依赖：
 
@@ -51,7 +92,7 @@ python test_deepseek_connection.py --repeat 1 --concurrency 1 --timeout 120
 python test_deepseek_connection.py --repeat 5 --concurrency 5 --timeout 120
 ```
 
-诊断脚本关闭 OpenAI SDK 自动重试，并输出每个请求的耗时、异常类型和响应长度。主颜色池程序也使用 `timeout=120` 秒和 `max_retries=0`，由自己的三次重试逻辑统一记录。单并发成功而五并发失败，通常表示并发过高或服务端限流；单并发也超时，则优先检查 API endpoint、Token 权限或服务状态。
+诊断脚本关闭 OpenAI SDK 自动重试，并输出每个请求的耗时、异常类型和响应长度。主颜色池程序使用 `timeout=150` 秒和 `max_retries=0`，由自己的三次重试逻辑统一记录。服务端高峰期响应可达 100s 以上（实测单请求 115.8s），120s 超时会把慢响应误判为失败，故超时放宽到 150s。单并发成功而五并发失败，通常表示并发过高或服务端限流；单并发也超时，则优先检查 API endpoint、Token 权限或服务状态。
 
 ## 独立 Confidence 分析
 
@@ -88,123 +129,143 @@ Confidence 参数：
 | `--output` | JSON 输出路径；不指定则打印到终端。 |
 | `--max-new-tokens` | Stage 2 最大生成 token 数，默认 `12`。 |
 
-## 颜色池运行
+## 颜色池运行（V2 Entropy 单入口）
 
-默认增量模式：读取 `/root/autodl-tmp/datasets/dataset.json`，补齐缺失的 `color × bin`，输出 `datasets/color_prior_pool.json`。
+该脚本已是 V2 五档 text-entropy 池的独立入口：`main()` 直接调用
+`generation_v2.TextEntropyProducer`，与图像入口共用同一个 Qwen batch
+运行时（`generation_runtime.py`：唯一模型实例、逐 batch 串行）和持久化
+队列（位于系统临时目录）。
+完整参数表格见
+[data_generation/legacy/generate_color_pool/README.md](/root/autodl-tmp/data_generation/legacy/generate_color_pool/README.md)。
+旧 confidence `PoolBuilder` 及其 confidence 版 prompt 已拆到同目录的
+`legacy_pool_builder.py`（`from generate_color_pool import PoolBuilder` 仍可用），
+CLI 不再调用它。
 
-```bash
-python "generate color pool/generate_color_pool.py"
-```
-
-首次建议先运行 find：
-
-```bash
-python "generate color pool/generate_color_pool.py" --find --resume
-```
-
-find 顺序固定为：提取已有 prior → 本地模型测试 → 接纳合格 prior → 完成全部 find → 调用 DeepSeek 补齐缺失档位。find 完成前 DeepSeek 调用数为 0。
-
-运行 `--find` 时终端会显示 `[Find] started`、每条 prior 的 accepted/bin/reason、每个颜色的 bin 汇总，以及 `[Find] completed all colors`。
-
-小规模试运行：
+默认增量模式：读取 `/root/autodl-tmp/datasets/dataset.json`，为每个
+`颜色 × entropy bin` 生成/补齐先验，输出
+`generation_v2_outputs/formal/text/text_entropy_pool.json`。
 
 ```bash
-python "generate color pool/generate_color_pool.py" \
-  --find --colors yellow --round 1 --target-per-bin 1 --resume
+python "data_generation/legacy/generate_color_pool/generate_color_pool.py"
 ```
 
-指定颜色：
+`--find` 已废弃（V2 总是先验证再入队）。小规模试运行：
 
 ```bash
-python "generate color pool/generate_color_pool.py" --colors yellow,red,blue
+python "data_generation/legacy/generate_color_pool/generate_color_pool.py" \
+  --colors red --round 1 --target-per-bin 1
 ```
 
-一次可以选择 6 个颜色；它们按最多 3 色的同步 cohort 执行：
+指定颜色与熵档：
 
 ```bash
-python "generate color pool/generate_color_pool.py" \
-  --colors red,orange,yellow,green,blue,cyan \
-  --color-workers 6
+python "data_generation/legacy/generate_color_pool/generate_color_pool.py" --colors red,blue
+python "data_generation/legacy/generate_color_pool/generate_color_pool.py" --select_pool 0,1,4   # 只生成最低两档和最高档
+python "data_generation/legacy/generate_color_pool/generate_color_pool.py" --select_pool 40-80   # 等价的 score 区间写法
 ```
 
-颜色级并行只作用于 DeepSeek 文本生成和 Analyzer。每个低档 bin 使用 3 个专属 Generator 和 3 个一一对应的 Analyzer；其他 bin 各使用 1 对。三个颜色同时处理 Bin 0、Bin 1 时，每个远端阶段会同步发出 `3 colors × 2 bins × 3 agents = 18` 个请求。默认选择全部 5 个 bin，峰值为 `3 × (2×3 + 3×1) = 27`，因此默认使用 27 路 DeepSeek 并发。Generator 完成后，本地 Qwen 仍按 candidate 串行评测；三个颜色会在 cohort barrier 等齐，随后同步发出对应的 18 个低档 Analyzer 请求。下一组颜色在前一 cohort 完成后开始。
+未被 `--select_pool` 选中的档位不进行 DeepSeek 候选生成。
 
-只生成指定 confidence bins：
+`--after` 按 12 色顺序（red, orange, yellow, green, blue, cyan, purple, pink,
+brown, white, black, gray）跳过之前的颜色：
 
 ```bash
-# 使用 bin 编号，只生成最低两档和最高档
-python "generate color pool/generate_color_pool.py" --select_pool 0,1,4
-
-# 等价的区间写法
-python "generate color pool/generate_color_pool.py" \
-  --select_pool 0.0-0.2,0.2-0.4,0.8-1.0
+python "data_generation/legacy/generate_color_pool/generate_color_pool.py" --after yellow  # 从 green 开始
 ```
 
-未被 `--select_pool` 选中的档位不会创建 Generator 或 Analyzer，也不会进行 DeepSeek 候选生成。`--find` 仍会测试数据集已有 prior，但只为所选档位补充生成内容。
-
-`--after` 不包含参数本身的颜色：
-
-```bash
-python "generate color pool/generate_color_pool.py" --after yellow  # 从 green 开始
-python "generate color pool/generate_color_pool.py" --after gray    # 从 maroon 开始
-```
+V2 下 DeepSeek 调用由 producer 串行执行（每个 (颜色, bin) 的轮次独立），
+Qwen 测试通过父进程唯一 scheduler 逐 batch 执行。`--deepseek-workers`、
+`--color-workers`、`--stability-threshold` 仅为旧 CLI 兼容保留，不再生效。
 
 ## 颜色池参数
 
 | 参数 | 默认值 | 含义 |
 | --- | --- | --- |
-| `--find` | 关闭 | 先测试输入数据已有 prior；全部 find 完成前禁止 DeepSeek。 |
-| `--after COLOR` | 无 | 从全局颜色顺序中该颜色的下一个颜色开始。 |
-| `--round N` | `5` | 每个颜色最多执行的 Generator–Analyzer 轮数。 |
+| `--find` | 关闭 | 已废弃；V2 总是先验证再入队。 |
+| `--after COLOR` | 无 | 从 12 色顺序中该颜色的下一个颜色开始。 |
+| `--round N` | `5` | 每个 (颜色, bin) 最多执行的 Generator/Analyzer 轮数。 |
 | `--input PATH` | `/root/autodl-tmp/datasets/dataset.json` | 输入数据集。 |
-| `--output PATH` | `datasets/color_prior_pool.json` | 主结果 JSON。 |
-| `--target-per-bin N` | `5` | 每个颜色、每个 bin 至少保留的 prior 数量。 |
-| `--select_pool BINS` | `all` | 需要生成的 bins；支持 `0,1,4`、`bin0,bin1,bin4` 或区间写法。 |
-| `--bin-batch-sizes A,B,C,D,E` | `40,40,20,10,40` | Bin 0 到 Bin 4 每轮候选数。 |
-| `--deepseek-workers N` | `27` | DeepSeek 最大并发数；低档每 bin 按 3 个智能体计数，其他档按 1 个计数。只选两个低档且并发 3 色时至少为 18；全选时至少为 27。 |
-| `--color-workers N` | `6` | 一次调度的颜色数，范围 `1-6`；实际按最多 3 色的同步 cohort 执行，本地 Qwen 始终串行。 |
-| `--colors A,B,C` | 全部颜色 | 只处理逗号分隔的颜色子集。 |
+| `--output PATH` | `generation_v2_outputs/formal/text/text_entropy_pool.json` | 主结果 JSON。 |
+| `--target-per-bin N` | `5` | 每个颜色、每个 entropy bin 至少保留的 prior 数量。 |
+| `--select_pool BINS` | `all` | 需要生成的 entropy 档；支持 `0,1,4` 或 0–100 区间写法（如 `40-80`）。 |
+| `--bin-batch-sizes A,B,C,D,E` | `20,20,20,20,20` | Bin 0 到 Bin 4 每轮 DeepSeek 候选数。 |
+| `--deepseek-workers N` | `27` | 已失效（V2 串行调用 DeepSeek）；仅旧 CLI 兼容。 |
+| `--color-workers N` | `6` | 已失效（V2 每颜色/bin 独立轮次）；仅旧 CLI 兼容。 |
+| `--colors A,B,C` | 全部 12 色 | 只处理逗号分隔的颜色子集。 |
 | `--resume` | 关闭 | 显式启用恢复语义；默认增量模式同样读取已有结果。 |
 | `--seed N` | `42` | 问题选择、模板改写等确定性随机种子。 |
 | `--near-duplicate-threshold X` | `0.88` | 近重复文本过滤阈值，越高越严格。 |
-| `--stability-threshold X` | `0.1` | 稳定性阈值，严格使用 `soft_range < X`。 |
+| `--stability-threshold X` | `0.1` | 已失效（V2 使用 entropy 档位判定）；仅旧 CLI 兼容。 |
+| `--qwen-batch-size N` | `4` | 单次 Qwen batch 的测试 job 数（避免 24 GB 卡 OOM）。 |
 
-## Bin 与稳定性规则
+## Entropy bin 与验收规则
 
-| Bin | soft confidence 范围 | 默认每轮候选数 |
+| Bin | entropy_score 范围 | 默认每轮候选数 |
 | --- | --- | ---: |
-| 0 | `[0.0, 0.2)` | 40 |
-| 1 | `[0.2, 0.4)` | 40 |
-| 2 | `[0.4, 0.6)` | 20 |
-| 3 | `[0.6, 0.8)` | 10 |
-| 4 | `[0.8, 1.0]` | 40 |
+| 0 | `[0, 20)` | 20 |
+| 1 | `[20, 40)` | 20 |
+| 2 | `[40, 60)` | 20 |
+| 3 | `[60, 80)` | 20 |
+| 4 | `[80, 100]` | 20 |
 
-默认 40 条时，Bin 0、Bin 1 使用三个互相隔离的 Generator–Analyzer 对：`prior_knowledge_agent` 负责 15 条 `prior_knowledge_multistep`（类似 “The color has the same color as a morpho butterfly's wings”）以及剩余 5 条 `free_form`；`not_exclusion_agent` 负责 10 条显式使用 `not` 并否定其他候选颜色的 `not_exclusion`；`high_difficulty_agent` 负责 10 条 `high_difficulty`。每个 Analyzer 只读取所属 Generator、所属源 bin 的评测结果和跨档结果，并独立维护下一轮 prompt。自定义 batch size 时仍按 `15:10:10:5` 等比例调整。
+`entropy_score` 基于受限 12 类颜色答案空间，以自然对数计算 entropy，再除以
+`ln(12)` 映射到 0–100。
 
-Bin 0、Bin 1 的 prompt 强调“目标颜色仍是唯一最佳答案，但证据较弱并保留多个可信替代项”，避免为了降低 confidence 而让答案本身发生变化。Bin 4 强调直接、典型、无歧义的常识关联，避免模糊、否定、冷门事实和竞争答案。Bin 2、Bin 3 的策略与批量保持不变。
+每个 (颜色, bin) 独立执行轮次：DeepSeek Generator 生成 `--bin-batch-sizes`
+个候选 → 文本契约校验（shape-independent、按档位禁止具体颜色词等）→
+DeepSeek Analyzer 判定 → 每个候选在三个不同形状问题上做 3 次 text-only
+Qwen 测试。通过条件：三次答案必须都是目标颜色、restricted top-1 全是目标
+颜色、三次熵实测落在同一档且 `max-min` 小于该档的容差（按档缩放
+`5 + 2.5 × bin_id`：bin 0 为 5.0、bin 1 为 7.5、bin 2 为 10、bin 3 为 12.5、
+bin 4 为 15）。容差按档缩放是因为熵波动主要由三个不同形状问题的形状竞争
+引起，并随线索模糊度增长（强线索约 0.5、中等约 8–10、弱约 15–30），固定
+`5.0` 会让 bin 2–4 几乎无法通过。按三次实测熵所在档归档（允许跨档路由：
+为 Bin 0 生成但实测落入 Bin 1 的候选会写入 Bin 1；跨档时按实测档的容差
+复核）。
 
-每条 prior 在三个不同 shape 问题上测试：三次答案必须都是目标颜色，三次 Stage 2 必须成功，且 `max(soft_values) - min(soft_values) < stability_threshold`。Bin 0、Bin 1 生成的候选即使首测越出目标档也会继续完成三问；稳定后按照三次 `soft_mean` 的实际区间归档，例如为 Bin 0 生成但实测均值为 `0.35` 的数据会写入 Bin 1。其他档位仍要求落入其生成目标档，首测越界会立即停止。问题不足时，会从同一 `Choose from:` 集合的真实问题模板替换 shape，并记录 `question_source: "template_rewrite"`。
+## 每档 DeepSeek prompt
+
+每个 entropy bin 的 DeepSeek Generator/Analyzer prompt 都是独立、特异化的
+模板，保存在 `data_generation/prompts/text_entropy_bin_prompts.json`
+（schema `text_entropy_bin_prompts.v1`，generator/analyzer 各 5 档）。可直接
+编辑该 JSON 调优某一档的线索风格或判定标准，无需改代码。各档策略：
+
+| Bin | 生成策略 | 推理步数 |
+| --- | --- | ---: |
+| 0 | 确定性：必须直接提及目标颜色词，陈述一目了然的常识事实 | 0–1 |
+| 1 | 强指向：不点名颜色，指向日常物品/场景，读者第一联想 | 1 |
+| 2 | 中等模糊：场景/季节/文化联想，需存在至少一个竞争猜测 | 1–2 |
+| 3 | 高模糊：双重联想或多义物体，多步推理后才可辩护 | 2–3 |
+| 4 | 极高模糊：隐晦/间接/悖论式联想，初看多个颜色都合理 | 3+ |
+
+加载时会校验 schema、档位齐全和占位符完整（generator 模板支持
+`{color}`、`{colors}`、`{count}`、`{accepted_json}`；analyzer 支持
+`{color}`、`{bin_id}`、`{candidate_json}`），文件缺失或格式错误会明确报错，
+不会静默改变生成行为。各档词项契约（bin 0 允许且要求目标色词、bins 1–4
+禁止任何具体颜色词）仍由代码侧 `validate_color_lexical_contract` 强制。
 
 ## 输出与磁盘保护
 
-每完成一个颜色，才使用临时文件和 `os.replace()` 原子更新：
+每个 (颜色, bin) 每轮有 prior 入库时，才使用临时文件和 `os.replace()` 原子
+更新主结果：
 
 ```text
-datasets/color_prior_pool.json
-generate color pool/output/color_prior_generation_report.json
-generate color pool/output/color_prior_generation_events.jsonl
-generate color pool/output/color_prior_generation.log
-generate color pool/output/color_prior_prompt_history.json
+generation_v2_outputs/formal/text/text_entropy_pool.json
 ```
 
-不会按候选、推理或轮次写 checkpoint。
+不会按候选、推理或轮次写 checkpoint；Qwen 持久化队列和 worker 中间文件位于
+按 run root 哈希命名的系统临时目录，不写入输出目录。
 
-DeepSeek 请求会实时打印到终端：请求开始、成功解析（含响应字符数）、失败原因和重试信息；这些实时日志不会触发 checkpoint 写入，也不会打印 API key 或完整 prompt。中断时当前颜色不会落盘，最多重做当前颜色；已完成颜色不会删除或覆盖。
-每个颜色的每一轮结束后也会立即打印 `[ColorPool] color=... round=... accepted=... missing_bins=... color_complete=...`，用于确认该轮是否正常完成。
+DeepSeek 请求会实时打印到终端：请求开始、成功解析（含响应字符数）、失败
+原因和重试信息；这些实时日志不会触发 checkpoint 写入，也不会打印 API key
+或完整 prompt。中断时当前 (颜色, bin) 不会落盘，最多重做当前条目；已完成
+条目不会删除或覆盖。每个 (颜色, bin) 的每一轮结束后也会立即打印
+`[TextEntropy] color=... bin=... round=N/M accepted=... (+N this round)`，
+用于确认该轮测试结果。
 
 ## 注意事项
 
-- 完整运行需要 GPU 和较大显存。
+- 完整运行需要 GPU 和较大显存；`--qwen-batch-size` 默认 `4`，避免 24 GB
+  卡在 eager attention 下大 batch OOM。
 - 建议先用单颜色、单轮、`--target-per-bin 1` 验证。
 - 缺少 `openai`、API key 或网络时，DeepSeek 阶段会明确报错，不会伪造结果。
-- `--find` 和生成流程都会运行大量本地推理。
