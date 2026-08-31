@@ -94,3 +94,5 @@ dp_SA/lat_difficulty_swap/output
 dp_SA/checkpoint_steering/output
 
 generate color pool/output
+
+dp_SA/answer_matched_lat_steering/output
