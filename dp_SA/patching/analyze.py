@@ -162,7 +162,7 @@ def analyze(output_dir: Path, *, repeats: int, seed: int, final: bool = True) ->
             p = sign_flip_p(gains, repeats=repeats,
                             seed=stable_seed(seed, "signflip", endpoint, row["position"], str(row["layer"])))
             row["p_raw"] = p
-            row["fdr_family"] = f"{endpoint}:2_positions_x_5_layers"
+            row["fdr_family"] = f"{endpoint}:{len(family)}_actual_cells"
             p_values.append(p)
         for row, q in zip(family, bh_fdr(p_values)):
             row["q_bh"] = q
@@ -178,8 +178,29 @@ def analyze(output_dir: Path, *, repeats: int, seed: int, final: bool = True) ->
             contrasts.append({"layer": layer, "endpoint": endpoint, **value})
     lookup = {(row["position"], int(row["layer"]), row["group"], row["endpoint"]): row for row in metric_rows}
     contrast_lookup = {(int(row["layer"]), row["endpoint"]): row for row in contrasts}
-    claims: list[dict[str, Any]] = []
+    position_claims: list[dict[str, Any]] = []
+    for position, layer in sorted(grouped):
+        endpoint_checks = {}
+        for endpoint in ("fixed_clean_class_margin", "oriented_soft"):
+            row = lookup[(position, layer, "all", endpoint)]
+            endpoint_checks[endpoint] = {
+                "corruption_damage_ci_above_zero": row["disruption_ci_low"] is not None and row["disruption_ci_low"] > 0,
+                "recovery_ci_above_zero": row["recovery_ci_low"] is not None and row["recovery_ci_low"] > 0,
+                "patch_gain_ci_above_zero": row["patch_gain_ci_low"] is not None and row["patch_gain_ci_low"] > 0,
+            }
+        hard = lookup[(position, layer, "all", "oriented_hard")]
+        hard_noncontradictory = (
+            float(hard["patch_gain_value"]) >= 0 and
+            (hard["recovery_value"] is None or float(hard["recovery_value"]) >= 0)
+        )
+        pass_gate = all(all(checks.values()) for checks in endpoint_checks.values()) and hard_noncontradictory
+        position_claims.append({"position":position,"layer":layer,"continuous_endpoint_checks":endpoint_checks,
+                                "hard_midpoint_noncontradictory":hard_noncontradictory,
+                                "recoverable_functional_information_supported":pass_gate})
+    legacy_claims: list[dict[str, Any]] = []
     for layer in sorted({int(row["layer"]) for row in results}):
+        if not all((layer, endpoint) in contrast_lookup for endpoint in PRIMARY):
+            continue
         endpoint_checks = {}
         for endpoint in ("fixed_clean_class_margin", "oriented_soft"):
             row = lookup[("P1_PANL", layer, "all", endpoint)]
@@ -190,17 +211,22 @@ def analyze(output_dir: Path, *, repeats: int, seed: int, final: bool = True) ->
                 "panl_patch_gain_ci_above_zero": row["patch_gain_ci_low"] is not None and row["patch_gain_ci_low"] > 0,
                 "panl_better_than_control_ci_above_zero": contrast["recovery_difference"]["ci_low"] is not None and contrast["recovery_difference"]["ci_low"] > 0,
             }
-        hard = lookup[("P1_PANL", layer, "all", "oriented_hard")]
-        hard_contrast = contrast_lookup[(layer, "oriented_hard")]
-        hard_noncontradictory = (
-            float(hard["patch_gain_value"]) >= 0 and
-            (hard["recovery_value"] is None or float(hard["recovery_value"]) >= 0) and
-            float(hard_contrast["patch_gain_difference"]["value"]) >= 0
-        )
-        pass_gate = all(all(checks.values()) for checks in endpoint_checks.values()) and hard_noncontradictory
-        claims.append({"layer": layer, "continuous_endpoint_checks": endpoint_checks,
-                       "hard_midpoint_noncontradictory": hard_noncontradictory,
-                       "functional_information_claim_supported": pass_gate})
+        hard=lookup[("P1_PANL",layer,"all","oriented_hard")]
+        hard_contrast=contrast_lookup[(layer,"oriented_hard")]
+        hard_noncontradictory=(float(hard["patch_gain_value"])>=0 and
+                               (hard["recovery_value"] is None or float(hard["recovery_value"])>=0) and
+                               float(hard_contrast["patch_gain_difference"]["value"])>=0)
+        supported=all(all(checks.values()) for checks in endpoint_checks.values()) and hard_noncontradictory
+        legacy_claims.append({"layer":layer,"continuous_endpoint_checks":endpoint_checks,
+                              "hard_midpoint_noncontradictory":hard_noncontradictory,
+                              "functional_information_claim_supported":supported})
+    claims_for_compatibility=(legacy_claims if legacy_claims else [
+        {"position":row["position"],"layer":row["layer"],
+         "continuous_endpoint_checks":row["continuous_endpoint_checks"],
+         "hard_midpoint_noncontradictory":row["hard_midpoint_noncontradictory"],
+         "functional_information_claim_supported":row["recoverable_functional_information_supported"]}
+        for row in position_claims
+    ])
     metric_rows.extend({"record_type": "position_contrast", **row} for row in contrasts)
     atomic_csv(output_dir / "metrics.csv", metric_rows)
     atomic_csv(output_dir / "bootstrap.csv", bootstrap_rows)
@@ -208,11 +234,13 @@ def analyze(output_dir: Path, *, repeats: int, seed: int, final: bool = True) ->
         "status": "complete" if final else "provisional", "run_fingerprint": config["fingerprint"],
         "baseline_count": len(baselines), "patch_cell_count": len(results),
         "bootstrap_repeats": repeats, "sampling_unit": "item_id",
-        "primary_fdr_families": {endpoint: 10 for endpoint in PRIMARY},
+        "primary_fdr_families": {endpoint: len(grouped) for endpoint in PRIMARY},
         "metrics": metric_rows, "position_contrasts": contrasts,
-        "claim_gate": "margin_and_oriented_soft_CI_with_noncontradictory_hard",
-        "layer_claims": claims,
-        "any_layer_supports_functional_information_claim": any(row["functional_information_claim_supported"] for row in claims),
+        "claim_gate": ("panl_recovery_and_superiority_to_panl_plus_1" if legacy_claims else
+                       "position_recovery_without_cross_position_superiority"),
+        "position_claims":position_claims,"layer_claims":claims_for_compatibility,
+        "any_layer_supports_functional_information_claim": any(
+            row["functional_information_claim_supported"] for row in claims_for_compatibility),
     }
     atomic_json(output_dir / "summary.json", summary)
     _plots(output_dir, metric_rows)
@@ -244,7 +272,20 @@ def _plots(output: Path, rows: Sequence[dict[str, Any]]) -> None:
     import matplotlib.pyplot as plt
     plot_dir = output / "plots"
     plot_dir.mkdir(exist_ok=True)
-    styles = {"P1_PANL": ("#E07B39", "o"), "P1_PANL_PLUS_1": ("#4C78A8", "s")}
+    cell_rows=[row for row in rows if row.get("record_type")=="cell"]
+    positions=sorted({str(row["position"]) for row in cell_rows})
+    layers=sorted({int(row["layer"]) for row in cell_rows})
+    item_counts=sorted({int(row["item_count"]) for row in cell_rows if row.get("group")=="all"})
+    n_text=str(item_counts[0]) if len(item_counts)==1 else "/".join(map(str,item_counts))
+    grid_text=f"n={n_text}; {len(positions)} position{'s' if len(positions)!=1 else ''} × {len(layers)} layer{'s' if len(layers)!=1 else ''}"
+    colors=plt.get_cmap("tab10")
+    markers=("o","s","^","D","v","P","X","*")
+    styles={position:(colors(index%10),markers[index%len(markers)]) for index,position in enumerate(positions)}
+
+    def recovery_part(data: Sequence[dict[str,Any]], position: str) -> list[dict[str,Any]]:
+        return sorted([row for row in data if row["position"]==position and row["recovery_value"] is not None and
+                       row["recovery_ci_low"] is not None and row["recovery_ci_high"] is not None],
+                      key=lambda row:int(row["layer"]))
     for endpoint, filename, title in (
         ("fixed_clean_class_margin", "delayed_patching_logit_recovery.png", "Fixed-clean-class logit-margin recovery"),
         ("oriented_soft", "delayed_patching_soft_recovery.png", "Oriented soft-SA recovery"),
@@ -253,15 +294,16 @@ def _plots(output: Path, rows: Sequence[dict[str, Any]]) -> None:
         fig, ax = plt.subplots(figsize=(8, 5))
         data = _cell_rows(rows, endpoint)
         for position, (color, marker) in styles.items():
-            part = sorted([row for row in data if row["position"] == position], key=lambda row: int(row["layer"]))
+            part = recovery_part(data,position)
+            if not part: continue
             x = [int(row["layer"]) for row in part]
             y = [row["recovery_value"] for row in part]
-            low = [value - row["recovery_ci_low"] for value, row in zip(y, part)]
-            high = [row["recovery_ci_high"] - value for value, row in zip(y, part)]
+            low = [max(0.0,value - row["recovery_ci_low"]) for value, row in zip(y, part)]
+            high = [max(0.0,row["recovery_ci_high"] - value) for value, row in zip(y, part)]
             ax.errorbar(x, y, yerr=[low, high], label=position, color=color, marker=marker, capsize=3)
         ax.axhline(0, color="black", lw=.8); ax.axhline(1, color="black", lw=.8, ls="--")
-        ax.set_xticks(sorted({int(row["layer"]) for row in data})); ax.set_xlabel("Zero-based decoder layer")
-        ax.set_ylabel("Ratio-of-means recovery"); ax.set_title(f"{title} (n=50; 25+25)"); ax.legend(); ax.grid(alpha=.25)
+        ax.set_xticks(layers); ax.set_xlabel("Zero-based decoder layer")
+        ax.set_ylabel("Ratio-of-means recovery"); ax.set_title(f"{title} ({grid_text})"); ax.legend(); ax.grid(alpha=.25)
         fig.tight_layout(); fig.savefig(plot_dir / filename, dpi=180); plt.close(fig)
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), sharex=True)
     for ax, endpoint, label in zip(axes, ("oriented_soft", "fixed_clean_class_margin"), ("Oriented soft SA", "Logit margin")):
@@ -271,41 +313,44 @@ def _plots(output: Path, rows: Sequence[dict[str, Any]]) -> None:
             x = [int(row["layer"]) for row in part]
             for state, ls in (("clean", ":"), ("corrupt", "--"), ("patched", "-")):
                 y = [row[f"{state}_value"] for row in part]
-                low = [value - row[f"{state}_ci_low"] for value, row in zip(y, part)]
-                high = [row[f"{state}_ci_high"] - value for value, row in zip(y, part)]
+                low = [max(0.0,value - row[f"{state}_ci_low"]) for value, row in zip(y, part)]
+                high = [max(0.0,row[f"{state}_ci_high"] - value) for value, row in zip(y, part)]
                 ax.errorbar(x, y, yerr=[low, high], color=color,
                             marker=marker if state == "patched" else None,
                             ls=ls, capsize=2, label=f"{position} {state}")
         ax.set_title(label); ax.set_xlabel("Layer"); ax.grid(alpha=.25)
     axes[0].set_ylabel("Mean"); axes[1].legend(fontsize=7, ncol=2)
-    fig.suptitle("Clean / corrupt / patched means (n=50; 25+25)"); fig.tight_layout()
+    fig.suptitle(f"Clean / corrupt / patched means ({grid_text})"); fig.tight_layout()
     fig.savefig(plot_dir / "delayed_patching_clean_corrupt_patched.png", dpi=180); plt.close(fig)
     fig, ax = plt.subplots(figsize=(8, 5)); data = _cell_rows(rows, "fixed_clean_class_margin")
     for position, (color, marker) in styles.items():
         part = sorted([row for row in data if row["position"] == position], key=lambda row: int(row["layer"]))
         y = [row["patched_vs_clean_first_token_change_rate"] for row in part]
-        low = [value - row["patched_vs_clean_first_token_change_rate_ci_low"] for value, row in zip(y, part)]
-        high = [row["patched_vs_clean_first_token_change_rate_ci_high"] - value for value, row in zip(y, part)]
+        low = [max(0.0,value - row["patched_vs_clean_first_token_change_rate_ci_low"]) for value, row in zip(y, part)]
+        high = [max(0.0,row["patched_vs_clean_first_token_change_rate_ci_high"] - value) for value, row in zip(y, part)]
         ax.errorbar([row["layer"] for row in part], y, yerr=[low, high],
                     color=color, marker=marker, capsize=3, label=f"{position}: patched vs clean")
     if data:
         ax.axhline(data[0]["corrupt_first_token_change_rate"], color="black", ls="--", label="corrupt vs clean")
         ax.axhspan(data[0]["corrupt_first_token_change_rate_ci_low"],
                    data[0]["corrupt_first_token_change_rate_ci_high"], color="black", alpha=.1)
-    ax.set_title("First-token change rate (n=50; 25+25)"); ax.set_xlabel("Layer"); ax.set_ylabel("Rate"); ax.legend(); ax.grid(alpha=.25)
+    ax.set_title(f"First-token change rate ({grid_text})"); ax.set_xlabel("Layer"); ax.set_ylabel("Rate"); ax.legend(); ax.grid(alpha=.25)
     fig.tight_layout(); fig.savefig(plot_dir / "delayed_patching_change_rate.png", dpi=180); plt.close(fig)
     fig, ax = plt.subplots(figsize=(8, 5))
     for group, color in (("image_side", "#D95F02"), ("text_side", "#1B9E77")):
-        for position, (_base, marker) in styles.items():
-            part = sorted([row for row in _cell_rows(rows, "soft_sa", group) if row["position"] == position], key=lambda row: int(row["layer"]))
+        for position_index,(position,(_base,marker)) in enumerate(styles.items()):
+            part = recovery_part(_cell_rows(rows,"soft_sa",group),position)
+            if not part: continue
             y = [row["recovery_value"] for row in part]
-            low = [value - row["recovery_ci_low"] for value, row in zip(y, part)]
-            high = [row["recovery_ci_high"] - value for value, row in zip(y, part)]
+            low = [max(0.0,value - row["recovery_ci_low"]) for value, row in zip(y, part)]
+            high = [max(0.0,row["recovery_ci_high"] - value) for value, row in zip(y, part)]
             ax.errorbar([row["layer"] for row in part], y, yerr=[low, high],
                         color=color, marker=marker, capsize=2,
-                        ls="-" if position == "P1_PANL" else "--", label=f"{group} {position}")
+                        ls=("-","--","-.",":")[position_index%4], label=f"{group} {position}")
     ax.axhline(0, color="black", lw=.8); ax.axhline(1, color="black", lw=.8, ls=":")
-    ax.set_title("Side-specific soft-SA recovery (n=25 each)"); ax.set_xlabel("Layer"); ax.set_ylabel("Recovery"); ax.legend(fontsize=8); ax.grid(alpha=.25)
+    side_counts=sorted({int(row["item_count"]) for row in cell_rows if row.get("group") in {"image_side","text_side"}})
+    side_n=str(side_counts[0]) if len(side_counts)==1 else "/".join(map(str,side_counts))
+    ax.set_title(f"Side-specific soft-SA recovery (n={side_n} per side)"); ax.set_xlabel("Layer"); ax.set_ylabel("Recovery"); ax.legend(fontsize=8); ax.grid(alpha=.25)
     fig.tight_layout(); fig.savefig(plot_dir / "delayed_patching_side_comparison.png", dpi=180); plt.close(fig)
 
 
@@ -317,14 +362,20 @@ def _write_summary(output: Path, summary: dict[str, Any]) -> None:
     for endpoint in PRIMARY:
         lines.append(f"### {endpoint}")
         lines.append("")
+        def display(value: Any) -> str:
+            return "undefined" if value is None else f"{float(value):.6g}"
         for row in sorted(_cell_rows(rows, endpoint), key=lambda value: (value["position"], int(value["layer"]))):
-            lines.append(f"- {row['position']} L{row['layer']}: R={row['recovery_value']:.6g}, "
-                         f"95% CI [{row['recovery_ci_low']:.6g}, {row['recovery_ci_high']:.6g}], "
-                         f"p={row.get('p_raw', float('nan')):.6g}, q={row.get('q_bh', float('nan')):.6g}, n={row['item_count']}")
+            lines.append(f"- {row['position']} L{row['layer']}: R={display(row['recovery_value'])}, "
+                         f"95% CI [{display(row['recovery_ci_low'])}, {display(row['recovery_ci_high'])}], "
+                         f"p={display(row.get('p_raw'))}, q={display(row.get('q_bh'))}, n={row['item_count']}")
         lines.append("")
     lines.extend(["## Functional-information claim gate", ""])
     for row in summary["layer_claims"]:
-        lines.append(f"- L{row['layer']}: {'SUPPORTED' if row['functional_information_claim_supported'] else 'not established'}; "
+        position=f"{row['position']} " if row.get("position") else ""
+        wording=("carries recoverable functional information" if row.get("position") else
+                 "PANL recovery exceeds the PANL+1 control")
+        lines.append(f"- {position}L{row['layer']}: {wording} "
+                     f"{'SUPPORTED' if row['functional_information_claim_supported'] else 'not established'}; "
                      f"hard midpoint non-contradictory={row['hard_midpoint_noncontradictory']}.")
     lines.extend(["", "Scientific null effects are valid outcomes and do not indicate execution failure.", ""])
     (output / "summary.md").write_text("\n".join(lines), encoding="utf-8")

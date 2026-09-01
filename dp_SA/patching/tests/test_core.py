@@ -11,16 +11,18 @@ from layer_metacognition.model_adapter import LanguageModules
 from layer_metacognition.sa_patching.artifacts import ragged_position_mean
 
 from dp_SA.patching.artifacts import grouped_shape_means, image_shape_key, length_conditioned_means
+from dp_SA.patching.analyze import analyze
+from dp_SA.patching.config import parse_positions
 from dp_SA.patching.hooks import (
     ActivationReplacementHook, EmbeddingReplacement, EmbeddingReplacementHook,
     EmptyActivationHook, PatchingInvariantError, ResidualActivationCacheHook,
 )
-from dp_SA.patching.io import atomic_jsonl, atomic_torch_save, load_jsonl_strict
+from dp_SA.patching.io import atomic_json, atomic_jsonl, atomic_torch_save, load_jsonl_strict
 from dp_SA.patching.lock import FormalRunLock
 from dp_SA.patching.metrics import (
     bh_fdr, bootstrap_ratio, oriented, probabilities, recovery, score_logits, sign_flip_p,
 )
-from dp_SA.patching.run import _build_replacements
+from dp_SA.patching.run import _build_replacements, _historical_parity, _position_definitions, _position_indices
 from dp_SA.patching.selection import select_calibration_manifest, select_evaluation_manifest, stable_case_key
 
 
@@ -126,6 +128,81 @@ def test_answer_only_builds_exactly_one_embedding_replacement():
     assert replacements[0].name == "answer"
     assert replacements[0].positions == (6,)
     assert torch.equal(replacements[0].source, torch.full((1, 3), 7.0))
+
+
+def test_class_list_end_is_supported_and_uses_its_true_locator_index():
+    assert parse_positions(["P1_CLASS_LIST_END"])==("P1_CLASS_LIST_END",)
+    located={"P1_PANL_PLUS_1":{"processed_index":4},"P1_CLASS_LIST_END":{"processed_index":9}}
+    assert _position_indices(located,["P1_CLASS_LIST_END"],12)=={"P1_CLASS_LIST_END":9}
+    with pytest.raises(ValueError,match="outside"):
+        _position_indices(located,["P1_CLASS_LIST_END"],9)
+
+
+def test_historical_parity_checks_existing_keys_and_marks_new_cells_unavailable(tmp_path: Path):
+    capture_dir=tmp_path/"outputs"/"capture"; hidden=capture_dir/"hidden"/"x.npz"
+    hidden.parent.mkdir(parents=True); expected=np.asarray([1,2,3],dtype=np.float16)
+    np.savez(hidden,P1_PANL__L18=expected)
+    row={"case_id":"x","hidden_file":"capture/hidden/x.npz"}
+    cache={18:{"P1_PANL":torch.tensor(expected.astype(np.float32)),
+               "P1_CLASS_LIST_END":torch.tensor([4.,5.,6.])}}
+    result=_historical_parity(capture_dir,row,cache,["P1_PANL","P1_CLASS_LIST_END"],[18])
+    statuses={(value["position"],value["status"]) for value in result["checks"]}
+    assert ("P1_PANL","compared") in statuses
+    assert ("P1_CLASS_LIST_END","historical_hidden_not_available") in statuses
+
+
+def _analysis_record(case_id: str, item: str, side: str, layer: int, position: str="P1_CLASS_LIST_END") -> dict:
+    image_side=side=="image_side"
+    clean_soft=.8 if image_side else .2; patched_soft=.7 if image_side else .3
+    clean_hard=.825 if image_side else .175; patched_hard=.675 if image_side else .325
+    return {
+        "cell_key":f"{case_id}|{position}|L{layer}","case_id":case_id,"item_id":item,
+        "test_side":side,"condition":"conflict_easy","position":position,
+        "token_position":9,"layer":layer,"corruption":"all","status":"completed",
+        "clean":{"fixed_clean_class_margin":2.,"soft_sa":clean_soft,"hard_midpoint":clean_hard,"entropy":1.},
+        "corrupt":{"fixed_clean_class_margin":0.,"soft_sa":.5,"hard_midpoint":.5,"entropy":2.},
+        "patched":{"fixed_clean_class_margin":1.5,"soft_sa":patched_soft,"hard_midpoint":patched_hard,"entropy":1.2},
+        "first_token":{"corrupt_changed":True,"patched_changed_from_clean":False,"clean_class_recovered":True},
+    }
+
+
+def test_class_list_only_analysis_is_dynamic_and_has_no_fake_panl_contrast(tmp_path: Path):
+    atomic_json(tmp_path/"run_config.json",{"fingerprint":"test","expected_patch_cells":4,"expected_baselines":2})
+    atomic_jsonl(tmp_path/"baselines.jsonl",[
+        {"case_id":"a","status":"completed"},{"case_id":"b","status":"completed"}])
+    rows=[]
+    for layer in (16,18):
+        rows.extend([_analysis_record("a","1","image_side",layer),_analysis_record("b","2","text_side",layer)])
+    atomic_jsonl(tmp_path/"results.jsonl",rows)
+    summary=analyze(tmp_path,repeats=20,seed=42,final=True)
+    assert summary["position_contrasts"]==[]
+    assert summary["primary_fdr_families"]=={endpoint:2 for endpoint in ("fixed_clean_class_margin","oriented_soft","oriented_hard")}
+    assert {row["position"] for row in summary["position_claims"]}=={"P1_CLASS_LIST_END"}
+    assert summary["claim_gate"]=="position_recovery_without_cross_position_superiority"
+    assert (tmp_path/"completion.json").is_file()
+
+
+def test_original_panl_control_analysis_still_builds_paired_contrasts(tmp_path: Path):
+    atomic_json(tmp_path/"run_config.json",{"fingerprint":"test","expected_patch_cells":4,"expected_baselines":2})
+    atomic_jsonl(tmp_path/"baselines.jsonl",[
+        {"case_id":"a","status":"completed"},{"case_id":"b","status":"completed"}])
+    rows=[]
+    for position in ("P1_PANL","P1_PANL_PLUS_1"):
+        rows.extend([_analysis_record("a","1","image_side",18,position),
+                     _analysis_record("b","2","text_side",18,position)])
+    atomic_jsonl(tmp_path/"results.jsonl",rows)
+    summary=analyze(tmp_path,repeats=20,seed=42,final=True)
+    assert len(summary["position_contrasts"])==3
+    assert summary["claim_gate"]=="panl_recovery_and_superiority_to_panl_plus_1"
+    assert summary["layer_claims"][0]["layer"]==18 and "position" not in summary["layer_claims"][0]
+
+
+def test_position_definition_fingerprint_changes_with_anchor_or_layer():
+    base={"positions":_position_definitions(["P1_CLASS_LIST_END"]),"layers":[16]}
+    changed_anchor=json.loads(json.dumps(base)); changed_anchor["positions"]["P1_CLASS_LIST_END"]["anchor_text"]="changed"
+    changed_layer={"positions":base["positions"],"layers":[18]}
+    from dp_SA.io_utils import canonical_hash
+    assert len({canonical_hash(base),canonical_hash(changed_anchor),canonical_hash(changed_layer)})==3
 
 
 def test_clean_cache_single_position_layer_patch_and_hook_cleanup(tmp_path: Path):

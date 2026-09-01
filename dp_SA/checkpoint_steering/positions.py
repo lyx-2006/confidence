@@ -86,6 +86,18 @@ def locate_checkpoint_positions(tokenizer: Any, rendered: str, inputs: Any, answ
         )
 
     for name, anchor in ANCHORS.items():
+        if name == "P1_CLASS_LIST_END":
+            common = base[name]
+            output[name] = _enrich(
+                tokenizer,
+                alignment,
+                common,
+                rendered_index=int(common["rendered_index"]),
+                anchor_text=str(common["anchor_text"]),
+                anchor_count=int(common["anchor_occurrence_count"]),
+                anchor_start=int(common["anchor_start_index"]),
+            )
+            continue
         starts = _occurrences(rendered, anchor)
         if len(starts) != 1:
             raise ValueError(f"{name}: expected one anchor occurrence, found {len(starts)}")

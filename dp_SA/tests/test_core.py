@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 
 from dp_SA.analysis import bh_fdr, select_probe_candidates
+from dp_SA.capture import _parse_layers as parse_capture_layers, _parse_positions as parse_capture_positions
+from dp_SA.config import LAYERS, POSITIONS
 from dp_SA.prompts import SA_INSTRUCTION_START, SA_PREFILL, phase0_prompt, phase1_prompt
 from dp_SA.selection import select_manifests
 from dp_SA.soft_score import soft_sa_from_logits
@@ -17,6 +19,15 @@ def test_prompts_delayed_instruction_and_exact_answer():
     p1=phase1_prompt("q","c","blue"); assert "**Answer**: blue\n\n" in p1
     assert p1.index("**Answer**: blue") < p1.index(SA_INSTRUCTION_START)
     assert not p1.endswith(SA_PREFILL)
+
+
+def test_capture_grid_validation_preserves_historical_defaults_and_supports_new_positions():
+    assert parse_capture_positions(POSITIONS)==POSITIONS
+    assert parse_capture_layers(LAYERS)==LAYERS
+    assert parse_capture_positions(["P1_LAT","P1_CLASS_LIST_END"])==("P1_LAT","P1_CLASS_LIST_END")
+    with pytest.raises(ValueError,match="unique"): parse_capture_positions(["P1_LAT","P1_LAT"])
+    with pytest.raises(ValueError,match="Unsupported"): parse_capture_positions(["UNKNOWN"])
+    with pytest.raises(ValueError,match="non-negative"): parse_capture_layers([-1])
 
 def test_soft_score_stable_and_midpoint():
     out=soft_sa_from_logits(np.asarray([0.0]*9),list(range(9)))

@@ -1,0 +1,28 @@
+[INFO] Loading processor from /root/autodl-tmp/qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct ...
+The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. Note that this behavior will be extended to all models in a future release.
+[INFO] Processor loaded.
+[INFO] Loading model from /root/autodl-tmp/qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct ...
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:00<00:03,  1.15it/s]Loading checkpoint shards:  40%|████      | 2/5 [00:01<00:02,  1.22it/s]Loading checkpoint shards:  60%|██████    | 3/5 [00:02<00:01,  1.22it/s]Loading checkpoint shards:  80%|████████  | 4/5 [00:03<00:00,  1.22it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:03<00:00,  1.66it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:03<00:00,  1.42it/s]
+[INFO] Model loaded. dtype=bfloat16, device_map=auto
+[INFO] Model device_map: {'': 0}
+The following generation flags are not valid and may be ignored: ['temperature']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/autodl-tmp/dp_SA/probe.py", line 110, in <module>
+    if __name__=="__main__": raise SystemExit(main())
+                                              ^^^^^^
+  File "/root/autodl-tmp/dp_SA/probe.py", line 109, in main
+    run_probe(root,candidate_path,Path(a.split),a.bootstrap,cells=cells,seed=a.seed); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/autodl-tmp/dp_SA/probe.py", line 67, in run_probe
+    split=json.loads(split_path.read_text()); item_to_fold={str(k):int(v) for k,v in split["item_to_fold"].items()}
+                     ^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/pathlib.py", line 1027, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/root/autodl-tmp/layer_metacognition/output/Final_v4_run_no_sa/baseline/stage_no_sa_prediction_probe/split_assignments.json'

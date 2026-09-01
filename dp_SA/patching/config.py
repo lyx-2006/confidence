@@ -8,6 +8,7 @@ FORMAT_VERSION = 1
 DEFAULT_CAPTURE_DIR = ROOT / "dp_SA" / "outputs" / "capture"
 DEFAULT_OUTPUT_PARENT = ROOT / "dp_SA" / "patching" / "outputs"
 DEFAULT_POSITIONS = ("P1_PANL", "P1_PANL_PLUS_1")
+SUPPORTED_POSITIONS = (*DEFAULT_POSITIONS, "P1_CLASS_LIST_END")
 DEFAULT_LAYERS = (12, 14, 16, 18, 20)
 DEFAULT_EVAL_CASES = 50
 CORRUPTIONS = ("all", "answer_only")
@@ -31,7 +32,7 @@ def parse_positions(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
     output = tuple(str(value) for value in values)
     if not output or len(set(output)) != len(output):
         raise ValueError("--positions must be non-empty and unique")
-    invalid = sorted(set(output) - set(DEFAULT_POSITIONS))
+    invalid = sorted(set(output) - set(SUPPORTED_POSITIONS))
     if invalid:
         raise ValueError(f"Unsupported delayed patch positions: {invalid}")
     return output

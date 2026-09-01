@@ -14,13 +14,14 @@ import numpy as np
 import torch
 
 from dp_SA.config import DATASET_PATH, INFERENCE_PATH, MIDPOINTS, MODEL_PATH
+from dp_SA.positions import P1_CLASS_LIST_END_DEFINITION
 from dp_SA.soft_score import class_token_ids
 from layer_metacognition.model_adapter import load_qwen_inference, resolve_language_modules, run_logits_forward
 
 from .artifacts import build_or_load_artifacts, evaluation_image_key
 from .config import (
     BOOTSTRAP_REPEATS, DEFAULT_CAPTURE_DIR, DEFAULT_EVAL_CASES, DEFAULT_LAYERS,
-    DEFAULT_OUTPUT_PARENT, DEFAULT_POSITIONS, FORMAT_VERSION, HISTORICAL_LAYERS,
+    DEFAULT_OUTPUT_PARENT, DEFAULT_POSITIONS, FORMAT_VERSION,
     LOGIT_PARITY_TOLERANCE, MODEL_CONFIG_FILES, SEED, SOFT_PARITY_TOLERANCE, CORRUPTIONS,
     parse_layers, parse_positions,
 )
@@ -134,19 +135,44 @@ def _clean_cache_path(output_dir: Path, case_id: str) -> Path:
     return output_dir / "clean_cache" / f"{case_id}.pt"
 
 
-def _historical_parity(capture_dir: Path, row: dict[str, Any], cache: dict[int, dict[str, torch.Tensor]], layers: Sequence[int]) -> dict[str, Any]:
+def _position_definitions(positions: Sequence[str]) -> dict[str, Any]:
+    definitions = {
+        "P1_PANL": {"target": "newline_immediately_after_fixed_phase1_answer"},
+        "P1_PANL_PLUS_1": {"target": "processed_token_immediately_after_P1_PANL"},
+        "P1_CLASS_LIST_END": dict(P1_CLASS_LIST_END_DEFINITION),
+    }
+    return {position: definitions[position] for position in positions}
+
+
+def _position_indices(located: dict[str, Any], positions: Sequence[str], sequence_length: int) -> dict[str, int]:
+    missing=[position for position in positions if position not in located]
+    if missing:
+        raise ValueError(f"Requested positions were not located: {missing}")
+    output={position:int(located[position]["processed_index"]) for position in positions}
+    if any(index < 0 or index >= sequence_length for index in output.values()):
+        raise ValueError(f"Requested position is outside prepared input: {output}")
+    return output
+
+
+def _historical_parity(capture_dir: Path, row: dict[str, Any], cache: dict[int, dict[str, torch.Tensor]],
+                       positions: Sequence[str], layers: Sequence[int]) -> dict[str, Any]:
     hidden_path = capture_dir.parent / str(row["hidden_file"])
     if not hidden_path.is_file():
         raise FileNotFoundError(f"Historical hidden capture is missing: {hidden_path}")
     checked: list[dict[str, Any]] = []
     with np.load(hidden_path) as historical:
-        for layer in sorted(set(layers) & set(HISTORICAL_LAYERS)):
-            for position in DEFAULT_POSITIONS:
+        available=set(historical.files)
+        for layer in layers:
+            for position in positions:
                 key = f"{position}__L{layer}"
+                if key not in available:
+                    checked.append({"position":position,"layer":layer,"status":"historical_hidden_not_available"})
+                    continue
                 current = cache[layer][position].numpy().astype(np.float16)
                 expected = historical[key]
                 equal = np.array_equal(current, expected)
-                checked.append({"position": position, "layer": layer, "equal_after_fp16": bool(equal),
+                checked.append({"position": position, "layer": layer, "status":"compared",
+                                "equal_after_fp16": bool(equal),
                                 "max_abs_difference": float(np.max(np.abs(current.astype(np.float32) - expected.astype(np.float32))))})
                 if not equal:
                     raise PatchingInvariantError(f"Historical hidden parity failed: {row['case_id']} {key}")
@@ -237,7 +263,7 @@ def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
         for side in ("image_side", "text_side"):
             run_cases.extend([row for row in selected if row["test_side"] == side][:2])
         run_cases = sorted(run_cases, key=lambda row: str(row["case_id"]))
-        run_layers = (14,)
+        run_layers = (layers[0],)
         bootstrap = 100
     grid = [(position, layer) for position in positions for layer in run_layers]
     expected_keys = {f"{row['case_id']}|{position}|L{layer}" for row in run_cases for position, layer in grid}
@@ -281,6 +307,7 @@ def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
             "model_processor_sha256": _model_files(model_path),
             "transformers_version": transformers.__version__,
             "positions": list(positions), "layers": list(layers),
+            "position_definitions": _position_definitions(positions),
             "active_layers": list(run_layers), "eval_cases": args.eval_cases,
             "active_case_count": len(run_cases), "seed": args.seed,
             "bootstrap": bootstrap, "smoke": bool(args.smoke),
@@ -311,10 +338,14 @@ def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
             case_id = str(row["case_id"])
             _rendered, inputs, details = prepare_delayed_case(inference, row, image_root=image_root)
             spans = details["spans"]
+            located = details["located"]
             sequence_length = int(inputs.input_ids.shape[1])
             sac = int(spans["SAC"])
-            position_indices = {position: int(spans["PANL"] if position == "P1_PANL" else spans["PANL_PLUS_1"])
-                                for position in positions}
+            try:
+                position_indices=_position_indices(located,positions,sequence_length)
+            except ValueError as exc:
+                raise ValueError(f"{case_id}: {exc}") from exc
+            position_records={position:dict(located[position]) for position in positions}
             image_key = evaluation_image_key(inference, inputs, spans, hidden_size=modules.hidden_size)
             replacements = _build_replacements(artifacts, image_key, spans, corruption=args.corruption)
             baseline = baseline_by_case.get(case_id)
@@ -329,10 +360,11 @@ def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
                 digit = tokenizer.decode([class_ids[int(clean["hard_class"])]], skip_special_tokens=False,
                                          clean_up_tokenization_spaces=False)
                 parity = _parity(row, clean, digit)
-                historical = _historical_parity(capture_dir, row, cache_hook.cache, run_layers)
+                historical = _historical_parity(capture_dir, row, cache_hook.cache, positions, run_layers)
                 cache_payload = {
-                    "format_version": 1, "case_id": case_id, "run_fingerprint": fingerprint,
+                    "format_version": 2, "case_id": case_id, "run_fingerprint": fingerprint,
                     "positions": position_indices, "layers": list(run_layers),
+                    "position_records": position_records,
                     "hidden": {layer: {name: value.contiguous() for name, value in values.items()}
                                for layer, values in cache_hook.cache.items()},
                 }
@@ -363,6 +395,7 @@ def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
                     "clean": clean, "corrupt": corrupt,
                     "clean_generated_digit": digit, "clean_parity": parity,
                     "historical_hidden_parity": historical,
+                    "position_records": position_records,
                     "embedding_diagnostics": embedding_diagnostics,
                     "image_shape_key": image_key,
                     "span_lengths": {name: len(span_positions(spans, name)) for name in ("IMAGE", "TEXT_CLUE", "ANSWER")},
@@ -375,11 +408,14 @@ def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 if not cache_path.is_file():
                     raise ValueError(f"Baseline exists without clean cache: {case_id}")
-                if baseline.get("image_shape_key") != image_key or baseline.get("spans", {}).get("PANL") != spans["PANL"]:
+                if (baseline.get("image_shape_key") != image_key or
+                        canonical_hash(baseline.get("position_records")) != canonical_hash(position_records)):
                     raise ValueError(f"Baseline token/image fingerprint changed: {case_id}")
             cache_payload = torch.load(cache_path, map_location="cpu", weights_only=False)
             if cache_payload.get("run_fingerprint") != fingerprint:
                 raise ValueError(f"Clean cache fingerprint changed: {case_id}")
+            if canonical_hash(cache_payload.get("position_records")) != canonical_hash(position_records):
+                raise ValueError(f"Clean cache position definition changed: {case_id}")
             clean_class = int(baseline["clean"]["hard_class"])
             for position, layer in grid:
                 cell_key = f"{case_id}|{position}|L{layer}"

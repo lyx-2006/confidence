@@ -6,6 +6,7 @@ import pytest
 import torch
 
 from dp_SA.prompts import SA_PREFILL, phase1_prompt
+from dp_SA.positions import locate_phase1_positions
 from dp_SA.checkpoint_steering.config import ANCHORS, POSITION_ORDER
 from dp_SA.checkpoint_steering.positions import locate_checkpoint_positions
 
@@ -72,6 +73,16 @@ def test_five_positions_are_uniquely_located_with_full_audit():
     assert len(located["P1_SAC"]["token_window"]) >= 5
     for name in ANCHORS:
         assert "\n" in located[name]["token_text"]
+
+
+def test_class_list_position_reuses_public_locator_exact_fields():
+    tokenizer=CharTokenizer(); rendered=phase1_prompt("q","clue","blue")+"\nassistant\n"+SA_PREFILL
+    ids=tokenizer.encode(rendered)
+    inputs=SimpleNamespace(input_ids=torch.tensor([ids]),attention_mask=torch.ones(1,len(ids),dtype=torch.long))
+    public=locate_phase1_positions(tokenizer,rendered,inputs,"blue")["P1_CLASS_LIST_END"]
+    checkpoint=locate_checkpoint_positions(tokenizer,rendered,inputs,"blue")["P1_CLASS_LIST_END"]
+    for field in ("processed_index","rendered_index","token_id","token_text","anchor_text","anchor_occurrence_count","anchor_start_index"):
+        assert checkpoint[field]==public[field]
 
 
 def test_alignment_survives_processed_image_placeholder_expansion():

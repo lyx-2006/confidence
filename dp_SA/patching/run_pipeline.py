@@ -19,6 +19,7 @@ from .run import _default_output, build_parser as build_run_parser
 TEST_PATHS = (
     "layer_metacognition/tests/test_sa_patching.py",
     "dp_SA/tests",
+    "dp_SA/checkpoint_steering/tests",
     "dp_SA/attention_block/tests",
     "dp_SA/patching/tests",
 )
@@ -77,13 +78,14 @@ def _smoke_gate(output: Path, args: argparse.Namespace) -> dict:
     if completed.returncode:
         raise RuntimeError(f"GPU smoke resume failed; see {log_path}")
     second = json.loads((smoke / "run_completion.json").read_text())
+    smoke_config = json.loads((smoke / "run_config.json").read_text())
     after = {
         "baselines": len(load_jsonl_strict(smoke / "baselines.jsonl")),
         "results": len(load_jsonl_strict(smoke / "results.jsonl")),
     }
     checks = {
         "four_balanced_cases": first["baseline_count"] == 4,
-        "eight_patch_cells": first["patch_cell_count"] == 8,
+        "dynamic_patch_cell_count": first["patch_cell_count"] == int(smoke_config["expected_patch_cells"]),
         "resume_baseline_count_unchanged": before["baselines"] == after["baselines"],
         "resume_result_count_unchanged": before["results"] == after["results"],
         "resume_reports_same_grid": second["baseline_count"] == first["baseline_count"] and second["patch_cell_count"] == first["patch_cell_count"],

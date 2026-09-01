@@ -17,7 +17,10 @@ from confidence_test.runtime_imports import load_runtime
 from layer_metacognition.conversation_builder import prepare_multimodal_inputs, render_continued_assistant
 from layer_metacognition.model_adapter import model_input_device, resolve_language_modules, run_hooked_forward
 
-from .config import CONDITIONS, DATASET_PATH, ERROR_RATE_LIMIT, HIDDEN_DEFINITION, INFERENCE_PATH, LAYERS, MODEL_PATH, OUTPUT_ROOT, POSITIONS
+from .config import (
+    CONDITIONS, DATASET_PATH, ERROR_RATE_LIMIT, HIDDEN_DEFINITION, INFERENCE_PATH,
+    LAYERS, MODEL_PATH, OUTPUT_ROOT, POSITIONS, SUPPORTED_CAPTURE_POSITIONS,
+)
 from .io_utils import append_jsonl, atomic_json, canonical_hash, load_jsonl, sha256_file
 from .positions import locate_phase1_positions
 from .prompts import ANSWER_PREFILL, SA_PREFILL, phase0_prompt, phase1_prompt
@@ -75,7 +78,26 @@ def _case_rows(max_items: int|None, max_samples: int|None) -> list[dict[str,Any]
         if len(selected)==max_samples: return selected
     return selected
 
-def run_capture(*, output_root: Path=OUTPUT_ROOT, max_items: int|None=None, max_samples: int|None=None, resume: bool=False) -> dict[str,Any]:
+def _parse_positions(values: Sequence[str]) -> tuple[str, ...]:
+    output=tuple(str(value) for value in values)
+    if not output or len(set(output)) != len(output):
+        raise ValueError("--positions must be non-empty and unique")
+    invalid=sorted(set(output)-set(SUPPORTED_CAPTURE_POSITIONS))
+    if invalid:
+        raise ValueError(f"Unsupported capture positions: {invalid}")
+    return output
+
+def _parse_layers(values: Sequence[int]) -> tuple[int, ...]:
+    output=tuple(int(value) for value in values)
+    if not output or len(set(output)) != len(output):
+        raise ValueError("--layers must be non-empty and unique")
+    if min(output) < 0:
+        raise ValueError("--layers must contain zero-based non-negative indices")
+    return output
+
+def run_capture(*, output_root: Path=OUTPUT_ROOT, max_items: int|None=None, max_samples: int|None=None,
+                resume: bool=False, positions: Sequence[str]=POSITIONS, layers: Sequence[int]=LAYERS) -> dict[str,Any]:
+    positions=_parse_positions(positions); layers=_parse_layers(layers)
     capture_dir=output_root/"capture"; capture_dir.mkdir(parents=True,exist_ok=True)
     pid_path=capture_dir/"active.pid"
     if pid_path.exists():
@@ -87,7 +109,7 @@ def run_capture(*, output_root: Path=OUTPUT_ROOT, max_items: int|None=None, max_
         model_files=("config.json","tokenizer.json","tokenizer_config.json","preprocessor_config.json","model.safetensors.index.json")
         model_fingerprint={name:sha256_file(MODEL_PATH/name) for name in model_files}
         config={"format_version":2,"dataset":str(DATASET_PATH.resolve()),"dataset_sha256":sha256_file(DATASET_PATH),"model":str(MODEL_PATH.resolve()),"model_fingerprint":model_fingerprint,
-                "conditions":list(CONDITIONS),"positions":list(POSITIONS),"layers":list(LAYERS),"max_items":max_items,"max_samples":max_samples,
+                "conditions":list(CONDITIONS),"positions":list(positions),"layers":list(layers),"max_items":max_items,"max_samples":max_samples,
                 "hidden_definition":HIDDEN_DEFINITION,"phase0_generation":{"max_new_tokens":24,"do_sample":False,"use_cache":True},
                 "phase1_generation":{"max_new_tokens":1,"do_sample":False,"use_cache":True,"constraint":"validated_class_token_ids"},"phase0_template_hash":canonical_hash(phase0_prompt("{question}","{text_clue}")),
                 "phase1_template_hash":canonical_hash(phase1_prompt("{question}","{text_clue}","{answer}"))}
@@ -95,12 +117,15 @@ def run_capture(*, output_root: Path=OUTPUT_ROOT, max_items: int|None=None, max_
         config_path=capture_dir/"config.json"
         if config_path.exists():
             old=json.loads(config_path.read_text())
-            if old.get("fingerprint")!=config["fingerprint"]: raise ValueError("Capture config fingerprint changed; refusing resume")
+            if old.get("fingerprint")!=config["fingerprint"]:
+                raise ValueError("Capture config fingerprint changed; use a fresh --output-root")
             if not resume: raise FileExistsError("Capture output exists; use --resume")
         else: atomic_json(config_path,config)
         phase0_path=capture_dir/"phase0_results.jsonl"; results_path=capture_dir/"results.jsonl"
         phase0={r["case_id"]:r for r in load_jsonl(phase0_path)}; completed={r["case_id"] for r in load_jsonl(results_path) if r.get("status")=="completed"}
         runtime=load_runtime(INFERENCE_PATH); inference=runtime.QwenVLInference(str(MODEL_PATH)); modules=resolve_language_modules(inference.model)
+        if any(layer >= modules.num_hidden_layers for layer in layers):
+            raise ValueError(f"Requested layer outside model with {modules.num_hidden_layers} layers")
         tokenizer=getattr(inference.processor,"tokenizer",inference.processor); class_ids=class_token_ids(tokenizer); device=model_input_device(inference)
         rows=_case_rows(max_items,max_samples); failures=0; started=time.time(); image_hashes: dict[str,str]={}
         for ordinal,spec in enumerate(rows,1):
@@ -127,13 +152,14 @@ def run_capture(*, output_root: Path=OUTPUT_ROOT, max_items: int|None=None, max_
                 answer=str(p0["phase0_raw_answer"]); prompt1=phase1_prompt(case.question,case.text_clue,answer); messages1=_messages(prompt1,spec["image_path"],SA_PREFILL)
                 rendered1=render_continued_assistant(inference.processor,messages1,SA_PREFILL)
                 inputs1=prepare_multimodal_inputs(inference.processor,messages1,rendered1,device=device)
-                located=locate_phase1_positions(tokenizer,rendered1,inputs1,answer); pos={name:int(located[name]["processed_index"]) for name in POSITIONS}
-                forward=run_hooked_forward(inference.model,inputs1,modules,pos,logits_positions=[pos["P1_SAC"]])
-                score=soft_sa_from_logits(forward.logits_by_position[pos["P1_SAC"]],class_ids)
+                located=locate_phase1_positions(tokenizer,rendered1,inputs1,answer); pos={name:int(located[name]["processed_index"]) for name in positions}
+                sac=int(located["P1_SAC"]["processed_index"])
+                forward=run_hooked_forward(inference.model,inputs1,modules,pos,logits_positions=[sac])
+                score=soft_sa_from_logits(forward.logits_by_position[sac],class_ids)
                 generated_ids,generated_text,_=_generate(inference,inputs1,1,class_ids); valid=generated_text in set(map(str,range(9)))
                 if not valid: raise ValueError(f"Constrained Phase 1 generation was invalid: {generated_text!r} {generated_ids}")
                 if int(generated_text)!=score["argmax_hard_class"]: raise ValueError("Forward argmax differs from greedy generation")
-                arrays={f"{position}__L{layer}":forward.hidden_by_name[position][layer].detach().float().cpu().numpy().astype(np.float16) for position in POSITIONS for layer in LAYERS}
+                arrays={f"{position}__L{layer}":forward.hidden_by_name[position][layer].detach().float().cpu().numpy().astype(np.float16) for position in positions for layer in layers}
                 hidden_rel=Path("capture")/"hidden"/f"{case_id}.npz"; _atomic_npz(output_root/hidden_rel,arrays)
                 normalized=normalize_answer(answer); image_answer=case.conflict_answer
                 result={"status":"completed","case_id":case_id,"item_id":case.item_id,"prior_index":case.prior_index,"condition":spec["condition"],"version":"v4",
@@ -158,5 +184,6 @@ def run_capture(*, output_root: Path=OUTPUT_ROOT, max_items: int|None=None, max_
 
 def main(argv: Sequence[str]|None=None)->int:
     p=argparse.ArgumentParser(); p.add_argument("--output-root",default=str(OUTPUT_ROOT)); p.add_argument("--max-items",type=int); p.add_argument("--max-samples",type=int); p.add_argument("--resume",action="store_true")
-    a=p.parse_args(argv); run_capture(output_root=Path(a.output_root),max_items=a.max_items,max_samples=a.max_samples,resume=a.resume); return 0
+    p.add_argument("--positions",nargs="+",default=list(POSITIONS)); p.add_argument("--layers",nargs="+",type=int,default=list(LAYERS))
+    a=p.parse_args(argv); run_capture(output_root=Path(a.output_root),max_items=a.max_items,max_samples=a.max_samples,resume=a.resume,positions=a.positions,layers=a.layers); return 0
 if __name__=="__main__": raise SystemExit(main())

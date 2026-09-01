@@ -45,7 +45,9 @@ def prepare_delayed_case(inference: Any, row: dict[str, Any], *, image_root: Pat
     )
     tokenizer = getattr(inference.processor, "tokenizer", inference.processor)
     located = locate_phase1_positions(tokenizer, rendered, inputs, answer)
-    for name in ("P1_PANL", "P1_PANL_PLUS_1", "P1_SAC"):
+    for name in ("P1_PANL", "P1_PANL_PLUS_1", "P1_CLASS_LIST_END", "P1_SAC"):
+        if name not in row.get("positions", {}):
+            continue
         stored = int(row["positions"][name]["processed_index"])
         current = int(located[name]["processed_index"])
         if stored != current:

@@ -7,10 +7,13 @@ OUTPUT_ROOT = ROOT / "dp_SA" / "outputs"
 MODEL_PATH = ROOT / "qwen-2.5-vl" / "models" / "Qwen2.5-VL-7B-Instruct"
 DATASET_PATH = ROOT / "datasets" / "datasets.json"
 INFERENCE_PATH = ROOT / "qwen-2.5-vl" / "inference.py"
-SPLIT_PATH = ROOT / "layer_metacognition" / "output" / "Final_v4_run_no_sa" / "baseline" / "stage_no_sa_prediction_probe" / "split_assignments.json"
+SPLIT_PATH = ROOT / "layer_metacognition" / "output" / "Final_v4_run_sa_prediction" / "answer_basis_9" / "stage_sa_prediction_probe" / "split_assignments.json"
 
 CONDITIONS = ("conflict_easy", "conflict_hard")
 POSITIONS = ("P1_AC", "P1_PANL", "P1_PANL_PLUS_1", "P1_SAC")
+SUPPORTED_CAPTURE_POSITIONS = (
+    "P1_AC", "P1_LAT", "P1_PANL", "P1_PANL_PLUS_1", "P1_CLASS_LIST_END", "P1_SAC",
+)
 PROBE_POSITIONS = ("P1_AC", "P1_PANL", "P1_PANL_PLUS_1")
 LAYERS = (10, 14, 18, 20, 24, 26)
 ALPHAS = (-10.0, -2.0, 0.0, 2.0, 10.0)
