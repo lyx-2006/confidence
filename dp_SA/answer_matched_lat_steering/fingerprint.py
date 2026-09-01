@@ -7,8 +7,8 @@ from dp_SA.prompts import PHASE1_TEMPLATE, SA_PREFILL
 
 from .config import (
     ALPHAS, BOOTSTRAP_REPEATS, DIRECTIONS, EXPECTED_SOURCE_SHA256,
-    HIDDEN_DEFINITION, INFERENCE_PATH, LAYERS, MODEL_PATH, POSITION,
-    SEED, SMOKE_ALPHAS, SMOKE_LAYERS, VECTOR_NORM_FRACTION,
+    HIDDEN_DEFINITION, INFERENCE_PATH, LAYERS, MODEL_PATH, POSITIONS,
+    SEED, SMOKE_ALPHAS, SMOKE_DIRECTIONS, SMOKE_LAYERS, VECTOR_NORM_FRACTION,
 )
 from .io_utils import atomic_json, canonical_hash, sha256_file
 
@@ -25,10 +25,10 @@ def model_hashes() -> dict[str, str]:
 
 def experiment_config(*, smoke: bool, manifest_fingerprints: dict[str, str]) -> dict[str, Any]:
     payload = {
-        "format_version": 1, "smoke_only": smoke, "position": POSITION,
+        "format_version": 2, "smoke_only": smoke, "positions": list(POSITIONS),
         "layers": list(SMOKE_LAYERS if smoke else LAYERS),
         "alphas": list(SMOKE_ALPHAS if smoke else ALPHAS),
-        "directions": list(DIRECTIONS), "seed": SEED,
+        "directions": list(SMOKE_DIRECTIONS if smoke else DIRECTIONS), "seed": SEED,
         "bootstrap_repeats": 200 if smoke else BOOTSTRAP_REPEATS,
         "vector_norm_fraction": VECTOR_NORM_FRACTION,
         "hidden_definition": HIDDEN_DEFINITION,

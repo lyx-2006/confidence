@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 
 from dp_SA.answer_matched_lat_steering.vectors import (
-    family_equal_mean, loao_direction, scale_direction, shuffled_answer_direction,
+    family_equal_mean, loao_direction, recipient_target_norm, scale_direction, shuffled_answer_direction,
 )
+from dp_SA.answer_matched_lat_steering.config import VECTOR_NORM_FRACTION
 
 
 def test_family_equal_mean_does_not_weight_record_rich_family_more():
@@ -32,3 +33,12 @@ def test_loao_rejects_fewer_than_three_other_answers():
     with pytest.raises(ValueError, match="only 2"):
         loao_direction({"red": np.ones(2), "blue": np.ones(2), "green": np.ones(2)}, "red")
 
+
+def test_recipient_target_norm_uses_only_loao_included_answers():
+    cells = {
+        ("f1", "red", "high_text"): np.array([100.0, 0.0]),
+        ("f2", "blue", "high_text"): np.array([3.0, 4.0]),
+        ("f3", "green", "high_image"): np.array([0.0, 10.0]),
+    }
+    value = recipient_target_norm(cells, ["blue", "green"])
+    assert value == pytest.approx(VECTOR_NORM_FRACTION * 7.5)

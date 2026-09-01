@@ -14,11 +14,12 @@ from typing import Any, Sequence
 from .analyze import analyze
 from .config import (
     FORMAL_CAPTURE_FORWARDS, FORMAL_STEERING_FORWARDS, FORMAL_TOTAL_FORWARDS,
-    HISTORICAL_CAPTURE, HISTORICAL_CONSTRUCTION, HISTORICAL_TEST,
+    HISTORICAL_CAPTURE, HISTORICAL_CONSTRUCTION, HISTORICAL_TEST, LEGACY_RESULTS_ROOT,
     MAX_SMOKE_ROUNDS, RESULTS_ROOT, SMOKE_ROOT,
 )
-from .io_utils import append_jsonl, atomic_json, atomic_text, sha256_file
+from .io_utils import append_jsonl, atomic_json, atomic_text, canonical_hash, sha256_file
 from .prepare import run_prepare
+from .probe import run_probe
 from .run import run_steering
 
 
@@ -53,7 +54,10 @@ def _inside(path: Path, parent: Path) -> bool:
 
 
 def _historical_hashes() -> dict[str, str]:
-    return {str(path): sha256_file(path) for path in (HISTORICAL_CAPTURE, HISTORICAL_CONSTRUCTION, HISTORICAL_TEST)}
+    hashes = {str(path): sha256_file(path) for path in (HISTORICAL_CAPTURE, HISTORICAL_CONSTRUCTION, HISTORICAL_TEST)}
+    legacy = {str(path.relative_to(LEGACY_RESULTS_ROOT)): sha256_file(path) for path in sorted(LEGACY_RESULTS_ROOT.rglob("*")) if path.is_file()}
+    hashes[str(LEGACY_RESULTS_ROOT)] = canonical_hash(legacy)
+    return hashes
 
 
 def _smoke_report(report: dict[str, Any]) -> str:
@@ -75,20 +79,21 @@ def _smoke_report(report: dict[str, Any]) -> str:
 
 
 def run_smoke(root: Path, round_number: int) -> dict[str, Any]:
-    started = time.time(); before = _historical_hashes(); failure = None; status = "failed"; tests = {"passed": 0, "failed": 0}; prepare = {}; steering = {}; analysis = {}; resume_prepare = {}; resume_steering = {}; resume_analysis = {}
+    started = time.time(); before = _historical_hashes(); failure = None; status = "failed"; tests = {"passed": 0, "failed": 0}; prepare = {}; steering = {}; probe = {}; analysis = {}; resume_prepare = {}; resume_steering = {}; resume_probe = {}; resume_analysis = {}
     try:
-        tests = run_cpu_tests(); prepare = run_prepare(output_root=root, smoke=True, resume=False); steering = run_steering(output_root=root, smoke=True, resume=False); analysis = analyze(output_root=root, smoke=True, resume=False)
-        resume_prepare = run_prepare(output_root=root, smoke=True, resume=True); resume_steering = run_steering(output_root=root, smoke=True, resume=True); resume_analysis = analyze(output_root=root, smoke=True, resume=True)
+        tests = run_cpu_tests(); prepare = run_prepare(output_root=root, smoke=True, resume=False); steering = run_steering(output_root=root, smoke=True, resume=False); probe = run_probe(output_root=root, smoke=True, resume=False); analysis = analyze(output_root=root, smoke=True, resume=False)
+        resume_prepare = run_prepare(output_root=root, smoke=True, resume=True); resume_steering = run_steering(output_root=root, smoke=True, resume=True); resume_probe = run_probe(output_root=root, smoke=True, resume=True); resume_analysis = analyze(output_root=root, smoke=True, resume=True)
         capture_forwards = int(prepare["capture"]["new_gpu_forwards"]); steering_forwards = int(steering["new_gpu_forwards"])
-        if capture_forwards != 20 or steering_forwards != 72: raise RuntimeError(f"Unexpected smoke forwards: capture={capture_forwards}, steering={steering_forwards}")
-        if not resume_prepare["capture"].get("resumed_noop") or not resume_steering.get("resumed_noop") or not resume_analysis.get("resumed_noop"): raise RuntimeError("Resume was not a zero-forward no-op")
-        required = [root / "tables" / name for name in ("delta_sa_by_layer_alpha_and_answer.csv", "dose_response_and_controls.csv", "split_and_selection_audit.csv", "README.md")] + [root / "figures" / "P1_LAT_delta_sa_by_layer.png", root / "summary.md", root / "progress" / "completion.json"]
-        if not all(path.is_file() and path.stat().st_size > 0 for path in required) or analysis.get("alpha_zero_parity") != "passed": raise RuntimeError("Smoke schema/parity audit failed")
+        if capture_forwards != 20 or steering_forwards != 192: raise RuntimeError(f"Unexpected smoke forwards: capture={capture_forwards}, steering={steering_forwards}")
+        if not resume_prepare["capture"].get("resumed_noop") or not resume_steering.get("resumed_noop") or not resume_probe.get("resumed_noop") or not resume_analysis.get("resumed_noop"): raise RuntimeError("Resume was not a zero-forward no-op")
+        required = [root / "tables" / name for name in ("table1_lat_panl_steering.csv", "table2_lat_panl_probe.csv", "README.md")] + [root / "figures" / name for name in ("figure1_lat_steering.png", "figure2_panl_steering.png", "figure3_lat_panl_steering_overlay.png", "figure4_lat_panl_probe.png")] + [root / "summary.md"]
+        if not all(path.is_file() and path.stat().st_size > 0 for path in required) or analysis.get("alpha_zero_parity") != "passed" or probe.get("cell_count") != 8: raise RuntimeError("Smoke schema/parity audit failed")
         if before != _historical_hashes(): raise RuntimeError("Historical artifacts changed during smoke")
+        atomic_json(root / "progress" / "completion.json", {**analysis, "status": "complete", "pipeline_complete": True, "historical_unchanged": True, "capture_forwards": capture_forwards, "steering_forwards": steering_forwards, "resume_noop": True})
         status = "passed"
     except Exception as exc:
         failure = f"{type(exc).__name__}: {exc}"; append_jsonl(root / "progress" / "failures.jsonl", {"stage": "gpu_smoke", "round": round_number, "message": failure, "timestamp": time.time()})
-    report = {"round": round_number, "status": status, "next_state": "awaiting_formal_confirmation" if status == "passed" else "smoke_failed", "tests_passed": tests.get("passed", 0), "tests_failed": tests.get("failed", 0), "capture_forwards": prepare.get("capture", {}).get("new_gpu_forwards", 0), "steering_forwards": steering.get("new_gpu_forwards", 0), "gpu_forward_count": prepare.get("capture", {}).get("new_gpu_forwards", 0) + steering.get("new_gpu_forwards", 0), "alpha_zero_parity": "passed" if analysis.get("alpha_zero_parity") == "passed" else "failed_or_not_reached", "resume_noop": bool(resume_prepare.get("capture", {}).get("resumed_noop") and resume_steering.get("resumed_noop") and resume_analysis.get("resumed_noop")), "historical_unchanged": before == _historical_hashes(), "failure_reason": failure, "elapsed_seconds": time.time() - started, "output_root": str(root.resolve()), "formal_estimate": {"reused_hidden_cases": 150, "clean_forwards": FORMAL_CAPTURE_FORWARDS, "steering_forwards": FORMAL_STEERING_FORWARDS, "total_forwards": FORMAL_TOTAL_FORWARDS, "estimated_hours": [2.0, 2.5], "estimated_disk_mb": [130, 180], "command": "python -m dp_SA.answer_matched_lat_steering.run_pipeline --output-root dp_SA/answer_matched_lat_steering/output/results"}}
+    report = {"round": round_number, "status": status, "next_state": "awaiting_formal_confirmation" if status == "passed" else "smoke_failed", "tests_passed": tests.get("passed", 0), "tests_failed": tests.get("failed", 0), "capture_forwards": prepare.get("capture", {}).get("new_gpu_forwards", 0), "steering_forwards": steering.get("new_gpu_forwards", 0), "probe_cells": probe.get("cell_count", 0), "gpu_forward_count": prepare.get("capture", {}).get("new_gpu_forwards", 0) + steering.get("new_gpu_forwards", 0), "alpha_zero_parity": "passed" if analysis.get("alpha_zero_parity") == "passed" else "failed_or_not_reached", "resume_noop": bool(resume_prepare.get("capture", {}).get("resumed_noop") and resume_steering.get("resumed_noop") and resume_probe.get("resumed_noop") and resume_analysis.get("resumed_noop")), "historical_unchanged": before == _historical_hashes(), "failure_reason": failure, "elapsed_seconds": time.time() - started, "output_root": str(root.resolve()), "formal_estimate": {"reused_hidden_cases": 0, "clean_forwards": FORMAL_CAPTURE_FORWARDS, "steering_forwards": FORMAL_STEERING_FORWARDS, "total_forwards": FORMAL_TOTAL_FORWARDS, "estimated_hours": [9.0, 10.0], "command": "python -m dp_SA.answer_matched_lat_steering.run_pipeline"}}
     atomic_json(root / "progress" / "smoke_report.json", report); atomic_text(root / "progress" / "smoke_report.md", _smoke_report(report)); atomic_json(SMOKE_ROOT / "latest_status.json", report)
     if status != "passed": raise RuntimeError(f"GPU smoke round {round_number} failed: {failure}")
     return report
@@ -100,7 +105,7 @@ def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume
         if _inside(root, RESULTS_ROOT): raise ValueError("Smoke output must remain outside formal results")
         if root.exists() and any(root.iterdir()) and not resume: raise FileExistsError(f"Smoke output exists: {root}")
         return run_smoke(root, round_number)
-    root = Path(output_root or RESULTS_ROOT)
+    root = Path(output_root or RESULTS_ROOT); before = _historical_hashes()
     if root.exists() and any(root.iterdir()) and not resume: raise FileExistsError(f"Formal results exist; use --resume: {root}")
     root.mkdir(parents=True, exist_ok=True)
     latest = SMOKE_ROOT / "latest_status.json"
@@ -108,8 +113,11 @@ def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume
         report = json.loads(latest.read_text())
         if report.get("status") != "passed": raise RuntimeError("Formal run requires a passed smoke")
         (root / "progress").mkdir(parents=True, exist_ok=True); shutil.copyfile(Path(report["output_root"]) / "progress" / "smoke_report.md", root / "progress" / "smoke_report.md")
-    prepare = run_prepare(output_root=root, smoke=False, resume=resume); steering = run_steering(output_root=root, smoke=False, resume=resume); analysis = analyze(output_root=root, smoke=False, resume=resume)
-    return {"status": "complete", "prepare": prepare, "steering": steering, "analysis": analysis}
+    prepare = run_prepare(output_root=root, smoke=False, resume=resume); steering = run_steering(output_root=root, smoke=False, resume=resume); probe = run_probe(output_root=root, smoke=False, resume=resume); analysis = analyze(output_root=root, smoke=False, resume=resume)
+    if before != _historical_hashes(): raise RuntimeError("Historical artifacts changed during formal pipeline")
+    completion = {**analysis, "status": "complete", "pipeline_complete": True, "historical_unchanged": True, "capture_complete": prepare["capture"]["status"] == "complete", "steering_complete": steering["status"] == "complete", "probe_complete": probe["status"] == "complete"}
+    atomic_json(root / "progress" / "completion.json", completion)
+    return {"status": "complete", "prepare": prepare, "steering": steering, "probe": probe, "analysis": analysis, "completion": completion}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

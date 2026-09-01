@@ -7,6 +7,8 @@ import pytest
 from dp_SA.answer_matched_lat_steering.config import HISTORICAL_CAPTURE, HISTORICAL_CONSTRUCTION, HISTORICAL_TEST
 from dp_SA.answer_matched_lat_steering.fingerprint import check_or_write
 from dp_SA.answer_matched_lat_steering.io_utils import sha256_file
+from dp_SA.answer_matched_lat_steering.config import LAYERS, POSITIONS
+from dp_SA.answer_matched_lat_steering.run import trial_key
 
 
 def test_resume_fingerprint_gate(tmp_path: Path):
@@ -26,3 +28,9 @@ def test_historical_inputs_are_present_and_read_only_source_fingerprints_stable(
         HISTORICAL_TEST: "ad44ec8499ecd8ba0c3f75c9cad2c91b90df6ede69ad96733364ca9e71d52a06",
     }
     assert {path: sha256_file(path) for path in expected} == expected
+
+
+def test_position_is_part_of_resume_key_and_formal_grid_is_complete():
+    base = {"case_id": "c", "fold": 1, "direction": "matched_loao", "layer": 9, "alpha": 2}
+    assert trial_key({**base, "position": POSITIONS[0]}) != trial_key({**base, "position": POSITIONS[1]})
+    assert LAYERS == tuple(range(9, 16))
