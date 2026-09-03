@@ -1,41 +1,27 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from PIL import Image
-
-from dp_SA.confidence_steering.analyze import analyze, build_delta_table, make_wide
-from dp_SA.confidence_steering.io_utils import atomic_jsonl, ensure_layout
+from dp_SA.confidence_steering.analyze import _plot_by_direction, family_draws, summarize
 
 
-def _data():
-    test=[];trials=[]
-    for family,origin,answer in (("f1","follow_text","red"),("f2","follow_image","blue")):
-        for hard,condition in ((0,"conflict_easy"),(1,"conflict_hard")):
-            case=f"{family}-{hard}"; test.append({"case_id":case,"family_id":family})
-            for direction,sign in (("residual_confidence_loao",1),("within_answer_shuffled",0.2)):
-                for layer in (8,14):
-                    for alpha in (-2.0,0.0,2.0):
-                        trials.append({"status":"completed","case_id":case,"item_id":family,"family_id":family,"condition":condition,"answer_origin":origin,"fixed_answer":answer,
-                                       "direction":direction,"layer":layer,"alpha":alpha,"delta_soft_sa":sign*alpha*.01,"hard_class_changed":False,"margin_change":sign*alpha*.02,
-                                       "alpha_zero_parity":{"passed":True} if alpha==0 else None})
-    return test,trials
+def test_shared_family_bootstrap_and_aggregation_modes() -> None:
+    rows = [
+        {"family_id": "f1", "item_id": "a", "fixed_answer": "red", "answer_origin": "follow_text", "condition": "conflict_easy", "value": 1.0},
+        {"family_id": "f1", "item_id": "b", "fixed_answer": "red", "answer_origin": "follow_image", "condition": "conflict_hard", "value": 3.0},
+        {"family_id": "f2", "item_id": "c", "fixed_answer": "blue", "answer_origin": "follow_text", "condition": "conflict_easy", "value": 5.0},
+    ]
+    draws, fingerprint = family_draws(rows, 20)
+    assert len(draws) == 20 and fingerprint == family_draws(rows, 20)[1]
+    result = summarize(rows, "value", "family_micro", draws)
+    assert result["mean_delta"] == 3.5 and result["family_count"] == 2
 
 
-def test_paired_bootstrap_wide_and_metrics() -> None:
-    test,trials=_data(); rows,draws=build_delta_table(trials,test,repeats=20,seed=42)
-    assert len(rows)==2*6*2*3 and len(draws)==20
-    true=next(r for r in rows if r["direction"]=="residual_confidence_loao" and r["group"]=="all" and r["layer"]==8 and r["alpha"]==2)
-    assert true["mean_delta_sa"]==.02 and true["valid_bootstrap_repeats"]==20
-    wide=make_wide(rows); assert "L8_a+2" in wide[0] and len(wide)==2*6*4
-
-
-def test_analyze_writes_three_tables_two_300dpi_figures(tmp_path: Path) -> None:
-    root=ensure_layout(tmp_path); test,trials=_data(); atomic_jsonl(root/"artifacts/audits/test_manifest.jsonl",test); atomic_jsonl(root/"artifacts/trials/trials.jsonl",trials)
-    result=analyze(output_root=root,smoke=True,repeats=20)
-    assert result["tables"]==3 and result["figures"]==2
-    for name in ("delta_sa_by_layer.png","symmetric_effect_s10.png"):
-        path=root/"figures"/name
-        with Image.open(path) as image: assert image.info.get("dpi",(0,))[0]>=299
-    assert "LAT→PANL→SA" in (root/"summary.md").read_text()
-
+def test_plot_accepts_smoke_alpha_subset(tmp_path) -> None:
+    rows = []
+    for direction in ("confidence_raw", "confidence_perp_difficulty", "confidence_perp_sa", "confidence_perp_difficulty_sa"):
+        for layer in (12, 14):
+            for alpha in (-2.0, 0.0, 2.0):
+                rows.append({"group": "answer_equal_macro", "direction": direction, "layer": layer,
+                             "alpha": alpha, "mean_delta": 0.0, "ci95_low": -0.1, "ci95_high": 0.1})
+    destinations = _plot_by_direction(rows, tmp_path / "final", "delta")
+    assert len(destinations) == 4
+    assert all(destination.is_file() for destination in destinations)

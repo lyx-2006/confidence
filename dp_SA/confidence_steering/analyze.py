@@ -6,184 +6,197 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .config import ALPHAS, BOOTSTRAP_REPEATS, DIRECTIONS, LAYERS, RESULTS_ROOT, SEED, SMOKE_ALPHAS, SMOKE_BOOTSTRAP_REPEATS, SMOKE_LAYERS
-from .io_utils import atomic_csv, atomic_json, atomic_text, canonical_hash, check_fingerprint, ensure_layout, load_jsonl, sha256_file
+from .config import (
+    BOOTSTRAP_REPEATS, DIRECTIONS, FORMAL_ROOT, NULL_EXPAND_P_THRESHOLD,
+    PRIMARY_DIRECTION, SEED, SMOKE_BOOTSTRAP_REPEATS, TRUE_DIRECTIONS,
+)
+from .io_utils import atomic_csv, atomic_json, atomic_text, canonical_hash, ensure_layout, load_jsonl, semantic_fingerprint, sha256_file
 
-GROUPS = ("all", "follow_text", "follow_image", "conflict_easy", "conflict_hard", "answer_equal_macro")
+GROUPS = ("all", "follow_text", "follow_image", "conflict_easy", "conflict_hard", "answer_equal_macro", "family_micro")
+ENDPOINTS = ("delta_confidence_LAT_immediate", "delta_confidence_PANL_L18", "delta_panl_probe_sa", "delta_final_soft_sa")
+
+
+def family_draws(rows: Sequence[dict[str, Any]], repeats: int, seed: int = SEED) -> tuple[list[list[str]], str]:
+    families = sorted({str(r["family_id"]) for r in rows}); rng = np.random.default_rng(seed)
+    draws = [[str(x) for x in rng.choice(families, len(families), replace=True)] for _ in range(repeats)]
+    return draws, canonical_hash(draws)
 
 
 def _selected(rows: Sequence[dict[str, Any]], group: str) -> list[dict[str, Any]]:
-    if group in ("all", "answer_equal_macro"): return list(rows)
+    if group in ("all", "answer_equal_macro", "family_micro"): return list(rows)
     if group in ("follow_text", "follow_image"): return [r for r in rows if r["answer_origin"] == group]
     return [r for r in rows if r["condition"] == group]
 
 
-def point_summary(rows: Sequence[dict[str, Any]], field: str, *, answer_macro: bool) -> tuple[float, float, float, int, int, int]:
-    if not rows: return (math.nan, math.nan, math.nan, 0, 0, 0)
-    if answer_macro:
-        groups: dict[str, list[float]] = defaultdict(list)
-        for row in rows: groups[str(row["fixed_answer"])].append(float(row[field]))
-        values = np.asarray([np.mean(groups[color]) for color in sorted(groups)], dtype=float)
-    else: values = np.asarray([float(row[field]) for row in rows], dtype=float)
-    sd = float(values.std(ddof=1)) if len(values) > 1 else 0.0; sem = float(sd / math.sqrt(len(values)))
-    return float(values.mean()), sd, sem, len(rows), len({r["family_id"] for r in rows}), len({r["fixed_answer"] for r in rows})
+def _mean(rows: Sequence[dict[str, Any]], field: str, group: str) -> float:
+    if not rows: return math.nan
+    if group == "answer_equal_macro":
+        grouped: dict[str, list[float]] = defaultdict(list)
+        for row in rows: grouped[row["fixed_answer"]].append(float(row[field]))
+        return float(np.mean([np.mean(v) for v in grouped.values()]))
+    if group == "family_micro":
+        grouped = defaultdict(list)
+        for row in rows: grouped[row["family_id"]].append(float(row[field]))
+        return float(np.mean([np.mean(v) for v in grouped.values()]))
+    return float(np.mean([float(r[field]) for r in rows]))
 
 
-def family_draws(test: Sequence[dict[str, Any]], repeats: int, seed: int) -> tuple[list[list[str]], str]:
-    families = sorted({str(r["family_id"]) for r in test}); rng = np.random.default_rng(seed)
-    draws = [[str(x) for x in rng.choice(families, size=len(families), replace=True)] for _ in range(repeats)]
-    return draws, canonical_hash(draws)
-
-
-def bootstrap_values(rows: Sequence[dict[str, Any]], field: str, draws: Sequence[Sequence[str]], *, answer_macro: bool) -> np.ndarray:
+def summarize(rows: Sequence[dict[str, Any]], field: str, group: str, draws: Sequence[Sequence[str]]) -> dict[str, Any]:
+    selected = _selected(rows, group); observed = _mean(selected, field, group)
     by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in rows: by_family[str(row["family_id"])].append(row)
-    output = []
+    for row in selected: by_family[row["family_id"]].append(row)
+    boot = []
     for draw in draws:
-        sampled = [row for family in draw for row in by_family.get(str(family), [])]
-        if not sampled: continue
-        value = point_summary(sampled, field, answer_macro=answer_macro)[0]
-        if math.isfinite(value): output.append(value)
-    return np.asarray(output, dtype=float)
+        sample = [r for family in draw for r in by_family.get(family, [])]
+        value = _mean(sample, field, group)
+        if math.isfinite(value): boot.append(value)
+    sem = float(np.std(boot, ddof=1)) if len(boot) > 1 else 0.0
+    low, high = np.percentile(boot, [2.5, 97.5]) if boot else (math.nan, math.nan)
+    hard_change = _mean(selected, "hard_sa_changed", group) if selected and "hard_sa_changed" in selected[0] else math.nan
+    return {"mean_delta": observed, "sem": sem, "ci95_low": float(low), "ci95_high": float(high), "hard_change_rate": hard_change, "family_count": len({r["family_id"] for r in selected}), "item_count": len({r["item_id"] for r in selected}), "color_count": len({r["fixed_answer"] for r in selected}), "trial_count": len(selected), "valid_bootstrap_repeats": len(boot)}
 
 
-def ci(values: np.ndarray) -> tuple[float, float, int]:
-    if not len(values): return math.nan, math.nan, 0
-    low, high = np.percentile(values, [2.5, 97.5]); return float(low), float(high), len(values)
-
-
-def build_delta_table(trials: Sequence[dict[str, Any]], test: Sequence[dict[str, Any]], *, repeats: int, seed: int) -> tuple[list[dict[str, Any]], list[list[str]]]:
-    draws, draw_fp = family_draws(test, repeats, seed); output = []
-    for direction in DIRECTIONS:
-        for group in GROUPS:
-            for layer in sorted({int(r["layer"]) for r in trials}):
-                for alpha in sorted({float(r["alpha"]) for r in trials}):
-                    rows = _selected([r for r in trials if r["direction"] == direction and int(r["layer"]) == layer and float(r["alpha"]) == alpha], group)
-                    mean, sd, sem, n, nf, na = point_summary(rows, "delta_soft_sa", answer_macro=group == "answer_equal_macro")
-                    boot = bootstrap_values(rows, "delta_soft_sa", draws, answer_macro=group == "answer_equal_macro"); low, high, valid = ci(boot)
-                    hard = point_summary(rows, "hard_class_changed", answer_macro=group == "answer_equal_macro")[0]
-                    margin = point_summary(rows, "margin_change", answer_macro=group == "answer_equal_macro")[0]
-                    output.append({"direction": direction, "group": group, "layer": layer, "alpha": alpha, "mean_delta_sa": mean, "sample_sd": sd, "sem": sem,
-                                   "ci95_low": low, "ci95_high": high, "hard_change_rate": hard, "mean_margin_change": margin,
-                                   "record_count": n, "family_count": nf, "answer_color_count": na, "valid_bootstrap_repeats": valid, "bootstrap_draw_fingerprint": draw_fp})
-    return output, draws
-
-
-def _case_metrics(trials: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str, int], list[dict[str, Any]]] = defaultdict(list)
-    for row in trials: grouped[str(row["case_id"]), str(row["direction"]), int(row["layer"])].append(row)
+def symmetric_effect(rows: Sequence[dict[str, Any]], field: str, dose: float) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, int], dict[float, dict[str, Any]]] = defaultdict(dict)
+    for row in rows: grouped[row["case_id"], row["direction"], int(row["layer"])][float(row["alpha"])] = row
     output = []
-    for (_case, direction, layer), rows in sorted(grouped.items()):
-        values = {float(r["alpha"]): float(r["delta_soft_sa"]) for r in rows}
-        if len(values) != len(rows): raise ValueError("Duplicate case dose")
-        x = np.asarray(sorted(values)); y = np.asarray([values[a] for a in x]); source = rows[0]
-        output.append({"case_id": source["case_id"], "item_id": source["item_id"], "family_id": source["family_id"], "fixed_answer": source["fixed_answer"],
-                       "condition": source["condition"], "answer_origin": source["answer_origin"], "direction": direction, "layer": layer,
-                       "S2": (values[2.0]-values[-2.0])/2.0, "S10": (values[10.0]-values[-10.0])/2.0 if 10.0 in values else math.nan,
-                       "slope": float(np.polyfit(x, y, 1)[0])})
+    for (_case, direction, layer), values in grouped.items():
+        if dose not in values or -dose not in values: continue
+        source = values[dose]; output.append({**{k: source[k] for k in ("case_id", "item_id", "family_id", "condition", "answer_origin", "fixed_answer")}, "direction": direction, "layer": layer, "effect": (float(values[dose][field]) - float(values[-dose][field])) / 2.0})
     return output
 
 
-def _metric_rows(case_metrics: Sequence[dict[str, Any]], draws: Sequence[Sequence[str]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    output, family_slopes = [], []
-    layers = sorted({int(r["layer"]) for r in case_metrics})
+def build_endpoint_table(trials: Sequence[dict[str, Any]], endpoint: str, draws: Sequence[Sequence[str]], cleanliness: dict[int, str]) -> list[dict[str, Any]]:
+    output = []; layers = sorted({int(r["layer"]) for r in trials}); alphas = sorted({float(r["alpha"]) for r in trials})
+    symmetric = {dose: symmetric_effect(trials, endpoint, dose) for dose in (2.0, 10.0)}
     for direction in DIRECTIONS:
         for group in GROUPS:
             for layer in layers:
-                rows = _selected([r for r in case_metrics if r["direction"] == direction and int(r["layer"]) == layer], group)
-                for metric in ("S2", "S10", "slope"):
-                    finite = [r for r in rows if math.isfinite(float(r[metric]))]
-                    mean, sd, sem, n, nf, na = point_summary(finite, metric, answer_macro=group == "answer_equal_macro")
-                    boot = bootstrap_values(finite, metric, draws, answer_macro=group == "answer_equal_macro"); low, high, valid = ci(boot)
-                    output.append({"direction": direction, "group": group, "layer": layer, "metric": metric, "effect": mean, "sample_sd": sd, "sem": sem,
-                                   "ci95_low": low, "ci95_high": high, "record_count": n, "family_count": nf, "answer_color_count": na, "valid_bootstrap_repeats": valid})
-                grouped = defaultdict(list)
-                for row in rows: grouped[str(row["family_id"])].append(float(row["slope"]))
-                family_slopes.extend({"direction": direction, "group": group, "layer": layer, "family_id": family, "slope": float(np.mean(values))} for family, values in sorted(grouped.items()))
-    # Paired true-minus-shuffled S10 contrast at case level.
-    index = {(r["case_id"], int(r["layer"]), r["direction"]): r for r in case_metrics}
-    for group in GROUPS:
-        for layer in layers:
-            rows = []
-            for key, true in index.items():
-                if key[1] != layer or key[2] != DIRECTIONS[0]: continue
-                shuffled = index.get((key[0], layer, DIRECTIONS[1]))
-                if shuffled is None or not all(math.isfinite(float(x["S10"])) for x in (true, shuffled)): continue
-                rows.append({**true, "contrast": float(true["S10"])-float(shuffled["S10"])})
-            rows = _selected(rows, group); mean, sd, sem, n, nf, na = point_summary(rows, "contrast", answer_macro=group == "answer_equal_macro")
-            boot = bootstrap_values(rows, "contrast", draws, answer_macro=group == "answer_equal_macro"); low, high, valid = ci(boot)
-            output.append({"direction": "true_minus_shuffled", "group": group, "layer": layer, "metric": "S10", "effect": mean, "sample_sd": sd, "sem": sem,
-                           "ci95_low": low, "ci95_high": high, "record_count": n, "family_count": nf, "answer_color_count": na, "valid_bootstrap_repeats": valid})
-    return output, family_slopes
-
-
-def make_wide(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    output = []
-    for direction in DIRECTIONS:
-        for group in GROUPS:
-            selected = [r for r in rows if r["direction"] == direction and r["group"] == group]
-            for metric, field in (("mean_delta_sa", "mean_delta_sa"), ("ci_low", "ci95_low"), ("ci_high", "ci95_high"), ("n", "record_count")):
-                row = {"direction": direction, "group": group, "metric": metric}
-                for value in selected:
-                    alpha = f"+{float(value['alpha']):g}" if float(value["alpha"]) > 0 else f"{float(value['alpha']):g}"
-                    row[f"L{int(value['layer'])}_a{alpha}"] = value[field]
-                output.append(row)
+                effects = {}
+                for dose in (2.0, 10.0):
+                    selected = [r for r in symmetric[dose] if r["direction"] == direction and r["layer"] == layer]
+                    effects[dose] = summarize(selected, "effect", group, draws) if selected else None
+                for alpha in alphas:
+                    selected = [r for r in trials if r["direction"] == direction and int(r["layer"]) == layer and float(r["alpha"]) == alpha]
+                    summary = summarize(selected, endpoint, group, draws)
+                    output.append({"group": group, "direction": direction, "layer": layer, "alpha": alpha, **summary, "S2": effects[2.0]["mean_delta"] if effects[2.0] else None, "S2_ci95_low": effects[2.0]["ci95_low"] if effects[2.0] else None, "S2_ci95_high": effects[2.0]["ci95_high"] if effects[2.0] else None, "S10": effects[10.0]["mean_delta"] if effects[10.0] else None, "S10_ci95_low": effects[10.0]["ci95_low"] if effects[10.0] else None, "S10_ci95_high": effects[10.0]["ci95_high"] if effects[10.0] else None, "cleanliness_status": cleanliness.get(layer, "not_evaluated")})
     return output
 
 
-def _plot_delta(rows: Sequence[dict[str, Any]], path: Path) -> None:
-    all_rows = [r for r in rows if r["group"] == "all"]; layers = sorted({int(r["layer"]) for r in all_rows}); alphas = sorted({float(r["alpha"]) for r in all_rows})
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True); palette = plt.cm.coolwarm(np.linspace(0, 1, len(alphas)))
-    for ax, direction in zip(axes, DIRECTIONS, strict=True):
-        for alpha, color in zip(alphas, palette, strict=True):
-            data = sorted([r for r in all_rows if r["direction"] == direction and float(r["alpha"]) == alpha], key=lambda r: int(r["layer"]))
-            x = [int(r["layer"]) for r in data]; mean = np.asarray([r["mean_delta_sa"] for r in data]); low = np.asarray([r["ci95_low"] for r in data]); high = np.asarray([r["ci95_high"] for r in data])
-            ax.errorbar(x, mean, yerr=np.vstack([mean-low, high-mean]), marker="o", capsize=3, color="#888888" if alpha == 0 else color, label=f"alpha={alpha:+g}")
-        ax.axhline(0, color="black", lw=.8); ax.set_xticks(layers); ax.set_title(direction); ax.set_xlabel("Zero-based decoder layer"); ax.grid(axis="y", alpha=.2)
-    axes[0].set_ylabel("Mean delta soft SA"); axes[1].legend(fontsize=8); fig.tight_layout(); fig.savefig(path, dpi=300); plt.close(fig)
+def empirical_null(main: Sequence[dict[str, Any]], null: Sequence[dict[str, Any]], endpoint: str) -> tuple[list[dict[str, Any]], bool]:
+    output = []; expand = False
+    for dose in (2.0, 10.0):
+        true_rows = [r for r in symmetric_effect(main, endpoint, dose) if r["direction"] == PRIMARY_DIRECTION and r["layer"] == 14]
+        observed = _mean(true_rows, "effect", "answer_equal_macro")
+        null_values = []
+        for replicate in sorted({int(r["null_replicate"]) for r in null}):
+            rows = [r for r in null if int(r["null_replicate"]) == replicate]
+            effects = []
+            grouped: dict[str, dict[float, dict[str, Any]]] = defaultdict(dict)
+            for row in rows: grouped[row["case_id"]][float(row["alpha"])] = row
+            for values in grouped.values():
+                if dose in values and -dose in values: effects.append((float(values[dose][endpoint]) - float(values[-dose][endpoint])) / 2.0)
+            if effects:
+                effect_rows = []
+                for case, values in grouped.items():
+                    if dose in values and -dose in values:
+                        source = values[dose]; effect_rows.append({**source, "effect": (float(values[dose][endpoint]) - float(values[-dose][endpoint])) / 2.0})
+                null_values.append(_mean(effect_rows, "effect", "answer_equal_macro"))
+        b = len(null_values); one = (1 + sum(v >= observed for v in null_values)) / (b + 1); two = (1 + sum(abs(v) >= abs(observed) for v in null_values)) / (b + 1); percentile = 100.0 * sum(v < observed for v in null_values) / b if b else math.nan
+        output.append({"endpoint": endpoint, "layer": 14, "dose": dose, "true_symmetric_effect": observed, "null_repeats": b, "null_mean": float(np.mean(null_values)) if b else math.nan, "null_sd": float(np.std(null_values, ddof=1)) if b > 1 else math.nan, "true_percentile": percentile, "empirical_p_one_sided": one, "empirical_p_two_sided": two})
+        if endpoint == "delta_final_soft_sa" and dose == 2.0:
+            expand |= b == 20 and one <= NULL_EXPAND_P_THRESHOLD
+    return output, expand
 
 
-def _plot_symmetric(rows: Sequence[dict[str, Any]], path: Path, *, smoke: bool) -> None:
-    metric = "S2" if smoke else "S10"; selected = [r for r in rows if r["group"] == "all" and r["metric"] == metric and r["direction"] in DIRECTIONS]
-    fig, ax = plt.subplots(figsize=(6.5, 4.5))
-    for direction, color in zip(DIRECTIONS, ("#2166ac", "#b2182b"), strict=True):
-        data = sorted([r for r in selected if r["direction"] == direction], key=lambda r: int(r["layer"])); mean=np.asarray([r["effect"] for r in data]); low=np.asarray([r["ci95_low"] for r in data]); high=np.asarray([r["ci95_high"] for r in data])
-        ax.errorbar([r["layer"] for r in data], mean, yerr=np.vstack([mean-low,high-mean]), marker="o", capsize=3, label=direction, color=color)
-    ax.axhline(0,color="black",lw=.8); ax.set_xlabel("Zero-based decoder layer"); ax.set_ylabel(metric); ax.set_title(f"Symmetric effect ({metric}{' smoke surrogate' if smoke else ''})"); ax.legend(fontsize=8); ax.grid(axis="y",alpha=.2); fig.tight_layout(); fig.savefig(path,dpi=300); plt.close(fig)
+def _plot_direction(table: Sequence[dict[str, Any]], path: Path, ylabel: str, direction: str) -> None:
+    rows = [r for r in table if r["group"] == "answer_equal_macro" and r["direction"] == direction]
+    layers = sorted({r["layer"] for r in rows}); alphas = sorted({r["alpha"] for r in rows})
+    styles = ("-", "--", ":", "-.", (0, (3, 1, 1, 1)))
+    colors = plt.cm.viridis(np.linspace(0.08, 0.92, len(alphas)))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for alpha, style, color in zip(alphas, styles, colors):
+        data = sorted([r for r in rows if r["alpha"] == alpha], key=lambda r: r["layer"])
+        mean = np.asarray([r["mean_delta"] for r in data]); low = np.asarray([r["ci95_low"] for r in data]); high = np.asarray([r["ci95_high"] for r in data])
+        ax.errorbar([r["layer"] for r in data], mean, yerr=np.vstack((mean-low, high-mean)), color=color, ls=style, marker="o", capsize=3, label=f"α={alpha:+g}")
+    ax.axhline(0, color="black", lw=.7); ax.set_xticks(layers); ax.set_xlabel("LAT layer"); ax.set_ylabel(ylabel); ax.set_title(direction); ax.legend(fontsize=8, ncol=min(3, len(alphas))); fig.tight_layout(); path.parent.mkdir(parents=True, exist_ok=True); fig.savefig(path, dpi=300); plt.close(fig)
 
 
-def analyze(*, output_root: Path = RESULTS_ROOT, smoke: bool = False, resume: bool = False, repeats: int | None = None) -> dict[str, Any]:
-    root = ensure_layout(output_root); trial_path = root / "artifacts/trials/trials.jsonl"; test_path = root / "artifacts/audits/test_manifest.jsonl"
-    trials, test = load_jsonl(trial_path), load_jsonl(test_path); layers = SMOKE_LAYERS if smoke else LAYERS; alphas = SMOKE_ALPHAS if smoke else ALPHAS
-    expected = len(test)*len(DIRECTIONS)*len(layers)*len(alphas)
-    if len(trials) != expected or len({(r["case_id"],r["direction"],r["layer"],r["alpha"]) for r in trials}) != expected: raise ValueError("Analysis trial grid incomplete")
-    zero = [r for r in trials if float(r["alpha"]) == 0]
-    if any(not r.get("alpha_zero_parity",{}).get("passed") for r in zero): raise ValueError("Alpha-zero parity gate failed")
-    repeats = int(repeats or (SMOKE_BOOTSTRAP_REPEATS if smoke else BOOTSTRAP_REPEATS)); config={"smoke_only":smoke,"trials_sha256":sha256_file(trial_path),"test_sha256":sha256_file(test_path),"repeats":repeats,"seed":SEED,"analysis_code_sha256":sha256_file(Path(__file__))}
-    fingerprint=check_fingerprint(root/"progress/analyze_config.json",config,resume=resume); progress=root/"progress/analyze.json"
+def _plot_by_direction(table: Sequence[dict[str, Any]], directory: Path, ylabel: str) -> list[Path]:
+    paths = []
+    for direction in TRUE_DIRECTIONS:
+        path = directory / f"{direction}.png"
+        _plot_direction(table, path, ylabel, direction)
+        paths.append(path)
+    return paths
+
+
+def _audit_figures(root: Path) -> None:
+    rows = list(csv.DictReader((root / "tables/orthogonalization_audit.csv").open()))
+    directions = list(DIRECTIONS); layers = sorted({int(r["layer"]) for r in rows}); matrix = np.zeros((len(directions), len(directions))); counts = np.zeros_like(matrix)
+    metadata = json.loads((root / "artifacts/directions/vector_metadata.json").read_text())["vectors"]
+    index = {(int(r["layer"]), r["recipient_answer"], r["direction"]): r["scaled_key"] for r in metadata}
+    recipients = sorted({r["recipient_answer"] for r in metadata})
+    for layer in layers:
+        with np.load(root / f"artifacts/directions/P1_LAT__L{layer}.npz") as payload:
+            for recipient in recipients:
+                values = [np.asarray(payload[index[layer, recipient, d]], float) for d in directions]
+                for i, left in enumerate(values):
+                    for j, right in enumerate(values):
+                        matrix[i, j] += float(left @ right / np.linalg.norm(left) / np.linalg.norm(right)); counts[i, j] += 1
+    matrix /= counts
+    fig, ax = plt.subplots(figsize=(7, 6)); image = ax.imshow(matrix, vmin=-1, vmax=1, cmap="coolwarm"); ax.set_xticks(range(len(directions)), directions, rotation=45, ha="right", fontsize=7); ax.set_yticks(range(len(directions)), directions, fontsize=7); fig.colorbar(image, ax=ax, label="mean cosine across recipient × layer"); fig.tight_layout(); fig.savefig(root / "figures/direction_cosine_heatmap.png", dpi=300); plt.close(fig)
+    fig, ax = plt.subplots(figsize=(7, 4));
+    for direction in directions[1:]:
+        values = [np.mean([float(r["retained_norm_ratio"]) for r in rows if r["direction"] == direction and int(r["layer"]) == layer]) for layer in layers]; ax.plot(layers, values, marker="o", label=direction)
+    ax.axhline(.2, color="black", ls="--"); ax.set_xticks(layers); ax.set_ylabel("Mean retained norm ratio"); ax.legend(fontsize=7); fig.tight_layout(); fig.savefig(root / "figures/retained_norm_ratio.png", dpi=300); plt.close(fig)
+
+
+def analyze(*, output_root: Path = FORMAL_ROOT, smoke: bool = False, resume: bool = False, repeats: int | None = None) -> dict[str, Any]:
+    root = ensure_layout(output_root); main_path = root / "artifacts/trials/main_trials.jsonl"; null_path = root / "artifacts/trials/null_trials.jsonl"; trials = load_jsonl(main_path); null = load_jsonl(null_path) if null_path.is_file() else []
+    repeats = int(repeats or (SMOKE_BOOTSTRAP_REPEATS if smoke else BOOTSTRAP_REPEATS)); config = {"main_sha256": sha256_file(main_path), "null_sha256": sha256_file(null_path) if null_path.is_file() else None, "smoke": smoke, "repeats": repeats, "seed": SEED, "plot_layout": "endpoint_directory_per_direction_v1"}; fingerprint = semantic_fingerprint(root / "progress/analyze_config.json", config, resume=resume)
+    progress = root / "progress/analyze.json"
     if resume and progress.is_file():
-        old=json.loads(progress.read_text()); required=[root/"tables/delta_sa_by_layer_alpha.csv",root/"figures/delta_sa_by_layer.png",root/"figures/symmetric_effect_s10.png"]
-        if old.get("config_fingerprint")==fingerprint and old.get("status")=="complete" and all(p.is_file() and p.stat().st_size for p in required): return {**old,"resumed_noop":True}
-    delta, draws=build_delta_table(trials,test,repeats=repeats,seed=SEED); case_metrics=_case_metrics(trials); effects,family_slopes=_metric_rows(case_metrics,draws)
-    atomic_csv(root/"tables/delta_sa_by_layer_alpha.csv",delta); atomic_csv(root/"tables/delta_sa_by_layer_alpha_wide.csv",make_wide(delta)); atomic_csv(root/"tables/symmetric_effect_and_contrast.csv",effects)
-    atomic_csv(root/"artifacts/audits/case_symmetric_effects_and_slopes.csv",case_metrics); atomic_csv(root/"artifacts/audits/family_slopes.csv",family_slopes)
-    _plot_delta(delta,root/"figures/delta_sa_by_layer.png"); _plot_symmetric(effects,root/"figures/symmetric_effect_s10.png",smoke=smoke)
-    boundary="本实验干预的是由residual fixed-answer confidence标签定义的LAT方向。成功结果说明该confidence-defined方向具有改变final SA的因果能力，但不能证明它是纯粹、唯一的confidence子空间，也不能单独证明完整LAT→PANL→SA中介链。"
-    atomic_text(root/"summary.md",f"# Residual Confidence LAT Steering\n\n- smoke_only: `{str(smoke).lower()}`\n- formal_experiment_executed: `{str(not smoke).lower()}`\n- bootstrap_repeats: `{repeats}`\n\n> {boundary}\n")
-    result={"status":"complete","smoke_only":smoke,"trial_count":len(trials),"bootstrap_repeats":repeats,"alpha_zero_parity":"passed","tables":3,"figures":2,"config_fingerprint":fingerprint,"resumed_noop":False}; atomic_json(progress,result); return result
+        old = json.loads(progress.read_text());
+        if old.get("config_fingerprint") == fingerprint and old.get("status") == "complete": return {**old, "resumed_noop": True}
+    draws, draw_fp = family_draws(trials, repeats); verdict = json.loads((root / "artifacts/diagnostics/prelock_verdict.json").read_text()); cleanliness = {int(k): ("reliable" if v else "unreliable_confidence_readout") for k, v in verdict["probe_layer_reliable"].items()}
+    tables = {endpoint: build_endpoint_table(trials, endpoint, draws, cleanliness) for endpoint in ENDPOINTS}
+    atomic_csv(root / "tables/table2_panl_sa.csv", tables["delta_panl_probe_sa"]); atomic_csv(root / "tables/table1_final_sa.csv", tables["delta_final_soft_sa"])
+    final_figures = _plot_by_direction(tables["delta_final_soft_sa"], root / "figures/final", "Mean final Δ soft SA")
+    panl_figures = _plot_by_direction(tables["delta_panl_probe_sa"], root / "figures/panl", "Mean Δ SA (PANL L18 frozen probe)")
+    manipulation = tables["delta_confidence_LAT_immediate"] + tables["delta_confidence_PANL_L18"]
+    atomic_csv(root / "tables/confidence_manipulation_checks.csv", manipulation)
+    null_rows = []; expand = False
+    if null:
+        for endpoint in ENDPOINTS:
+            rows, decision = empirical_null(trials, null, endpoint); null_rows.extend(rows); expand |= decision
+    else: null_rows = [{"endpoint": endpoint, "layer": 14, "dose": dose, "true_symmetric_effect": None, "null_repeats": 0, "null_mean": None, "null_sd": None, "true_percentile": None, "empirical_p_one_sided": None, "empirical_p_two_sided": None} for endpoint in ENDPOINTS for dose in (2, 10)]
+    primary = next((r for r in tables["delta_final_soft_sa"] if r["direction"] == PRIMARY_DIRECTION and r["layer"] == 14 and r["group"] == "answer_equal_macro"), None)
+    if primary is not None and primary.get("S2_ci95_low") is not None and primary["S2_ci95_low"] > 0 and len({r.get("null_replicate") for r in null}) == 20:
+        expand = True
+    atomic_csv(root / "tables/l14_shuffle_null.csv", null_rows)
+    atomic_text(root / "tables/README.md", "# Tables\n\n`heldout_projection_audit.csv`仅使用outer_fold=0的230条方向审计数据，不包含正式100条test。confidence manipulation probes与独立SA probe均未参与方向或正交基构造。\n")
+    boundary = "本实验只评估confidence-related direction orthogonal to measured difficulty and LAT-SA directions。数值正交是实现检查；独立SA probe仅衡量对一个额外已测SA readout的去除程度，不代表所有SA已删除。confidence变化仅由独立probe提供manipulation-check支持。"
+    final_l14 = {r["direction"]: r for r in tables["delta_final_soft_sa"] if r["group"] == "answer_equal_macro" and r["layer"] == 14 and r["alpha"] == 2.0}
+    panl_l14 = {r["direction"]: r for r in tables["delta_panl_probe_sa"] if r["group"] == "answer_equal_macro" and r["layer"] == 14 and r["alpha"] == 2.0}
+    labels = (("confidence_raw", "confidence原始方向"), ("confidence_perp_difficulty", "删除已测量difficulty线性子空间后"), ("confidence_perp_sa", "删除已测量SA线性子空间后"), ("confidence_perp_difficulty_sa", "删除已测量SA/difficulty联合线性子空间后"))
+    findings = []
+    for direction, label in labels:
+        final = final_l14.get(direction); panl = panl_l14.get(direction)
+        findings.append(f"- {label}：L14 smoke S²(final)={final['S2'] if final else '未评估'}；S²(PANL)={panl['S2'] if panl else '未评估'}。")
+    atomic_text(root / "summary.md", f"# LAT confidence正交steering\n\n- smoke_only: `{str(smoke).lower()}`\n- formal_test_opened: `{str(not smoke).lower()}`\n- formal_eligible_before_unseal: `{str(verdict['formal_eligible']).lower()}`\n- bootstrap_repeats: `{repeats}`\n- bootstrap_draw_fingerprint: `{draw_fp}`\n\n## 确认性结果\n\n- 唯一确认性检验为confidence_perp_sa、L14、S²、final soft SA、answer_equal_macro；smoke不作正式结论。\n\n## 次要结果\n\n" + "\n".join(findings) + "\n\n## 探索性结果\n\n- 其他层、S¹⁰、PANL confidence传播及其余分组仅作机制或探索性分析。\n\n## 阴性结果\n\n- 所有阴性endpoint均保留；retained-norm ratio低于0.20时只标记严重重叠，不解释为confidence无效。\n" + f"\n> {boundary}\n")
+    result = {"status": "complete", "smoke_only": smoke, "main_trials": len(trials), "null_trials": len(null), "bootstrap_repeats": repeats, "bootstrap_draw_fingerprint": draw_fp, "expand_null_to_99": bool(expand and not smoke and len({r["null_replicate"] for r in null}) == 20), "main_tables": 2, "main_figures": len(final_figures) + len(panl_figures), "figure_directories": {"final": str((root / "figures/final").resolve()), "panl": str((root / "figures/panl").resolve())}, "config_fingerprint": fingerprint, "resumed_noop": False}; atomic_json(progress, result); return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser=argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume",action="store_true"); parser.add_argument("--smoke",action="store_true"); parser.add_argument("--bootstrap",type=int)
-    args=parser.parse_args(argv); root=Path(args.output_root) if args.output_root else RESULTS_ROOT
-    print(json.dumps(analyze(output_root=root,smoke=args.smoke,resume=args.resume,repeats=args.bootstrap),ensure_ascii=False)); return 0
+    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--bootstrap", type=int); args = parser.parse_args(argv); print(json.dumps(analyze(output_root=Path(args.output_root) if args.output_root else FORMAL_ROOT, smoke=args.smoke, resume=args.resume, repeats=args.bootstrap), ensure_ascii=False)); return 0
 
 
 if __name__ == "__main__": raise SystemExit(main())

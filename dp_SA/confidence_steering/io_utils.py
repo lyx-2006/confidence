@@ -11,13 +11,46 @@ import joblib
 import numpy as np
 
 from dp_SA.unimodal_logit_confidence.io_utils import (
-    atomic_csv, atomic_json, atomic_jsonl, atomic_text, canonical_hash,
+    atomic_csv as _atomic_csv, atomic_json, atomic_jsonl, atomic_text, canonical_hash,
     load_jsonl, sha256_file, stable_shard,
 )
 
 
+LAYOUT = (
+    "figures", "tables", "progress", "artifacts", "artifacts/manifests",
+    "artifacts/directions", "artifacts/probes", "artifacts/trials",
+    "artifacts/diagnostics", "artifacts/hidden",
+)
+
+
+def atomic_csv(path: str | Path, rows: Any) -> None:
+    values = list(rows)
+    names: list[str] = []
+    for row in values:
+        for key in row:
+            if key not in names: names.append(key)
+    _atomic_csv(path, values, fieldnames=names)
+
+
 def array_hash(value: np.ndarray) -> str:
     return hashlib.sha256(np.ascontiguousarray(value).view(np.uint8)).hexdigest()
+
+
+def create_output_root(root: str | Path, *, resume: bool) -> Path:
+    destination = Path(root).resolve()
+    if destination.exists() and not resume:
+        raise FileExistsError(f"Output directory exists; use --resume: {destination}")
+    destination.mkdir(parents=True, exist_ok=True)
+    for relative in LAYOUT:
+        (destination / relative).mkdir(parents=True, exist_ok=True)
+    return destination
+
+
+def ensure_layout(root: str | Path) -> Path:
+    destination = Path(root).resolve()
+    for relative in LAYOUT:
+        (destination / relative).mkdir(parents=True, exist_ok=True)
+    return destination
 
 
 def atomic_npz(path: str | Path, arrays: dict[str, np.ndarray]) -> None:
@@ -51,18 +84,7 @@ def append_jsonl(path: str | Path, row: dict[str, Any]) -> None:
         handle.flush(); os.fsync(handle.fileno())
 
 
-def ensure_layout(root: str | Path) -> Path:
-    root = Path(root).resolve()
-    for relative in (
-        "figures", "tables", "artifacts/residualization/fold_models",
-        "artifacts/family_answer_cells", "artifacts/vectors", "artifacts/trials",
-        "artifacts/audits", "progress",
-    ):
-        (root / relative).mkdir(parents=True, exist_ok=True)
-    return root
-
-
-def check_fingerprint(path: Path, payload: dict[str, Any], *, resume: bool) -> str:
+def semantic_fingerprint(path: Path, payload: dict[str, Any], *, resume: bool) -> str:
     fingerprint = canonical_hash(payload)
     if path.exists():
         previous = json.loads(path.read_text())
@@ -74,3 +96,7 @@ def check_fingerprint(path: Path, payload: dict[str, Any], *, resume: bool) -> s
         atomic_json(path, {**payload, "fingerprint": fingerprint})
     return fingerprint
 
+
+def validate_hashed_file(path: Path, expected: str, label: str) -> None:
+    if not path.is_file() or sha256_file(path) != expected:
+        raise ValueError(f"{label} fingerprint mismatch: {path}")

@@ -1,0 +1,41 @@
+# LAT confidence measured-subspace orthogonal steering
+
+This package constructs a confidence-related LAT direction using only the frozen
+training split, removes measured difficulty and LAT-SA subspaces, and evaluates
+the resulting intervention at a downstream PANL readout and the final SAC.
+
+The permanent development split is `outer_fold != 0` for construction and
+`outer_fold == 0` for direction audit. The frozen 100-record formal test manifest
+is opened only by the locked formal runtime after CPU audit and a matching GPU
+smoke have succeeded.
+
+The shared PANL SA readout is `P1_PANL × L18`. A block-output intervention at
+LAT L16 cannot affect the earlier PANL L14 representation; PANL L18 is after all
+four steering layers L10/L12/L14/L16 and is therefore the common downstream
+readout.
+
+Run the audit-set smoke:
+
+```bash
+python -m dp_SA.confidence_steering.run_pipeline --smoke --num-gpus 1
+```
+
+After a successful matching smoke, the one-GPU formal command is:
+
+```bash
+python -m dp_SA.confidence_steering.run_pipeline \
+  --output-root dp_SA/confidence_steering/output/orthogonal_results \
+  --num-gpus 1
+```
+
+For two GPUs, change the final argument to `--num-gpus 2`. Use `--resume` only
+with an existing output directory whose complete semantic fingerprint matches.
+
+Result figures are split by endpoint and direction. Final soft-SA plots are in
+`figures/final/<direction>.png`; PANL L18 probe-SA plots are in
+`figures/panl/<direction>.png`. Each figure contains one direction only, with
+LAT layer on the x-axis and alpha encoded by line style and color.
+
+The experiment only claims deletion of measured linear SA/difficulty subspaces.
+Numerical orthogonality is an implementation check, not evidence that every
+possible SA or difficulty signal was removed.

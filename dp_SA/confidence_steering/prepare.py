@@ -2,164 +2,309 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter, defaultdict
+import math
 from pathlib import Path
 from typing import Any, Sequence
 
-from layer_metacognition.conversation_builder import prepare_multimodal_inputs, render_continued_assistant
-from dp_SA.positions import locate_phase1_positions
-from dp_SA.prompts import SA_PREFILL
+import numpy as np
 
+from .audit import cosine, projection_audit_rows
 from .config import (
-    CANONICAL_COLORS, HIDDEN_DEFINITION, LAYERS, MODEL_PATH, POSITION, RESULTS_ROOT,
-    SEED, SMOKE_LAYERS, SOURCE_ROOT,
+    ALPHAS, BOOTSTRAP_REPEATS, CANONICAL_COLORS, DIRECTIONS, FORMAL_ROOT,
+    HIDDEN_SIZE, NULL_MAX_REPEATS, PANL_LAYER, PANL_POSITION,
+    PANL_SA_PEARSON_MIN, PANL_SA_R2_MIN, PRIMARY_DIRECTION,
+    PROTOCOL_VERSION, REMOVED_COSINE_LIMIT, RETAINED_NORM_MIN, SEED,
+    STEERING_LAYERS, TARGET_DEFINITION, TRAIN_MANIFEST,
 )
 from .core import (
-    answer_origin, build_vectors, family_answer_cells, input_inventory, oof_residualize,
-    prepare_rows, smoke_subset, tail_assignments, validate_frozen_design,
+    HiddenResolver, answer_patterns, fit_oof_probe, loao, make_cells,
+    prelock_inventory, prepare_train_rows, project_out, raw_gradient,
+    regression_metrics, scale_vector, shuffled_targets, split_train, svd_basis,
+    target_norm, weighted_sa_probe,
 )
 from .io_utils import (
-    array_hash, atomic_joblib, atomic_json, atomic_jsonl, atomic_npz, canonical_hash,
-    check_fingerprint, ensure_layout, load_jsonl, sha256_file,
+    array_hash, atomic_csv, atomic_joblib, atomic_json, atomic_jsonl, atomic_npz,
+    canonical_hash, ensure_layout, load_jsonl, semantic_fingerprint, sha256_file,
 )
-from .processor import load_frozen_processor
 
 
-def _messages(row: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        {"role": "user", "content": [{"type": "image", "image": str(Path(row["image_path"]).resolve())}, {"type": "text", "text": str(row["phase1_prompt"])}]},
-        {"role": "assistant", "content": [{"type": "text", "text": SA_PREFILL}]},
+def code_hashes() -> dict[str, str]:
+    package = Path(__file__).resolve().parent
+    repo = package.parents[1]
+    paths = sorted(package.glob("*.py")) + [
+        repo / "dp_SA/positions.py", repo / "dp_SA/soft_score.py",
+        repo / "layer_metacognition/model_adapter.py",
+        repo / "layer_metacognition/conversation_builder.py",
     ]
+    return {str(path.relative_to(repo)): sha256_file(path) for path in paths if path.name != "__init__.py"}
 
 
-def validate_positions(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    # Preserve the fast tokenizer (needed for offset mappings) while replacing
-    # the newer default fast image processor with the capture-era slow one.
-    processor = load_frozen_processor()
-    tokenizer = getattr(processor, "tokenizer", processor)
-    for row in rows:
-        messages = _messages(row); rendered = render_continued_assistant(processor, messages, SA_PREFILL)
-        inputs = prepare_multimodal_inputs(processor, messages, rendered, device="cpu")
-        located = locate_phase1_positions(tokenizer, rendered, inputs, str(row["phase0_raw_answer"]))
-        lat = located[POSITION]
-        frozen = row["positions"][POSITION]
-        if any(lat[field] != frozen[field] for field in ("processed_index", "token_id", "token_text")):
-            raise ValueError(f"LAT position changed: {row['case_id']}")
-        if int(lat["processed_index"]) != int(located["phase1_answer_span"][1]) - 1:
-            raise ValueError(f"LAT is not the last real answer token: {row['case_id']}")
-    return {"status": "passed", "record_count": len(rows), "position": POSITION, "definition": "last real token of fixed answer"}
+def bootstrap_metrics(y: np.ndarray, pred: np.ndarray, families: Sequence[str]) -> dict[str, Any]:
+    family_array = np.asarray(list(map(str, families)))
+    ordered = sorted(set(family_array)); indices = {f: np.flatnonzero(family_array == f) for f in ordered}
+    rng = np.random.default_rng(SEED); samples = {k: [] for k in ("r2", "pearson", "spearman", "mae")}
+    for _ in range(BOOTSTRAP_REPEATS):
+        take = np.concatenate([indices[ordered[i]] for i in rng.integers(0, len(ordered), len(ordered))])
+        for name, value in regression_metrics(y[take], pred[take]).items():
+            if math.isfinite(value): samples[name].append(value)
+    output = {}
+    for name, values in samples.items():
+        low, high = np.percentile(values, [2.5, 97.5])
+        output.update({f"{name}_ci_low": float(low), f"{name}_ci_high": float(high), f"{name}_bootstrap_valid": len(values)})
+    return output
 
 
-def _prepare_config(inventory: dict[str, Any], *, smoke: bool) -> dict[str, Any]:
-    model_files = {}
-    for name in ("config.json", "tokenizer.json", "tokenizer_config.json", "preprocessor_config.json", "chat_template.json"):
-        path = MODEL_PATH / name
-        if path.is_file(): model_files[name] = sha256_file(path)
-    package=Path(__file__).resolve().parent; source_hashes={name:sha256_file(package/name) for name in ("config.py","core.py","io_utils.py","prepare.py","processor.py")}
-    return {"format_version": 1, "experiment": "confidence_steering", "smoke_only": smoke, "seed": SEED,
-            "position": POSITION, "layers": list(SMOKE_LAYERS if smoke else LAYERS), "hidden_definition": HIDDEN_DEFINITION,
-            "inputs": {name: row["sha256"] for name, row in inventory.items()}, "model_processor_hashes": model_files,"source_code":source_hashes}
+def save_probe(root: Path, name: str, X: np.ndarray, y: np.ndarray,
+               construction: Sequence[dict[str, Any]], audit_X: np.ndarray,
+               audit_y: np.ndarray, audit: Sequence[dict[str, Any]],
+               target: str, position: str, layer: int):
+    folds = [int(row["outer_fold"]) for row in construction]
+    oof, fold_models, oof_metrics, model, alpha, trace = fit_oof_probe(X, y, construction, folds)
+    fold_hashes = {}
+    for fold, fold_model in fold_models.items():
+        path = root / f"artifacts/probes/{name}__fold_{fold}.joblib"
+        atomic_joblib(path, fold_model); fold_hashes[str(fold)] = sha256_file(path)
+    prediction = model.predict(audit_X); audit_metrics = regression_metrics(audit_y, prediction)
+    path = root / f"artifacts/probes/{name}__full.joblib"
+    payload = {"model": model, "target": target, "position": position, "layer": layer,
+               "selected_alpha": alpha, "alpha_trace": trace, "target_std": float(np.std(y)),
+               "training_case_ids": [r["case_id"] for r in construction], "audit_case_ids": []}
+    atomic_joblib(path, payload)
+    metrics = {"name": name, "target": target, "position": position, "layer": layer,
+               "selected_alpha": alpha, "construction_count": len(construction),
+               "construction_family_count": len({r["family_id"] for r in construction}),
+               "audit_count": len(audit), "audit_family_count": len({r["family_id"] for r in audit}),
+               **{f"construction_oof_{k}": v for k, v in oof_metrics.items()}, **audit_metrics,
+               **bootstrap_metrics(audit_y, prediction, [r["family_id"] for r in audit]),
+               "model_sha256": sha256_file(path), "fold_models_sha256": canonical_hash(fold_hashes),
+               "audit_used_for_fit": False}
+    predictions = [{"case_id": row["case_id"], "family_id": row["family_id"], "probe": name,
+                    "true": float(truth), "predicted": float(value), "split": "direction_audit"}
+                   for row, truth, value in zip(audit, audit_y, prediction, strict=True)]
+    return model, metrics, predictions
 
 
-def _resume_complete(root: Path, fingerprint: str) -> dict[str, Any] | None:
-    progress = root / "progress" / "prepare.json"
-    required = [root / "artifacts/residualization/oof_predictions.jsonl", root / "artifacts/family_answer_cells/cells.jsonl", root / "artifacts/vectors/vector_metadata.json"]
-    if not progress.is_file(): return None
-    value = json.loads(progress.read_text())
-    if value.get("config_fingerprint") != fingerprint: raise ValueError("Prepare resume fingerprint mismatch")
-    if value.get("status") == "complete" and all(path.is_file() and path.stat().st_size for path in required):
-        residual=json.loads((root/"artifacts/residualization/residualization_audit.json").read_text())
-        for fold,digest in residual["models"].items():
-            if sha256_file(root/f"artifacts/residualization/fold_models/fold_{fold}.joblib") != digest: raise ValueError("Residual model fingerprint mismatch")
-        vectors=json.loads((root/"artifacts/vectors/vector_metadata.json").read_text())
-        for layer,digest in vectors["files"].items():
-            path=root/f"artifacts/vectors/P1_LAT__L{layer}.npz"
-            if sha256_file(path) != digest: raise ValueError("Vector file fingerprint mismatch")
-            import numpy as np
-            with np.load(path) as payload:
-                for row in (r for r in vectors["vectors"] if str(r["layer"])==str(layer)):
-                    if array_hash(payload[row["scaled_key"]]) != row["scaled_hash"]: raise ValueError("Vector tensor fingerprint mismatch")
-        return {**value, "resumed_noop": True}
-    return None
+def smoke_manifest(audit_manifest: Sequence[dict[str, Any]]):
+    import itertools
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in audit_manifest: grouped.setdefault(str(row["family_id"]), []).append(row)
+    eligible = []
+    for combo in itertools.combinations(sorted(grouped), 4):
+        rows = [r for family in combo for r in grouped[family]]
+        origins = {"follow_text" if r["answer_matches_text"] and not r["answer_matches_image"] else "follow_image" if r["answer_matches_image"] and not r["answer_matches_text"] else "other" for r in rows}
+        if len({r["phase0_normalized_answer"] for r in rows}) >= 4 and {"follow_text", "follow_image"} <= origins and {r["condition"] for r in rows} == {"conflict_easy", "conflict_hard"}:
+            eligible.append((len(rows), combo, rows))
+    if not eligible: raise ValueError("No complete four-family audit smoke selection")
+    _, combo, rows = min(eligible, key=lambda value: (value[0], value[1]))
+    return sorted(rows, key=lambda r: r["case_id"]), {"source": "direction_audit_only", "families": list(combo), "records": len(rows)}
 
 
-def run_prepare(*, output_root: Path = RESULTS_ROOT, smoke: bool = False, resume: bool = False, revalidate_positions: bool = True) -> dict[str, Any]:
-    root = ensure_layout(output_root); inventory = input_inventory()
-    train_manifest = load_jsonl(Path(inventory["probe_train_manifest"]["path"])); test_manifest = load_jsonl(Path(inventory["test_manifest"]["path"]))
-    joined = load_jsonl(Path(inventory["phase1_confidence_joined"]["path"])); scores = load_jsonl(Path(inventory["unimodal_scores"]["path"]))
-    design = validate_frozen_design(train_manifest, test_manifest)
-    mapping = {
-        "C_t": "phase1_confidence_joined.text_fixed_answer_confidence", "C_i": "phase1_confidence_joined.image_fixed_answer_confidence",
-        "L_t": "phase1_confidence_joined.text_fixed_answer_log_odds", "L_i": "phase1_confidence_joined.image_fixed_answer_log_odds", "G_L": "phase1_confidence_joined.G_L",
-        "D_t": "unimodal_scores.entropy_difficulty via text_score_unique_key", "D_i": "unimodal_scores.entropy_difficulty via image_score_unique_key",
-        "Hard": "condition == conflict_hard", "prior_bin": "probe_train_manifest.prior_bin",
-        "answer_origin": "answer_matches_text/image -> follow_text/follow_image/neither_match", "fixed_answer_color": "phase0_normalized_answer, parity checked against joined.fixed_answer",
-        "hidden": "hidden reuse/capture index by case_id + P1_LAT__L{layer}",
-    }
-    audit = {"status": "passed", "inventory": inventory, "field_mapping": mapping, "design": design}
-    atomic_json(root / "artifacts/audits/input_audit.json", audit)
-    config = _prepare_config(inventory, smoke=smoke); fingerprint = check_fingerprint(root / "progress/prepare_config.json", config, resume=resume)
-    if resume:
-        complete = _resume_complete(root, fingerprint)
-        if complete is not None: return complete
+def build_directions(root: Path, cells: list[dict[str, Any]], cell_arrays: dict[int, dict[str, np.ndarray]]):
+    all_vectors = {}; metadata = []; subspaces = []; pattern_audits = []
+    for layer in STEERING_LAYERS:
+        hidden = cell_arrays[layer]; patterns = {}
+        for field, label in (("mean_G_L", "confidence"), ("mean_D_t", "difficulty_text"),
+                             ("mean_D_i", "difficulty_image"), ("mean_clean_final_sa", "final_sa")):
+            patterns[label], audits = answer_patterns(cells, hidden, field, return_audit=True)
+            pattern_audits.extend({**row, "layer": layer, "pattern": label} for row in audits)
+        shuffled_sets = []
+        for replicate in range(NULL_MAX_REPEATS + 1):
+            values = shuffled_targets(cells, replicate)
+            shuffled = [{**cell, "mean_G_L_shuffled": values[cell["array_key"]]} for cell in cells]
+            shuffled_sets.append(answer_patterns(shuffled, hidden, "mean_G_L_shuffled"))
+        arrays = {}; layer_vectors = {}
+        for recipient in CANONICAL_COLORS:
+            confidence, donors = loao(patterns["confidence"], recipient)
+            d_text, _ = loao(patterns["difficulty_text"], recipient)
+            d_image, _ = loao(patterns["difficulty_image"], recipient)
+            sa_pattern, _ = loao(patterns["final_sa"], recipient)
+            sa_model, sa_raw, training_cells, conversion_error, ridge_alpha, ridge_trace = weighted_sa_probe(cells, hidden, recipient)
+            sa_path = root / f"artifacts/probes/construction_lat_sa__{recipient}__L{layer}.joblib"
+            atomic_joblib(sa_path, {"model": sa_model, "raw_gradient": sa_raw, "training_cells": training_cells,
+                                    "recipient_excluded": recipient, "conversion_error": conversion_error,
+                                    "selected_alpha": ridge_alpha, "alpha_trace": ridge_trace})
+            q_difficulty, meta_difficulty = svd_basis([d_text, d_image])
+            q_sa, meta_sa = svd_basis([sa_pattern, sa_raw])
+            q_both, meta_both = svd_basis([d_text, d_image, sa_pattern, sa_raw])
+            main_shuffle, _ = loao(shuffled_sets[0], recipient)
+            variants = {
+                "confidence_raw": confidence,
+                "confidence_perp_difficulty": project_out(confidence, q_difficulty),
+                "confidence_perp_sa": project_out(confidence, q_sa),
+                "confidence_perp_difficulty_sa": project_out(confidence, q_both),
+                "within_answer_shuffled_perp_difficulty_sa": project_out(main_shuffle, q_both),
+            }
+            removed_columns = {
+                "confidence_perp_difficulty": [d_text, d_image],
+                "confidence_perp_sa": [sa_pattern, sa_raw],
+                "confidence_perp_difficulty_sa": [d_text, d_image, sa_pattern, sa_raw],
+                "within_answer_shuffled_perp_difficulty_sa": [d_text, d_image, sa_pattern, sa_raw],
+            }
+            norm = target_norm(cells, hidden, donors)
+            natural = np.stack([hidden[cell["array_key"]] for cell in cells if cell["fixed_answer_color"] in donors])
+            for direction, projected in variants.items():
+                source = main_shuffle if direction.startswith("within_answer") else confidence
+                scaled = scale_vector(projected, norm); key = f"{recipient}__{direction}__scaled"
+                arrays[key] = scaled; layer_vectors[f"{recipient}|{direction}"] = scaled
+                retained = float(np.linalg.norm(projected) / np.linalg.norm(source)); unit = scaled.astype(np.float64) / np.linalg.norm(scaled)
+                removed = [abs(cosine(projected, column)) for column in removed_columns.get(direction, [])]
+                projection_sd = float(np.std(natural @ unit))
+                valid = bool(scaled.shape == (HIDDEN_SIZE,) and scaled.dtype == np.float32 and np.isfinite(scaled).all() and all(value <= REMOVED_COSINE_LIMIT for value in removed))
+                row = {"recipient_answer": recipient, "layer": layer, "direction": direction, "scaled_key": key,
+                       "pre_projection_norm": float(np.linalg.norm(source)), "post_projection_norm": float(np.linalg.norm(projected)),
+                       "retained_norm_ratio": retained, "severe_overlap": retained < RETAINED_NORM_MIN,
+                       "target_norm": norm, "scaled_norm": float(np.linalg.norm(scaled)),
+                       "cosine_with_original_confidence": cosine(scaled, confidence),
+                       "cosine_difficulty_text": cosine(scaled, d_text), "cosine_difficulty_image": cosine(scaled, d_image),
+                       "cosine_sa_pattern": cosine(scaled, sa_pattern), "cosine_sa_ridge": cosine(scaled, sa_raw),
+                       "max_removed_absolute_cosine": max(removed, default=0.0),
+                       "natural_projection_std": projection_sd,
+                       "injection_to_natural_projection_sd": norm / projection_sd if projection_sd else None,
+                       "scaled_hash": array_hash(scaled), "implementation_invariant_passed": valid,
+                       "included_answers": donors}
+                row["vector_fingerprint"] = canonical_hash({key: row[key] for key in ("recipient_answer", "layer", "direction", "scaled_hash", "target_norm")})
+                metadata.append(row)
+            for replicate in range(1, NULL_MAX_REPEATS + 1):
+                shuffled, _ = loao(shuffled_sets[replicate], recipient)
+                arrays[f"null_{replicate:03d}__{recipient}__scaled"] = scale_vector(project_out(shuffled, q_both), norm)
+            basis_hashes = {"difficulty": array_hash(q_difficulty), "sa": array_hash(q_sa), "difficulty_sa": array_hash(q_both)}
+            arrays[f"{recipient}__basis_difficulty"] = q_difficulty
+            arrays[f"{recipient}__basis_sa"] = q_sa
+            arrays[f"{recipient}__basis_difficulty_sa"] = q_both
+            subspaces.append({"recipient_answer": recipient, "layer": layer, "difficulty": meta_difficulty,
+                              "sa": meta_sa, "difficulty_sa": meta_both, "basis_hashes": basis_hashes,
+                              "sa_model_sha256": sha256_file(sa_path), "ridge_conversion_error": conversion_error})
+        path = root / f"artifacts/directions/P1_LAT__L{layer}.npz"; atomic_npz(path, arrays)
+        all_vectors[layer] = layer_vectors
+    return all_vectors, metadata, subspaces, pattern_audits
 
-    rows = prepare_rows(train_manifest, test_manifest, joined, scores)
-    if smoke:
-        train_rows, selected_test, selection = smoke_subset(rows, [*train_manifest, *test_manifest])
-        test_ids = {r["case_id"] for r in selected_test}; test_rows = [r for r in test_manifest if r["case_id"] in test_ids]
-    else:
-        train_rows = [r for r in rows if r["split"] == "train"]; test_rows = list(test_manifest); selection = {"formal": True, "train_family_count": 128, "test_family_count": 50}
-    selected_manifest = [r for r in train_manifest if r["case_id"] in {x["case_id"] for x in train_rows}] + test_rows
-    position_audit = validate_positions(selected_manifest) if revalidate_positions else {"status": "skipped_for_unit_test", "record_count": len(selected_manifest)}
-    atomic_json(root / "artifacts/audits/position_audit.json", position_audit); atomic_json(root / "artifacts/audits/smoke_selection.json", selection)
 
-    oof, models = oof_residualize(train_rows)
-    fold_manifest = []
-    by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in oof: by_family[row["family_id"]].append(row)
-    for family, members in sorted(by_family.items()):
-        folds = {int(r["outer_fold"]) for r in members}
-        if len(folds) != 1: raise ValueError("Family crossed nuisance folds")
-        fold_manifest.append({"family_id": family, "fold": next(iter(folds)), "case_ids": sorted(r["case_id"] for r in members), "record_count": len(members),
-                              "condition_counts": dict(Counter(r["condition"] for r in members)), "answer_origin_counts": dict(Counter(r["answer_origin"] for r in members)), "fixed_answer_color_counts": dict(Counter(r["fixed_answer_color"] for r in members))})
-    atomic_jsonl(root / "artifacts/residualization/fold_manifest.jsonl", fold_manifest)
-    atomic_jsonl(root / "artifacts/residualization/oof_predictions.jsonl", oof)
-    atomic_jsonl(root / "artifacts/residualization/confidence_training_records.jsonl", oof)
-    model_hashes = {}
-    for fold, model in models.items():
-        path = root / f"artifacts/residualization/fold_models/fold_{fold}.joblib"; atomic_joblib(path, model); model_hashes[str(fold)] = sha256_file(path)
-    residual_audit = {"status": "passed", "record_count": len(oof), "family_count": len(by_family), "fold_count": 5,
-                      "models": model_hashes, "features": ["D_t", "D_i", "Hard", "prior_bin", "answer_origin", "fixed_answer_color"],
-                      "forbidden_fields_read": [], "all_records_have_exactly_one_oof_prediction": True,
-                      "fingerprint": canonical_hash([{k: r[k] for k in ("case_id", "outer_fold", "G_L", "predicted_G_L_oof", "R_C")} for r in oof])}
-    atomic_json(root / "artifacts/residualization/residualization_audit.json", residual_audit)
+def direction_sensitivity(root: Path, vectors, metadata, confidence_models, target_std: float):
+    meta = {(row["layer"], row["recipient_answer"], row["direction"]): row for row in metadata}
+    rows = []; reliability = {}
+    for layer in STEERING_LAYERS:
+        gradient = raw_gradient(confidence_models[layer]); layer_ok = True
+        probe_path = root / f"artifacts/probes/confidence_gap__P1_LAT__L{layer}__full.joblib"; probe_hash = sha256_file(probe_path)
+        with np.load(root / f"artifacts/directions/P1_LAT__L{layer}.npz") as payload:
+            for recipient in CANONICAL_COLORS:
+                raw_dot = float(gradient @ vectors[layer][f"{recipient}|confidence_raw"])
+                main_dot = float(gradient @ vectors[layer][f"{recipient}|{PRIMARY_DIRECTION}"])
+                null = ([float(gradient @ np.asarray(payload[f"null_{rep:03d}__{recipient}__scaled"])) / target_std
+                         for rep in range(1, NULL_MAX_REPEATS + 1)] if layer == 14 else [])
+                threshold = float(np.percentile(null, 95)) if null else None
+                cell_ok = raw_dot > 0 and main_dot > 0 and (threshold is None or main_dot / target_std > threshold)
+                layer_ok &= cell_ok
+                for direction in DIRECTIONS:
+                    dot = float(gradient @ vectors[layer][f"{recipient}|{direction}"])
+                    percentile = 100.0 * sum(value < dot / target_std for value in null) / len(null) if null else None
+                    if direction == "confidence_raw": direction_status = "passed" if raw_dot > 0 else "failed"
+                    elif direction == PRIMARY_DIRECTION: direction_status = "passed" if main_dot > 0 and (threshold is None or main_dot / target_std > threshold) else "failed"
+                    else: direction_status = "reported"
+                    for alpha in ALPHAS:
+                        rows.append({"recipient_answer": recipient, "layer": layer, "direction": direction, "alpha": alpha,
+                                     "raw_probe_dot": dot, "standardized_sensitivity": dot / target_std,
+                                     "standardized_delta_at_alpha": alpha * dot / target_std,
+                                     "retained_confidence_sensitivity_ratio": dot / raw_dot if raw_dot else math.nan,
+                                     "shuffle_percentile": percentile, "shuffle95_threshold": threshold,
+                                     "status": direction_status, "probe_hash": probe_hash,
+                                     "vector_hash": meta[layer, recipient, direction]["scaled_hash"]})
+        reliability[layer] = layer_ok
+    return rows, reliability, reliability[14]
 
-    layers = SMOKE_LAYERS if smoke else LAYERS; cells, cell_arrays = family_answer_cells(oof, layers=layers)
-    for layer in layers: atomic_npz(root / f"artifacts/family_answer_cells/P1_LAT__L{layer}.npz", cell_arrays[int(layer)])
-    atomic_jsonl(root / "artifacts/family_answer_cells/cells.jsonl", cells)
-    assignments, eligibility = tail_assignments(cells)
-    atomic_jsonl(root / "artifacts/family_answer_cells/eligibility_and_tails.jsonl", eligibility)
-    atomic_json(root / "artifacts/family_answer_cells/assignments.json", assignments)
-    recipient_answers = [str(r["phase0_normalized_answer"]) for r in test_rows]
-    vectors, metadata = build_vectors(cells, cell_arrays, assignments, eligibility, recipient_answers, layers=layers)
-    vector_files = {}
-    for layer in layers:
-        path = root / f"artifacts/vectors/P1_LAT__L{layer}.npz"; atomic_npz(path, vectors[int(layer)]); vector_files[str(layer)] = sha256_file(path)
-    vector_fingerprint = canonical_hash([{k: r[k] for k in ("recipient_answer", "layer", "direction", "scaled_hash", "included_answers")} for r in metadata])
-    atomic_json(root / "artifacts/vectors/vector_metadata.json", {"status": "complete", "vectors": metadata, "files": vector_files, "fingerprint": vector_fingerprint})
-    atomic_jsonl(root / "artifacts/audits/test_manifest.jsonl", [{**r, "answer_origin": answer_origin(r), "fixed_answer_color": r["phase0_normalized_answer"]} for r in test_rows])
-    atomic_jsonl(root / "artifacts/audits/train_manifest.jsonl", train_rows)
-    result = {"status": "complete", "smoke_only": smoke, "train_records": len(oof), "train_families": len(by_family), "test_records": len(test_rows),
-              "cell_count": len(cells), "eligible_answers": [r["fixed_answer_color"] for r in eligibility if r["eligible"]], "vector_count": len(metadata),
-              "config_fingerprint": fingerprint, "vector_fingerprint": vector_fingerprint, "resumed_noop": False}
-    atomic_json(root / "progress/prepare.json", result); return result
+
+def run_prepare(*, output_root: Path = FORMAL_ROOT, smoke: bool = False, resume: bool = False) -> dict[str, Any]:
+    root = ensure_layout(output_root); inventory = prelock_inventory()
+    config = {"protocol_version": PROTOCOL_VERSION, "target_definition": TARGET_DEFINITION,
+              "test_state": "sealed", "smoke_only": smoke, "seed": SEED,
+              "layers": list(STEERING_LAYERS), "alphas": list(ALPHAS), "directions": list(DIRECTIONS),
+              "inputs": {name: value["sha256"] for name, value in inventory.items()}, "source_code": code_hashes()}
+    fingerprint = semantic_fingerprint(root / "progress/prepare_config.json", config, resume=resume)
+    progress = root / "progress/prepare.json"
+    if resume and progress.is_file():
+        previous = json.loads(progress.read_text())
+        if previous.get("status") == "complete" and previous.get("config_fingerprint") == fingerprint:
+            return {**previous, "resumed_noop": True}
+    manifest = load_jsonl(TRAIN_MANIFEST)
+    construction_manifest, audit_manifest, split_audit = split_train(manifest)
+    prepared = prepare_train_rows(manifest); by_case = {row["case_id"]: row for row in prepared}
+    construction = [by_case[row["case_id"]] for row in construction_manifest]
+    audit = [by_case[row["case_id"]] for row in audit_manifest]
+    atomic_json(root / "artifacts/diagnostics/input_and_split_audit.json", {"inventory": inventory, "split": split_audit, "test_manifest_opened": False})
+    atomic_jsonl(root / "artifacts/manifests/construction_records.jsonl", construction)
+    atomic_jsonl(root / "artifacts/manifests/direction_audit_records.jsonl", audit)
+    resolver = HiddenResolver(); cells, cell_arrays = make_cells(construction, resolver)
+    atomic_jsonl(root / "artifacts/manifests/construction_cells.jsonl", cells)
+    vectors, metadata, subspaces, pattern_audits = build_directions(root, cells, cell_arrays)
+    vector_files = {str(layer): sha256_file(root / f"artifacts/directions/P1_LAT__L{layer}.npz") for layer in STEERING_LAYERS}
+    vector_fingerprint = canonical_hash(vector_files)
+    atomic_json(root / "artifacts/directions/vector_metadata.json", {"vectors": metadata, "files": vector_files, "fingerprint": vector_fingerprint, "l14_null_repeats": NULL_MAX_REPEATS})
+    atomic_csv(root / "tables/direction_orthogonality.csv", metadata)
+    atomic_csv(root / "tables/retained_norm.csv", metadata)
+    atomic_csv(root / "tables/answer_balance_audit.csv", pattern_audits)
+    atomic_json(root / "artifacts/diagnostics/subspace_rank_and_singular_values.json", {"rows": subspaces})
+
+    probe_metrics = []; probe_predictions = []; confidence_models = {}
+    audit_lat = {layer: np.stack([resolver.load(row["case_id"], f"P1_LAT__L{layer}") for row in audit]) for layer in STEERING_LAYERS}
+    for layer in STEERING_LAYERS:
+        train_x = np.stack([resolver.load(row["case_id"], f"P1_LAT__L{layer}") for row in construction])
+        model, metrics, predictions = save_probe(root, f"confidence_gap__P1_LAT__L{layer}", train_x,
+            np.asarray([row["G_L"] for row in construction]), construction, audit_lat[layer],
+            np.asarray([row["G_L"] for row in audit]), audit, "G_L", "P1_LAT", layer)
+        confidence_models[layer] = model; probe_metrics.append(metrics); probe_predictions.extend(predictions)
+    train_panl = np.stack([resolver.load(row["case_id"], f"{PANL_POSITION}__L{PANL_LAYER}") for row in construction])
+    audit_panl = np.stack([resolver.load(row["case_id"], f"{PANL_POSITION}__L{PANL_LAYER}") for row in audit])
+    for name, target in (("confidence_gap__P1_PANL__L18", "G_L"), ("final_sa__P1_PANL__L18", "clean_final_sa")):
+        _, metrics, predictions = save_probe(root, name, train_panl, np.asarray([row[target] for row in construction]),
+            construction, audit_panl, np.asarray([row[target] for row in audit]), audit, target, PANL_POSITION, PANL_LAYER)
+        probe_metrics.append(metrics); probe_predictions.extend(predictions)
+    atomic_csv(root / "tables/probe_metrics.csv", probe_metrics)
+    atomic_jsonl(root / "artifacts/probes/audit_predictions.jsonl", probe_predictions)
+
+    sensitivity, direction_reliable, sensitivity_gate = direction_sensitivity(
+        root, vectors, metadata, confidence_models, float(np.std([row["G_L"] for row in construction])))
+    atomic_csv(root / "tables/direction_confidence_sensitivity.csv", sensitivity)
+    projection_rows = []
+    for layer in STEERING_LAYERS:
+        matrices = {direction: {color: vectors[layer][f"{color}|{direction}"] / np.linalg.norm(vectors[layer][f"{color}|{direction}"])
+                                for color in CANONICAL_COLORS} for direction in DIRECTIONS}
+        rows, _ = projection_audit_rows(audit, audit_lat[layer], matrices, layer=layer); projection_rows.extend(rows)
+    atomic_csv(root / "tables/heldout_projection_audit.csv", projection_rows)
+
+    metric_index = {row["name"]: row for row in probe_metrics}
+    probe_reliable = {layer: metric_index[f"confidence_gap__P1_LAT__L{layer}"]["pearson"] > 0 and metric_index[f"confidence_gap__P1_LAT__L{layer}"]["r2"] > 0 for layer in STEERING_LAYERS}
+    panl_sa = metric_index["final_sa__P1_PANL__L18"]
+    numerical_gate = all(row["implementation_invariant_passed"] for row in metadata)
+    l14_probe_gate = probe_reliable[14]
+    panl_sa_gate = panl_sa["pearson"] >= PANL_SA_PEARSON_MIN and panl_sa["r2"] >= PANL_SA_R2_MIN
+    formal_eligible = numerical_gate and l14_probe_gate and panl_sa_gate and sensitivity_gate
+    verdict = {"status": "passed" if formal_eligible else "failed", "formal_eligible": formal_eligible,
+               "test_state": "sealed", "test_manifest_opened": False, "numerical_gate": numerical_gate,
+               "l14_confidence_probe_gate": l14_probe_gate, "panl_final_sa_probe_gate": panl_sa_gate,
+               "l14_direction_sensitivity_gate": sensitivity_gate, "probe_layer_reliable": probe_reliable,
+               "direction_layer_reliable": direction_reliable}
+    atomic_json(root / "artifacts/diagnostics/prelock_verdict.json", verdict)
+    smoke_rows, smoke_selection = smoke_manifest(audit_manifest)
+    atomic_jsonl(root / "artifacts/manifests/smoke_manifest.jsonl", smoke_rows)
+    atomic_json(root / "artifacts/diagnostics/smoke_selection.json", smoke_selection)
+    probe_files = {str(path.relative_to(root)): sha256_file(path) for path in sorted((root / "artifacts/probes").glob("*.joblib"))}
+    material = {"protocol_version": PROTOCOL_VERSION, "target_definition": TARGET_DEFINITION,
+                "prepare_fingerprint": fingerprint, "vector_fingerprint": vector_fingerprint,
+                "vector_files": vector_files, "probe_files": probe_files, "verdict": verdict,
+                "code_hashes": code_hashes(), "layers": list(STEERING_LAYERS), "alphas": list(ALPHAS),
+                "directions": list(DIRECTIONS), "seed": SEED, "output_schema": list(("figures", "tables", "progress", "artifacts/manifests", "artifacts/directions", "artifacts/probes", "artifacts/hidden", "artifacts/diagnostics", "artifacts/trials")),
+                "null_rule": "primary L14 confidence_perp_sa S2 final_sa answer_equal_macro: CI_low>0 OR p20<=0.10"}
+    material["fingerprint"] = canonical_hash(material)
+    atomic_json(root / "artifacts/diagnostics/prelock_material.json", material)
+    result = {"status": "complete", "construction_records": len(construction), "audit_records": len(audit),
+              "construction_cells": len(cells), "formal_eligible": formal_eligible,
+              "config_fingerprint": fingerprint, "vector_fingerprint": vector_fingerprint,
+              "test_manifest_opened": False, "resumed_noop": False}
+    atomic_json(progress, result); return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true")
-    args = parser.parse_args(argv); root = Path(args.output_root) if args.output_root else RESULTS_ROOT
-    if args.smoke and not args.output_root: parser.error("--smoke requires an explicit output root outside formal results")
-    print(json.dumps(run_prepare(output_root=root, smoke=args.smoke, resume=args.resume), ensure_ascii=False)); return 0
+    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--resume", action="store_true")
+    args = parser.parse_args(argv); print(json.dumps(run_prepare(output_root=Path(args.output_root) if args.output_root else FORMAL_ROOT, smoke=args.smoke, resume=args.resume), ensure_ascii=False)); return 0
 
 
 if __name__ == "__main__": raise SystemExit(main())
