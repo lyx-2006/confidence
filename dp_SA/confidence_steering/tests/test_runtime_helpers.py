@@ -5,6 +5,8 @@ import numpy as np
 from dp_SA.confidence_steering.analyze import empirical_null, symmetric_effect
 from dp_SA.confidence_steering.io_utils import stable_shard
 from dp_SA.confidence_steering.run import alpha_zero_parity, trial_key
+from dp_SA.confidence_steering.prepare import prepare_gate_status
+from dp_SA.confidence_steering.run_spec import expected_runtime_counts, normalize_run_spec
 
 
 def test_two_gpu_sharding_is_stable_complete_and_disjoint() -> None:
@@ -32,3 +34,44 @@ def test_alpha_zero_parity_covers_lat_panl_probe_and_sac() -> None:
     hidden = np.asarray([1.0, 2.0], dtype=np.float32)
     result = alpha_zero_parity(score, dict(score), hidden, hidden.copy(), hidden, hidden.copy(), 0.0)
     assert result["passed"]
+
+
+def test_run_spec_is_dynamic_and_requires_explicit_shuffle() -> None:
+    natural = normalize_run_spec(["confidence_raw", "confidence_parallel_sa", "confidence_perp_sa_natural_scale"], [16, 14], [2, -2, 1, -1, 0])
+    assert natural["layers"] == [14, 16]
+    assert natural["alphas"] == [-2.0, -1.0, 0.0, 1.0, 2.0]
+    assert natural["paired_doses"] == [1.0, 2.0]
+    assert natural["analysis_kind"] == "mechanism_diagnostic" and not natural["shuffle_requested"]
+    shuffled = normalize_run_spec(["confidence_raw", "within_answer_shuffled_perp_difficulty_sa"], [14], [-1, 0, 1])
+    assert shuffled["shuffle_requested"] and shuffled["paired_doses"] == [1.0]
+    counts = expected_runtime_counts(natural, 100)
+    assert counts == {"main_trials": 3000, "main_forwards": 2700, "null_trials": 0, "total_forwards": 2700}
+
+
+def test_run_spec_rejects_invalid_and_fingerprints_semantics() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="Duplicate direction"):
+        normalize_run_spec(["confidence_raw", "confidence_raw"], [14], [-1, 0, 1])
+    with pytest.raises(ValueError, match="Unknown direction"):
+        normalize_run_spec(["unknown"], [14], [-1, 0, 1])
+    with pytest.raises(ValueError, match="alpha=0"):
+        normalize_run_spec(["confidence_raw"], [14], [-1, 1])
+    left = normalize_run_spec(["confidence_raw"], [14], [-1, 0, 1])
+    right = normalize_run_spec(["confidence_raw"], [14], [-2, 0, 2])
+    assert left["fingerprint"] != right["fingerprint"]
+
+
+def test_non_l14_probe_failure_is_reported_but_does_not_block_l14() -> None:
+    gates = prepare_gate_status(
+        {14: True, 16: False}, {14: True, 16: False},
+        numerical_gate=True, panl_sa_gate=True,
+    )
+    assert gates["formal_eligible"]
+    assert not gates["all_selected_confidence_probes_reliable"]
+    assert gates["l14_confidence_probe_gate"] and gates["direction_sensitivity_gate"]
+
+
+def test_panl_final_sa_and_l14_are_hard_gates() -> None:
+    assert not prepare_gate_status({14: False}, {14: True}, numerical_gate=True, panl_sa_gate=True)["formal_eligible"]
+    assert not prepare_gate_status({14: True}, {14: True}, numerical_gate=True, panl_sa_gate=False)["formal_eligible"]

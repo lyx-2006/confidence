@@ -61,7 +61,7 @@ HIDDEN_DEFINITION = "decoder_block_output_pre_final_norm"
 CANONICAL_COLORS = ("black", "blue", "brown", "cyan", "gray", "green", "orange", "pink", "purple", "red", "white", "yellow")
 
 RIDGE_ALPHA_GRID = tuple(10.0 ** exponent for exponent in range(-4, 5))
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 TARGET_DEFINITION = "G_L=log((C_i+1e-12)/(1-C_i+1e-12))-log((C_t+1e-12)/(1-C_t+1e-12))"
 REMOVED_COSINE_LIMIT = 1e-5
 SA_NUMERICAL_CHANGE_LIMIT = 1e-6

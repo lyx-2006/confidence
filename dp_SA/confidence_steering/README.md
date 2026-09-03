@@ -31,6 +31,21 @@ python -m dp_SA.confidence_steering.run_pipeline \
 For two GPUs, change the final argument to `--num-gpus 2`. Use `--resume` only
 with an existing output directory whose complete semantic fingerprint matches.
 
+The natural-scale SA decomposition is a separate mechanism-diagnostic run spec:
+
+```bash
+python -m dp_SA.confidence_steering.run_pipeline --smoke --num-gpus 1 \
+  --directions confidence_raw confidence_parallel_sa confidence_perp_sa_natural_scale \
+  --layers 14 16 \
+  --alphas -2 -1 0 1 2
+```
+
+After that exact smoke succeeds, its formal command uses the same arguments plus
+`--output-root dp_SA/confidence_steering/output/natural_decomposition`. This
+configuration has 3,000 main trials and 2,700 GPU forwards for 100 cases. It
+does not request a shuffle direction, so it creates no null trials or null
+analysis. Its paired statistics are S1 and S2 only.
+
 Result figures are split by endpoint and direction. Final soft-SA plots are in
 `figures/final/<direction>.png`; PANL L18 probe-SA plots are in
 `figures/panl/<direction>.png`. Each figure contains one direction only, with

@@ -34,6 +34,7 @@ from .io_utils import (
     stable_shard,
 )
 from .processor import enforce_frozen_image_processor
+from .run_spec import add_run_spec_arguments, normalize_run_spec, run_spec_cli_args, run_spec_from_args
 
 
 def _messages(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -45,7 +46,7 @@ def trial_key(row: dict[str, Any]) -> str:
 
 
 def null_key(row: dict[str, Any]) -> str:
-    return f'{row["case_id"]}|null{int(row["null_replicate"]):03d}|a{float(row["alpha"]):g}'
+    return f'{row["case_id"]}|null{int(row["null_replicate"]):03d}|L{int(row.get("layer", 14))}|a{float(row["alpha"]):g}'
 
 
 def _load_probe(root: Path, name: str):
@@ -54,7 +55,7 @@ def _load_probe(root: Path, name: str):
 
 
 def _load_vectors(root: Path, layers: Sequence[int]):
-    metadata = json.loads((root / "artifacts/directions/vector_metadata.json").read_text()); meta = {(int(r["layer"]), r["recipient_answer"], r["direction"]): r for r in metadata["vectors"]}; payloads = {layer: np.load(root / f"artifacts/directions/P1_LAT__L{layer}.npz") for layer in set(layers) | {14}}
+    metadata = json.loads((root / "artifacts/directions/vector_metadata.json").read_text()); meta = {(int(r["layer"]), r["recipient_answer"], r["direction"]): r for r in metadata["vectors"]}; payloads = {layer: np.load(root / f"artifacts/directions/P1_LAT__L{layer}.npz") for layer in set(layers)}
     return metadata, meta, payloads
 
 
@@ -90,7 +91,7 @@ def alpha_zero_parity(clean_score: dict[str, Any], zero_score: dict[str, Any], b
     return result
 
 
-def _trial_row(proto: dict[str, Any], manifest: dict[str, Any], clean_score: dict[str, Any], score: dict[str, Any], before: np.ndarray, after: np.ndarray, clean_panl: np.ndarray, panl: np.ndarray, hook_diag: dict[str, Any], lat_conf, panl_conf, panl_sa, hidden_file: str, hidden_key: str, vector_fp: str, alpha_zero: dict[str, Any] | None) -> dict[str, Any]:
+def _trial_row(proto: dict[str, Any], manifest: dict[str, Any], clean_score: dict[str, Any], score: dict[str, Any], before: np.ndarray, after: np.ndarray, clean_panl: np.ndarray, panl: np.ndarray, hook_diag: dict[str, Any], lat_conf, panl_conf, panl_sa, hidden_file: str, hidden_key: str, vector_fp: str, alpha_zero: dict[str, Any] | None, vector_info: dict[str, Any] | None = None) -> dict[str, Any]:
     clean_hard = int(clean_score["argmax_hard_class"]); clean_logits = np.asarray(clean_score["class_logits"], float); steered_logits = np.asarray(score["class_logits"], float)
     before_norm, after_norm = float(np.linalg.norm(before)), float(np.linalg.norm(after)); displacement = float(np.linalg.norm(after - before))
     result = {
@@ -109,6 +110,8 @@ def _trial_row(proto: dict[str, Any], manifest: dict[str, Any], clean_score: dic
         "clean_soft_sa": float(clean_score["soft_sa_image_score"]), "steered_soft_sa": float(score["soft_sa_image_score"]), "delta_final_soft_sa": float(score["soft_sa_image_score"] - clean_score["soft_sa_image_score"]),
         "clean_hard_sa": clean_hard, "steered_hard_sa": int(score["argmax_hard_class"]), "hard_sa_changed": int(score["argmax_hard_class"]) != clean_hard,
         "clean_class_margin": class_margin(clean_logits, clean_hard), "clean_class_margin_change": class_margin(steered_logits, clean_hard) - class_margin(clean_logits, clean_hard),
+        "actual_injection_norm": abs(float(proto["alpha"])) * float(vector_info["scaled_norm"]) if vector_info else displacement,
+        "signed_injection_natural_sd": float(proto["alpha"]) * float(vector_info["injection_to_natural_projection_sd"]) if vector_info and vector_info.get("injection_to_natural_projection_sd") is not None else None,
         "saturated": bool(float(score["soft_sa_image_score"]) < 1e-6 or float(score["soft_sa_image_score"]) > 1 - 1e-6), "format_valid": True, "vector_fingerprint": vector_fp, "alpha_zero_parity": alpha_zero,
     }
     floats = [value for value in result.values() if isinstance(value, float)]
@@ -116,13 +119,15 @@ def _trial_row(proto: dict[str, Any], manifest: dict[str, Any], clean_score: dic
     return result
 
 
-def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null: int, config_fingerprint: str) -> dict[str, Any]:
+def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null: int, config_fingerprint: str, run_spec: dict[str, Any]) -> dict[str, Any]:
     manifest = load_jsonl(root / "artifacts/manifests/runtime_manifest.jsonl"); selected = [r for r in manifest if stable_shard(str(r["case_id"]), num_gpus) == worker]
-    layers = list(SMOKE_LAYERS if smoke else STEERING_LAYERS); alphas = SMOKE_ALPHAS if smoke else ALPHAS
+    layers = list(SMOKE_LAYERS if smoke and run_spec["is_default"] else run_spec["layers"]); alphas = tuple(SMOKE_ALPHAS if smoke and run_spec["is_default"] else run_spec["alphas"]); directions = tuple(run_spec["directions"])
+    null_layers = ([14] if run_spec["is_default"] else layers) if run_spec["shuffle_requested"] and not smoke else []
+    null_alphas = tuple(alpha for alpha in alphas if alpha != 0 and -alpha in alphas)
     completed = _read_completed(root, "main_trials", trial_key); null_completed = _read_completed(root, "null_trials", null_key)
     main_path = root / f"artifacts/trials/main_trials.shard_{worker}.jsonl"; null_path = root / f"artifacts/trials/null_trials.shard_{worker}.jsonl"
-    expected_main = {trial_key({"case_id": r["case_id"], "direction": d, "layer": l, "alpha": a}) for r in selected for d in DIRECTIONS for l in layers for a in alphas}
-    expected_null = set() if smoke else {null_key({"case_id": r["case_id"], "null_replicate": rep, "alpha": a}) for r in selected for rep in range(1, desired_null + 1) for a in NULL_ALPHAS}
+    expected_main = {trial_key({"case_id": r["case_id"], "direction": d, "layer": l, "alpha": a}) for r in selected for d in directions for l in layers for a in alphas}
+    expected_null = {null_key({"case_id": r["case_id"], "null_replicate": rep, "layer": layer, "alpha": a}) for r in selected for rep in range(1, desired_null + 1) for layer in null_layers for a in null_alphas}
     if expected_main <= set(completed) and expected_null <= set(null_completed): return {"worker": worker, "new_gpu_forwards": 0, "resumed_noop": True}
     runtime = load_runtime(INFERENCE_PATH); inference = runtime.QwenVLInference(str(MODEL_PATH)); enforce_frozen_image_processor(inference.processor); modules = resolve_language_modules(inference.model); tokenizer = getattr(inference.processor, "tokenizer", inference.processor); ids = class_token_ids(tokenizer); device = model_input_device(inference)
     metadata, vector_meta, vector_payloads = _load_vectors(root, layers)
@@ -142,7 +147,7 @@ def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null
             clean_forward = run_hooked_forward(inference.model, inputs, modules, {PANL_POSITION: panl_pos}, logits_positions=[sac]); forwards += 1; clean_score = _score(clean_forward, sac, ids); clean_panl = clean_forward.hidden_by_name[PANL_POSITION][PANL_LAYER].detach().float().cpu().numpy().astype(np.float32)
             hidden_arrays["clean__P1_PANL__L18"] = clean_panl
             for layer in layers:
-                vector = torch.zeros(len(vector_payloads[layer][f"{answer}__{DIRECTIONS[0]}__scaled"]), dtype=torch.float32)
+                vector = torch.zeros(len(vector_payloads[layer][f"{answer}__{directions[0]}__scaled"]), dtype=torch.float32)
                 hook = AdditiveActivationHook(modules, layer_index=layer, target_position=lat, steering_vector=vector, prefill_sequence_length=sequence, injection_site="block_output")
                 with hook: forward = run_hooked_forward(inference.model, inputs, modules, {PANL_POSITION: panl_pos}, logits_positions=[sac])
                 forwards += 1; score = _score(forward, sac, ids); before = hook.h_before.numpy(); after = hook.h_after.numpy(); hp = forward.hidden_by_name[PANL_POSITION][PANL_LAYER].detach().float().cpu().numpy().astype(np.float32); diag = hook.diagnostics()
@@ -156,7 +161,7 @@ def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null
             clean_panl = np.asarray(hidden_arrays["clean__P1_PANL__L18"], np.float32)
         case_main = []
         for layer in layers:
-            for direction in DIRECTIONS:
+            for direction in directions:
                 meta = vector_meta[layer, answer, direction]; base = np.asarray(vector_payloads[layer][meta["scaled_key"]], np.float32)
                 for alpha in alphas:
                     proto = {"case_id": case, "direction": direction, "layer": layer, "alpha": float(alpha), "trial_type": "main", "config_fingerprint": config_fingerprint}
@@ -169,20 +174,21 @@ def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null
                         forwards += 1; score = _score(forward, sac, ids); before = hook.h_before.numpy(); after = hook.h_after.numpy(); hp = forward.hidden_by_name[PANL_POSITION][PANL_LAYER].detach().float().cpu().numpy().astype(np.float32); diag = hook.diagnostics(); parity = None
                         if int(diag["hook_call_count"]) != 1 or int(diag["steering_applied_count"]) != 1: raise ValueError(f"Hook did not hit exactly once: {case}/{direction}/L{layer}/a{alpha}")
                         hidden_key = f"main__{direction}__L{layer}__a{float(alpha):+g}__P1_PANL__L18"; hidden_arrays[hidden_key] = hp
-                    case_main.append(_trial_row(proto, row, clean_score, score, before, after, clean_panl, hp, diag, lat_conf[layer], panl_conf, panl_sa, str(hidden_path.relative_to(root)), hidden_key, meta["vector_fingerprint"], parity))
+                    case_main.append(_trial_row(proto, row, clean_score, score, before, after, clean_panl, hp, diag, lat_conf[layer], panl_conf, panl_sa, str(hidden_path.relative_to(root)), hidden_key, meta["vector_fingerprint"], parity, meta))
         case_null = []
-        if not smoke:
-            layer = 14
-            for rep in range(1, desired_null + 1):
-                base = np.asarray(vector_payloads[layer][f"null_{rep:03d}__{answer}__scaled"], np.float32); vector_fp = canonical_hash({"replicate": rep, "answer": answer, "hash": array_hash(base)})
-                for alpha in NULL_ALPHAS:
-                    proto = {"case_id": case, "direction": "rebuilt_shuffle_null", "layer": 14, "alpha": float(alpha), "trial_type": "null", "null_replicate": rep, "config_fingerprint": config_fingerprint}
-                    if null_key(proto) in null_completed: continue
-                    hook = AdditiveActivationHook(modules, layer_index=14, target_position=lat, steering_vector=torch.from_numpy(base) * float(alpha), prefill_sequence_length=sequence, injection_site="block_output")
-                    with hook: forward = run_hooked_forward(inference.model, inputs, modules, {PANL_POSITION: panl_pos}, logits_positions=[sac])
-                    forwards += 1; score = _score(forward, sac, ids); before = hook.h_before.numpy(); after = hook.h_after.numpy(); hp = forward.hidden_by_name[PANL_POSITION][PANL_LAYER].detach().float().cpu().numpy().astype(np.float32); diag = hook.diagnostics(); hidden_key = f"null__r{rep:03d}__a{float(alpha):+g}__P1_PANL__L18"; hidden_arrays[hidden_key] = hp
-                    if int(diag["hook_call_count"]) != 1 or int(diag["steering_applied_count"]) != 1: raise ValueError(f"Null hook did not hit exactly once: {case}/r{rep}/a{alpha}")
-                    case_null.append(_trial_row(proto, row, clean_score, score, before, after, clean_panl, hp, diag, lat_conf[14], panl_conf, panl_sa, str(hidden_path.relative_to(root)), hidden_key, vector_fp, None))
+        if null_layers:
+            for layer in null_layers:
+                for rep in range(1, desired_null + 1):
+                    base = np.asarray(vector_payloads[layer][f"null_{rep:03d}__{answer}__scaled"], np.float32)
+                    vector_fp = canonical_hash({"replicate": rep, "answer": answer, "layer": layer, "hash": array_hash(base)})
+                    for alpha in null_alphas:
+                        proto = {"case_id": case, "direction": "rebuilt_shuffle_null", "layer": layer, "alpha": float(alpha), "trial_type": "null", "null_replicate": rep, "config_fingerprint": config_fingerprint}
+                        if null_key(proto) in null_completed: continue
+                        hook = AdditiveActivationHook(modules, layer_index=layer, target_position=lat, steering_vector=torch.from_numpy(base) * float(alpha), prefill_sequence_length=sequence, injection_site="block_output")
+                        with hook: forward = run_hooked_forward(inference.model, inputs, modules, {PANL_POSITION: panl_pos}, logits_positions=[sac])
+                        forwards += 1; score = _score(forward, sac, ids); before = hook.h_before.numpy(); after = hook.h_after.numpy(); hp = forward.hidden_by_name[PANL_POSITION][PANL_LAYER].detach().float().cpu().numpy().astype(np.float32); diag = hook.diagnostics(); hidden_key = f"null__r{rep:03d}__L{layer}__a{float(alpha):+g}__P1_PANL__L18"; hidden_arrays[hidden_key] = hp
+                        if int(diag["hook_call_count"]) != 1 or int(diag["steering_applied_count"]) != 1: raise ValueError(f"Null hook did not hit exactly once: {case}/r{rep}/L{layer}/a{alpha}")
+                        case_null.append(_trial_row(proto, row, clean_score, score, before, after, clean_panl, hp, diag, lat_conf[layer], panl_conf, panl_sa, str(hidden_path.relative_to(root)), hidden_key, vector_fp, None))
         atomic_npz(hidden_path, hidden_arrays)
         for result in case_main: append_jsonl(main_path, result); completed[trial_key(result)] = result
         for result in case_null: append_jsonl(null_path, result); null_completed[null_key(result)] = result
@@ -190,38 +196,43 @@ def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null
     return {"worker": worker, "new_gpu_forwards": forwards, "resumed_noop": forwards == 0}
 
 
-def _merge(root: Path, *, smoke: bool, desired_null: int, config_fingerprint: str) -> dict[str, Any]:
-    manifest = load_jsonl(root / "artifacts/manifests/runtime_manifest.jsonl"); layers = list(SMOKE_LAYERS if smoke else STEERING_LAYERS); alphas = SMOKE_ALPHAS if smoke else ALPHAS
+def _merge(root: Path, *, smoke: bool, desired_null: int, config_fingerprint: str, run_spec: dict[str, Any]) -> dict[str, Any]:
+    manifest = load_jsonl(root / "artifacts/manifests/runtime_manifest.jsonl"); layers = list(SMOKE_LAYERS if smoke and run_spec["is_default"] else run_spec["layers"]); alphas = SMOKE_ALPHAS if smoke and run_spec["is_default"] else run_spec["alphas"]
     main = _read_completed(root, "main_trials", trial_key); null = _read_completed(root, "null_trials", null_key)
-    expected_main = len(manifest) * len(layers) * len(DIRECTIONS) * len(alphas); expected_null = 0 if smoke else len(manifest) * desired_null * len(NULL_ALPHAS)
+    null_layers = ([14] if run_spec["is_default"] else layers) if run_spec["shuffle_requested"] and not smoke else []; null_alphas = [a for a in alphas if a != 0 and -a in alphas]
+    expected_main = len(manifest) * len(layers) * len(run_spec["directions"]) * len(alphas); expected_null = len(manifest) * desired_null * len(null_layers) * len(null_alphas)
     if len(main) != expected_main or len(null) != expected_null: raise ValueError(f"Trial merge incomplete main={len(main)}/{expected_main} null={len(null)}/{expected_null}")
-    atomic_jsonl(root / "artifacts/trials/main_trials.jsonl", [main[k] for k in sorted(main)]); atomic_jsonl(root / "artifacts/trials/null_trials.jsonl", [null[k] for k in sorted(null)])
+    atomic_jsonl(root / "artifacts/trials/main_trials.jsonl", [main[k] for k in sorted(main)])
+    if expected_null or run_spec["is_default"]: atomic_jsonl(root / "artifacts/trials/null_trials.jsonl", [null[k] for k in sorted(null)])
     return {"main_trial_count": expected_main, "null_trial_count": expected_null}
 
 
-def run_steering(*, output_root: Path = FORMAL_ROOT, smoke: bool = False, resume: bool = False, num_gpus: int = 1, desired_null: int = NULL_INITIAL_REPEATS, worker_id: int | None = None) -> dict[str, Any]:
+def run_steering(*, output_root: Path = FORMAL_ROOT, smoke: bool = False, resume: bool = False, num_gpus: int = 1, desired_null: int | None = None, worker_id: int | None = None, run_spec: dict[str, Any] | None = None) -> dict[str, Any]:
     if num_gpus not in (1, 2): raise ValueError("--num-gpus must be 1 or 2")
+    run_spec = normalize_run_spec() if run_spec is None else run_spec; desired_null = (NULL_INITIAL_REPEATS if run_spec["shuffle_requested"] else 0) if desired_null is None else int(desired_null)
+    if not run_spec["shuffle_requested"] and desired_null: raise ValueError("Null repeats require an explicitly selected shuffle direction")
     root = ensure_layout(output_root); prelock = json.loads((root / "artifacts/diagnostics/prelock_material.json").read_text()); manifest_path = root / "artifacts/manifests/runtime_manifest.jsonl"
-    config = {"format_version": 3, "smoke_only": smoke, "prelock_fingerprint": prelock["fingerprint"], "runtime_manifest_sha256": sha256_file(manifest_path), "null_max_locked": 99}
+    if prelock.get("run_spec") != run_spec: raise ValueError("Runtime run spec does not match prepared artifacts")
+    config = {"format_version": 4, "smoke_only": smoke, "prelock_fingerprint": prelock["fingerprint"], "runtime_manifest_sha256": sha256_file(manifest_path), "run_spec": run_spec, "desired_null": desired_null}
     fingerprint = canonical_hash(config)
-    if worker_id is not None: return _worker(root, worker_id, num_gpus, smoke=smoke, desired_null=desired_null, config_fingerprint=fingerprint)
+    if worker_id is not None: return _worker(root, worker_id, num_gpus, smoke=smoke, desired_null=desired_null, config_fingerprint=fingerprint, run_spec=run_spec)
     semantic_fingerprint(root / "progress/run_config.json", config, resume=resume)
     if not torch.cuda.is_available() or torch.cuda.device_count() < num_gpus: raise RuntimeError(f"Requested {num_gpus} GPUs, visible={torch.cuda.device_count()}")
     started = time.time(); processes = []
     for worker in range(num_gpus):
-        env = dict(os.environ); env["CUDA_VISIBLE_DEVICES"] = str(worker); command = [sys.executable, "-m", "dp_SA.confidence_steering.run", "--output-root", str(root), "--num-gpus", str(num_gpus), "--worker-id", str(worker), "--desired-null", str(desired_null)]
+        env = dict(os.environ); env["CUDA_VISIBLE_DEVICES"] = str(worker); command = [sys.executable, "-m", "dp_SA.confidence_steering.run", "--output-root", str(root), "--num-gpus", str(num_gpus), "--worker-id", str(worker), "--desired-null", str(desired_null), *run_spec_cli_args(run_spec)]
         if smoke: command.append("--smoke")
         processes.append(subprocess.Popen(command, cwd=Path(__file__).resolve().parents[2], env=env))
     codes = [p.wait() for p in processes]
     if any(codes): raise RuntimeError(f"GPU worker failed: {codes}")
-    merged = _merge(root, smoke=smoke, desired_null=0 if smoke else desired_null, config_fingerprint=fingerprint)
+    merged = _merge(root, smoke=smoke, desired_null=0 if smoke else desired_null, config_fingerprint=fingerprint, run_spec=run_spec)
     forwards = sum(json.loads((root / f"progress/worker_{w}.json").read_text()).get("new_gpu_forwards", 0) for w in range(num_gpus))
     result = {"status": "complete", "smoke_only": smoke, **merged, "desired_null": 0 if smoke else desired_null, "new_gpu_forwards": forwards, "resumed_noop": forwards == 0, "config_fingerprint": fingerprint, "elapsed_seconds": time.time() - started}; atomic_json(root / "progress/run.json", result); return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1); parser.add_argument("--worker-id", type=int); parser.add_argument("--desired-null", type=int, default=NULL_INITIAL_REPEATS)
-    args = parser.parse_args(argv); root = Path(args.output_root) if args.output_root else FORMAL_ROOT; result = run_steering(output_root=root, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus, desired_null=args.desired_null, worker_id=args.worker_id)
+    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1); parser.add_argument("--worker-id", type=int); parser.add_argument("--desired-null", type=int); add_run_spec_arguments(parser)
+    args = parser.parse_args(argv); root = Path(args.output_root) if args.output_root else FORMAL_ROOT; result = run_steering(output_root=root, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus, desired_null=args.desired_null, worker_id=args.worker_id, run_spec=run_spec_from_args(args))
     if args.worker_id is not None: atomic_json(root / f"progress/worker_{args.worker_id}.json", result)
     print(json.dumps(result, ensure_ascii=False)); return 0
 

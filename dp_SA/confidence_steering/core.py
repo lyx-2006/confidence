@@ -256,6 +256,23 @@ def project_out(vector: np.ndarray, basis: np.ndarray) -> np.ndarray:
     return result
 
 
+def natural_sa_decomposition(vector: np.ndarray, basis: np.ndarray, norm: float) -> dict[str, Any]:
+    confidence = np.asarray(vector, dtype=np.float64)
+    parallel = basis @ (basis.T @ confidence)
+    perpendicular = project_out(confidence, basis)
+    common_scale = float(norm) / float(np.linalg.norm(confidence))
+    raw = scale_vector(confidence, norm)
+    parallel_scaled = (common_scale * parallel).astype(np.float32)
+    perpendicular_scaled = (common_scale * perpendicular).astype(np.float32)
+    reconstruction = raw.astype(np.float64) - parallel_scaled.astype(np.float64) - perpendicular_scaled.astype(np.float64)
+    relative_error = float(np.linalg.norm(reconstruction) / np.linalg.norm(raw))
+    raw_matches = bool(np.allclose(raw, (common_scale * confidence).astype(np.float32), rtol=1e-6, atol=1e-7))
+    return {"raw": raw, "parallel": parallel, "perpendicular": perpendicular,
+            "parallel_scaled": parallel_scaled, "perpendicular_scaled": perpendicular_scaled,
+            "common_scale": common_scale, "reconstruction_relative_error": relative_error,
+            "raw_matches_existing": raw_matches}
+
+
 def select_ridge_alpha(X: np.ndarray, y: np.ndarray, folds: Sequence[int]) -> tuple[float, list[dict[str, float]]]:
     folds_array = np.asarray(folds); trace = []
     for alpha in RIDGE_ALPHA_GRID:

@@ -17,6 +17,7 @@ from .config import (
 from .io_utils import atomic_json, atomic_jsonl, canonical_hash, create_output_root, load_jsonl, sha256_file
 from .prepare import run_prepare
 from .run import run_steering
+from .run_spec import add_run_spec_arguments, normalize_run_spec, run_spec_from_args
 
 TEST_PATHS = (
     "dp_SA/confidence_steering/tests",
@@ -32,20 +33,21 @@ def run_cpu_tests() -> dict[str, Any]:
     return {"status": "passed", "elapsed_seconds": time.time() - started, "paths": list(TEST_PATHS)}
 
 
-def _next_smoke_round() -> tuple[int, Path]:
-    SMOKE_PARENT.mkdir(parents=True, exist_ok=True)
+def _next_smoke_round(run_spec: dict[str, Any]) -> tuple[int, Path]:
+    parent = SMOKE_PARENT if run_spec["is_default"] else SMOKE_PARENT / f'config_{run_spec["fingerprint"][:12]}'
+    parent.mkdir(parents=True, exist_ok=True)
     for number in range(1, MAX_SMOKE_ROUNDS + 1):
-        path = SMOKE_PARENT / f"round_{number}"
+        path = parent / f"round_{number}"
         if not path.exists(): return number, path
     raise RuntimeError(f"All {MAX_SMOKE_ROUNDS} smoke rounds have been used")
 
 
-def _latest_smoke_lock() -> tuple[Path, dict[str, Any]]:
+def _latest_smoke_lock(run_spec: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
     candidates = []
     if SMOKE_PARENT.is_dir():
-        for path in SMOKE_PARENT.glob("round_*/progress/experiment_lock.json"):
+        for path in SMOKE_PARENT.rglob("round_*/progress/experiment_lock.json"):
             value = json.loads(path.read_text())
-            if value.get("status") == "locked" and int(value.get("protocol_version", -1)) == PROTOCOL_VERSION: candidates.append((path, value))
+            if value.get("status") == "locked" and int(value.get("protocol_version", -1)) == PROTOCOL_VERSION and value.get("run_spec") == run_spec: candidates.append((path, value))
     if not candidates: raise RuntimeError("Formal test remains sealed: no successful matching orthogonal smoke lock")
     return sorted(candidates, key=lambda item: item[0].stat().st_mtime)[-1]
 
@@ -75,23 +77,25 @@ def _make_lock(root: Path, *, smoke_lock: dict[str, Any] | None, smoke_lock_path
     if not verdict["formal_eligible"]: status = "audit_failed"
     elif smoke_lock is not None and (smoke_lock.get("code_hashes") != material["code_hashes"] or smoke_lock.get("vector_fingerprint") != material["vector_fingerprint"] or smoke_lock.get("probe_files") != material["probe_files"]): status = "smoke_lock_mismatch"
     else: status = "locked"
-    lock = {"status": status, "protocol_version": PROTOCOL_VERSION, "test_state": "sealed", "prelock_fingerprint": material["fingerprint"], "code_hashes": material["code_hashes"], "vector_fingerprint": material["vector_fingerprint"], "probe_files": material["probe_files"], "layers": material["layers"], "alphas": material["alphas"], "directions": material["directions"], "seed": material["seed"], "output_schema": material["output_schema"], "thresholds_frozen": True, "null_vectors_prebuilt": 99, "null_initial": 20, "null_expand_to": 99, "null_expand_rule": material["null_rule"], "source_smoke_lock": str(smoke_lock_path) if smoke_lock_path else None}
+    run_spec = material["run_spec"]; null_initial = NULL_INITIAL_REPEATS if run_spec["shuffle_requested"] else 0
+    lock = {"status": status, "protocol_version": PROTOCOL_VERSION, "test_state": "sealed", "prelock_fingerprint": material["fingerprint"], "code_hashes": material["code_hashes"], "vector_fingerprint": material["vector_fingerprint"], "probe_files": material["probe_files"], "layers": material["layers"], "alphas": material["alphas"], "directions": material["directions"], "run_spec": run_spec, "seed": material["seed"], "output_schema": material["output_schema"], "thresholds_frozen": True, "null_vectors_prebuilt": 99 if run_spec["shuffle_requested"] else 0, "null_initial": null_initial, "null_expand_to": 99 if run_spec["analysis_kind"] == "legacy_confirmatory" else null_initial, "null_expand_rule": material["null_rule"], "source_smoke_lock": str(smoke_lock_path) if smoke_lock_path else None}
     lock["fingerprint"] = canonical_hash(lock); return lock
 
 
-def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume: bool = False, num_gpus: int = 1) -> dict[str, Any]:
+def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume: bool = False, num_gpus: int = 1, run_spec: dict[str, Any] | None = None) -> dict[str, Any]:
+    run_spec = normalize_run_spec() if run_spec is None else run_spec
     tests = run_cpu_tests()
     if smoke:
         failures = []
         for _ in range(MAX_SMOKE_ROUNDS):
-            if output_root is None: number, root = _next_smoke_round()
+            if output_root is None: number, root = _next_smoke_round(run_spec)
             else: number, root = 1, Path(output_root)
             try:
-                create_output_root(root, resume=resume); prepared = run_prepare(output_root=root, smoke=True, resume=resume)
+                create_output_root(root, resume=resume); prepared = run_prepare(output_root=root, smoke=True, resume=resume, run_spec=run_spec)
                 if not prepared["formal_eligible"]: raise RuntimeError("Pre-lock audit gates failed; GPU smoke not started")
                 smoke_manifest = load_jsonl(root / "artifacts/manifests/smoke_manifest.jsonl"); atomic_jsonl(root / "artifacts/manifests/runtime_manifest.jsonl", smoke_manifest)
-                ran = run_steering(output_root=root, smoke=True, resume=resume, num_gpus=num_gpus, desired_null=0); analyzed = analyze(output_root=root, smoke=True, resume=resume)
-                resumed = run_steering(output_root=root, smoke=True, resume=True, num_gpus=num_gpus, desired_null=0)
+                ran = run_steering(output_root=root, smoke=True, resume=resume, num_gpus=num_gpus, desired_null=0, run_spec=run_spec); analyzed = analyze(output_root=root, smoke=True, resume=resume, run_spec=run_spec)
+                resumed = run_steering(output_root=root, smoke=True, resume=True, num_gpus=num_gpus, desired_null=0, run_spec=run_spec)
                 if not resumed["resumed_noop"] or resumed["new_gpu_forwards"] != 0: raise RuntimeError("Smoke resume performed new GPU forwards")
                 lock = _make_lock(root, smoke_lock=None, smoke_lock_path=None); lock["status"] = "locked" if ran["status"] == "complete" and analyzed["status"] == "complete" else "failed"; lock["smoke_round"] = number; lock["fingerprint"] = canonical_hash({k: v for k, v in lock.items() if k != "fingerprint"}); atomic_json(root / "progress/experiment_lock.json", lock)
                 report = {"status": "passed", "round": number, "output_root": str(root.resolve()), "formal_test_opened": False, "cpu_tests": tests, "prepare": prepared, "run": ran, "analyze": analyzed, "resume": resumed, "failures": failures, "experiment_lock": lock}; atomic_json(root / "progress/smoke_report.json", report); return report
@@ -101,22 +105,23 @@ def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume
                 if output_root is not None: break
         raise RuntimeError(f"Smoke failed after {len(failures)} round(s): {failures}")
 
-    root = Path(output_root or FORMAL_ROOT); create_output_root(root, resume=resume); prepared = run_prepare(output_root=root, smoke=False, resume=resume)
-    smoke_path, smoke_lock = _latest_smoke_lock(); lock = _make_lock(root, smoke_lock=smoke_lock, smoke_lock_path=smoke_path); atomic_json(root / "progress/experiment_lock.json", lock)
+    root = Path(output_root or FORMAL_ROOT); create_output_root(root, resume=resume); prepared = run_prepare(output_root=root, smoke=False, resume=resume, run_spec=run_spec)
+    smoke_path, smoke_lock = _latest_smoke_lock(run_spec); lock = _make_lock(root, smoke_lock=smoke_lock, smoke_lock_path=smoke_path); atomic_json(root / "progress/experiment_lock.json", lock)
     if lock["status"] != "locked": raise RuntimeError(f"Formal test remains sealed: {lock['status']}")
     smoke_report = smoke_path.parent / "smoke_report.json"
     atomic_json(root / "artifacts/diagnostics/smoke_reference.json", {"report": json.loads(smoke_report.read_text()), "sha256": sha256_file(smoke_report), "lock_sha256": sha256_file(smoke_path)})
-    unseal = unseal_formal_test(root, lock); ran20 = run_steering(output_root=root, smoke=False, resume=resume, num_gpus=num_gpus, desired_null=NULL_INITIAL_REPEATS); analyzed20 = analyze(output_root=root, smoke=False, resume=resume)
+    initial_null = NULL_INITIAL_REPEATS if run_spec["shuffle_requested"] else 0
+    unseal = unseal_formal_test(root, lock); ran20 = run_steering(output_root=root, smoke=False, resume=resume, num_gpus=num_gpus, desired_null=initial_null, run_spec=run_spec); analyzed20 = analyze(output_root=root, smoke=False, resume=resume, run_spec=run_spec)
     ran99 = analyzed99 = None
-    if analyzed20["expand_null_to_99"]:
-        ran99 = run_steering(output_root=root, smoke=False, resume=True, num_gpus=num_gpus, desired_null=NULL_MAX_REPEATS)
+    if run_spec["analysis_kind"] == "legacy_confirmatory" and analyzed20["expand_null_to_99"]:
+        ran99 = run_steering(output_root=root, smoke=False, resume=True, num_gpus=num_gpus, desired_null=NULL_MAX_REPEATS, run_spec=run_spec)
         # Null file changed, so analysis config is intentionally replaced only for the locked extension.
-        (root / "progress/analyze_config.json").unlink(); analyzed99 = analyze(output_root=root, smoke=False, resume=False)
+        (root / "progress/analyze_config.json").unlink(); analyzed99 = analyze(output_root=root, smoke=False, resume=False, run_spec=run_spec)
     return {"status": "complete", "formal_test_opened": True, "cpu_tests": tests, "prepare": prepared, "lock": lock, "unseal": unseal, "run20": ran20, "analyze20": analyzed20, "run99": ran99, "analyze99": analyzed99}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1); args = parser.parse_args(argv); print(json.dumps(run_pipeline(output_root=Path(args.output_root) if args.output_root else None, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus), ensure_ascii=False)); return 0
+    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1); add_run_spec_arguments(parser); args = parser.parse_args(argv); print(json.dumps(run_pipeline(output_root=Path(args.output_root) if args.output_root else None, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus, run_spec=run_spec_from_args(args)), ensure_ascii=False)); return 0
 
 
 if __name__ == "__main__": raise SystemExit(main())

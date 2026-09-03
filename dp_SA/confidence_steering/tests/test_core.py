@@ -10,7 +10,7 @@ from dp_SA.confidence_steering.config import (
     EXPECTED_FORMAL_MAIN_FORWARDS, EXPECTED_FORMAL_TRIALS, FORMAL_ROOT,
 )
 from dp_SA.confidence_steering.core import (
-    answer_patterns, continuous_pattern, inner_fold, loao, project_out, shuffled_targets,
+    answer_patterns, continuous_pattern, inner_fold, loao, natural_sa_decomposition, project_out, shuffled_targets,
     svd_basis, weighted_sa_probe,
 )
 from dp_SA.confidence_steering.prepare import run_prepare
@@ -60,6 +60,18 @@ def test_joint_projection_is_order_independent_and_ranked() -> None:
     left, right = project_out(v, q1), project_out(v, q2)
     assert meta1["rank"] == meta2["rank"] == 2 and np.allclose(left, right, atol=1e-10)
     assert abs(left @ a / np.linalg.norm(a) / np.linalg.norm(left)) < 1e-12
+
+
+def test_natural_sa_decomposition_uses_one_common_scale() -> None:
+    vector = np.asarray([3.0, 4.0] + [0.0] * 3582)
+    basis = np.asarray([[1.0], [0.0]] + [[0.0]] * 3582)
+    result = natural_sa_decomposition(vector, basis, 10.0)
+    assert np.linalg.norm(result["raw"]) == pytest.approx(10.0)
+    assert np.linalg.norm(result["parallel_scaled"]) == pytest.approx(6.0)
+    assert np.linalg.norm(result["perpendicular_scaled"]) == pytest.approx(8.0)
+    assert np.allclose(result["raw"], result["parallel_scaled"] + result["perpendicular_scaled"])
+    assert abs(result["perpendicular"] @ basis[:, 0]) < 1e-12
+    assert result["reconstruction_relative_error"] < 1e-7 and result["raw_matches_existing"]
 
 
 def test_ridge_standardized_coefficient_converts_to_raw_gradient() -> None:
