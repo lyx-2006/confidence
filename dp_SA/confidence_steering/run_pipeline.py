@@ -122,10 +122,19 @@ def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--gradient-validation", action="store_true")
+    parser.add_argument("--gradient-layer", type=int, default=14)
+    parser.add_argument("--gradient-epsilons", type=float, nargs="+", default=(0.5,))
     parser.add_argument("--random-sa-null-repeats", type=int)
     parser.add_argument("--random-sa-null-layer", type=int, default=14)
     parser.add_argument("--random-sa-null-dose", type=float, default=2.0)
     add_run_spec_arguments(parser); args = parser.parse_args(argv)
+    if args.gradient_validation:
+        if args.gradient_layer != 14: raise ValueError("The locked gradient-validation protocol requires --gradient-layer 14")
+        if args.random_sa_null_repeats is not None or any(value is not None for value in (args.directions, args.layers, args.alphas)): raise ValueError("Gradient-validation mode is independent of random-null and main run-spec options")
+        from .gradient_validation import run_gradient_pipeline
+        tests = run_cpu_tests(); result = run_gradient_pipeline(epsilons=args.gradient_epsilons, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus, output_root=Path(args.output_root) if args.output_root else None); result["cpu_tests"] = tests
+        print(json.dumps(result, ensure_ascii=False)); return 0
     if args.random_sa_null_repeats is not None:
         if args.random_sa_null_layer != 14 or args.random_sa_null_dose != 2.0:
             raise ValueError("The locked random-SA null protocol requires --random-sa-null-layer 14 and --random-sa-null-dose 2")
