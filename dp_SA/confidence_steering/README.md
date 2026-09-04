@@ -54,3 +54,23 @@ LAT layer on the x-axis and alpha encoded by line style and color.
 The experiment only claims deletion of measured linear SA/difficulty subspaces.
 Numerical orthogonality is an implementation check, not evidence that every
 possible SA or difficulty signal was removed.
+
+The matched random-SA-subspace null is an isolated follow-up. Its smoke reuses
+the completed 24-case natural-decomposition smoke read-only:
+
+```bash
+python -m dp_SA.confidence_steering.run_pipeline --smoke --num-gpus 1 \
+  --random-sa-null-repeats 3 --random-sa-null-layer 14 --random-sa-null-dose 2
+```
+
+After the matching 168-forward smoke is locked, the formal one-GPU command is:
+
+```bash
+python -m dp_SA.confidence_steering.run_pipeline --resume --num-gpus 1 \
+  --random-sa-null-repeats 20 --random-sa-null-layer 14 --random-sa-null-dose 2
+```
+
+Use `--num-gpus 2` for the two-GPU form. The formal stage adds 100 fresh clean
+validation forwards and 4,000 null forwards. It writes only the dedicated
+random-null namespace inside `output/natural_decomposition`; it neither runs
+the main pipeline nor reads or updates the older shuffle null.

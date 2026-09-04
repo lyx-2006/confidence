@@ -121,7 +121,26 @@ def run_pipeline(*, output_root: Path | None = None, smoke: bool = False, resume
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1); add_run_spec_arguments(parser); args = parser.parse_args(argv); print(json.dumps(run_pipeline(output_root=Path(args.output_root) if args.output_root else None, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus, run_spec=run_spec_from_args(args)), ensure_ascii=False)); return 0
+    parser = argparse.ArgumentParser(); parser.add_argument("--output-root"); parser.add_argument("--resume", action="store_true"); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--num-gpus", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--random-sa-null-repeats", type=int)
+    parser.add_argument("--random-sa-null-layer", type=int, default=14)
+    parser.add_argument("--random-sa-null-dose", type=float, default=2.0)
+    add_run_spec_arguments(parser); args = parser.parse_args(argv)
+    if args.random_sa_null_repeats is not None:
+        if args.random_sa_null_layer != 14 or args.random_sa_null_dose != 2.0:
+            raise ValueError("The locked random-SA null protocol requires --random-sa-null-layer 14 and --random-sa-null-dose 2")
+        if any(value is not None for value in (args.directions, args.layers, args.alphas)):
+            raise ValueError("Random-null mode is independent of the main --directions/--layers/--alphas options")
+        from .random_sa_null import run_random_null_pipeline
+        tests = run_cpu_tests()
+        result = run_random_null_pipeline(
+            repeats=args.random_sa_null_repeats, smoke=args.smoke, resume=args.resume,
+            num_gpus=args.num_gpus,
+            output_root=Path(args.output_root) if args.output_root else None,
+        )
+        result["cpu_tests"] = tests
+        print(json.dumps(result, ensure_ascii=False)); return 0
+    print(json.dumps(run_pipeline(output_root=Path(args.output_root) if args.output_root else None, smoke=args.smoke, resume=args.resume, num_gpus=args.num_gpus, run_spec=run_spec_from_args(args)), ensure_ascii=False)); return 0
 
 
 if __name__ == "__main__": raise SystemExit(main())
