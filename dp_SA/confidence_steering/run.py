@@ -33,7 +33,7 @@ from .io_utils import (
     canonical_hash, ensure_layout, load_jsonl, semantic_fingerprint, sha256_file,
     stable_shard,
 )
-from .processor import enforce_frozen_image_processor
+from .processor import enforce_fast_image_processor
 from .run_spec import add_run_spec_arguments, normalize_run_spec, run_spec_cli_args, run_spec_from_args
 
 
@@ -129,7 +129,7 @@ def _worker(root: Path, worker: int, num_gpus: int, *, smoke: bool, desired_null
     expected_main = {trial_key({"case_id": r["case_id"], "direction": d, "layer": l, "alpha": a}) for r in selected for d in directions for l in layers for a in alphas}
     expected_null = {null_key({"case_id": r["case_id"], "null_replicate": rep, "layer": layer, "alpha": a}) for r in selected for rep in range(1, desired_null + 1) for layer in null_layers for a in null_alphas}
     if expected_main <= set(completed) and expected_null <= set(null_completed): return {"worker": worker, "new_gpu_forwards": 0, "resumed_noop": True}
-    runtime = load_runtime(INFERENCE_PATH); inference = runtime.QwenVLInference(str(MODEL_PATH)); enforce_frozen_image_processor(inference.processor); modules = resolve_language_modules(inference.model); tokenizer = getattr(inference.processor, "tokenizer", inference.processor); ids = class_token_ids(tokenizer); device = model_input_device(inference)
+    runtime = load_runtime(INFERENCE_PATH); inference = runtime.QwenVLInference(str(MODEL_PATH)); enforce_fast_image_processor(inference.processor); modules = resolve_language_modules(inference.model); tokenizer = getattr(inference.processor, "tokenizer", inference.processor); ids = class_token_ids(tokenizer); device = model_input_device(inference)
     metadata, vector_meta, vector_payloads = _load_vectors(root, layers)
     lat_conf = {layer: _load_probe(root, f"confidence_gap__P1_LAT__L{layer}") for layer in layers}; panl_conf = _load_probe(root, "confidence_gap__P1_PANL__L18"); panl_sa = _load_probe(root, "final_sa__P1_PANL__L18")
     forwards = 0

@@ -16,6 +16,7 @@ from .config import (
 )
 from .io_utils import atomic_json, atomic_jsonl, canonical_hash, create_output_root, load_jsonl, sha256_file
 from .prepare import run_prepare
+from .processor import PROCESSOR_MODE
 from .run import run_steering
 from .run_spec import add_run_spec_arguments, normalize_run_spec, run_spec_from_args
 
@@ -78,7 +79,7 @@ def _make_lock(root: Path, *, smoke_lock: dict[str, Any] | None, smoke_lock_path
     elif smoke_lock is not None and (smoke_lock.get("code_hashes") != material["code_hashes"] or smoke_lock.get("vector_fingerprint") != material["vector_fingerprint"] or smoke_lock.get("probe_files") != material["probe_files"]): status = "smoke_lock_mismatch"
     else: status = "locked"
     run_spec = material["run_spec"]; null_initial = NULL_INITIAL_REPEATS if run_spec["shuffle_requested"] else 0
-    lock = {"status": status, "protocol_version": PROTOCOL_VERSION, "test_state": "sealed", "prelock_fingerprint": material["fingerprint"], "code_hashes": material["code_hashes"], "vector_fingerprint": material["vector_fingerprint"], "probe_files": material["probe_files"], "layers": material["layers"], "alphas": material["alphas"], "directions": material["directions"], "run_spec": run_spec, "seed": material["seed"], "output_schema": material["output_schema"], "thresholds_frozen": True, "null_vectors_prebuilt": 99 if run_spec["shuffle_requested"] else 0, "null_initial": null_initial, "null_expand_to": 99 if run_spec["analysis_kind"] == "legacy_confirmatory" else null_initial, "null_expand_rule": material["null_rule"], "source_smoke_lock": str(smoke_lock_path) if smoke_lock_path else None}
+    lock = {"status": status, "protocol_version": PROTOCOL_VERSION, "processor_mode": PROCESSOR_MODE, "test_state": "sealed", "prelock_fingerprint": material["fingerprint"], "code_hashes": material["code_hashes"], "vector_fingerprint": material["vector_fingerprint"], "probe_files": material["probe_files"], "layers": material["layers"], "alphas": material["alphas"], "directions": material["directions"], "run_spec": run_spec, "seed": material["seed"], "output_schema": material["output_schema"], "thresholds_frozen": True, "null_vectors_prebuilt": 99 if run_spec["shuffle_requested"] else 0, "null_initial": null_initial, "null_expand_to": 99 if run_spec["analysis_kind"] == "legacy_confirmatory" else null_initial, "null_expand_rule": material["null_rule"], "source_smoke_lock": str(smoke_lock_path) if smoke_lock_path else None}
     lock["fingerprint"] = canonical_hash(lock); return lock
 
 

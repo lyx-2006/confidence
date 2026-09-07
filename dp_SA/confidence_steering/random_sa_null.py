@@ -40,7 +40,7 @@ from .io_utils import (
     atomic_text, canonical_hash, load_jsonl, semantic_fingerprint, sha256_file,
     stable_shard,
 )
-from .processor import enforce_frozen_image_processor
+from .processor import PROCESSOR_MODE, enforce_fast_image_processor
 from .run import _messages, _predict, _score, trial_key
 from .run_spec import normalize_run_spec
 
@@ -163,7 +163,8 @@ def random_code_hashes() -> dict[str, str]:
 def random_protocol_material() -> dict[str, Any]:
     model_hash, processor_hash = model_processor_hashes()
     return {
-        "format_version": 1, "layer": RANDOM_NULL_LAYER, "dose": RANDOM_NULL_DOSE,
+        "format_version": 1, "processor_mode": PROCESSOR_MODE,
+        "layer": RANDOM_NULL_LAYER, "dose": RANDOM_NULL_DOSE,
         "candidate_pool_size": CANDIDATE_POOL_SIZE,
         "selected_candidates": SELECTED_CANDIDATES, "seed": SEED,
         "seed_rule": "SeedSequence([42,14,recipient_index,candidate_id])",
@@ -462,7 +463,7 @@ def _read_shards(directory: Path, pattern: str, key_field: str | None = None) ->
 def _load_runtime_objects(source_root: Path):
     runtime = load_runtime(INFERENCE_PATH)
     inference = runtime.QwenVLInference(str(MODEL_PATH))
-    enforce_frozen_image_processor(inference.processor)
+    enforce_fast_image_processor(inference.processor)
     modules = resolve_language_modules(inference.model)
     tokenizer = getattr(inference.processor, "tokenizer", inference.processor)
     return inference, modules, tokenizer, class_token_ids(tokenizer), model_input_device(inference)

@@ -26,6 +26,7 @@ from .io_utils import (
     array_hash, atomic_csv, atomic_joblib, atomic_json, atomic_jsonl, atomic_npz,
     canonical_hash, ensure_layout, load_jsonl, semantic_fingerprint, sha256_file,
 )
+from .processor import PROCESSOR_MODE
 from .run_spec import add_run_spec_arguments, normalize_run_spec, run_spec_from_args
 
 
@@ -260,6 +261,7 @@ def run_prepare(*, output_root: Path = FORMAL_ROOT, smoke: bool = False, resume:
     run_spec = normalize_run_spec() if run_spec is None else run_spec
     root = ensure_layout(output_root); inventory = prelock_inventory()
     config = {"protocol_version": PROTOCOL_VERSION, "target_definition": TARGET_DEFINITION,
+              "processor_mode": PROCESSOR_MODE,
               "test_state": "sealed", "smoke_only": smoke, "seed": SEED,
               "run_spec": run_spec,
               "inputs": {name: value["sha256"] for name, value in inventory.items()}, "source_code": code_hashes()}
@@ -334,6 +336,7 @@ def run_prepare(*, output_root: Path = FORMAL_ROOT, smoke: bool = False, resume:
     atomic_json(root / "artifacts/diagnostics/smoke_selection.json", smoke_selection)
     probe_files = {str(path.relative_to(root)): sha256_file(path) for path in sorted((root / "artifacts/probes").glob("*.joblib"))}
     material = {"protocol_version": PROTOCOL_VERSION, "target_definition": TARGET_DEFINITION,
+                "processor_mode": PROCESSOR_MODE,
                 "prepare_fingerprint": fingerprint, "vector_fingerprint": vector_fingerprint,
                 "vector_files": vector_files, "probe_files": probe_files, "verdict": verdict,
                 "code_hashes": code_hashes(), "layers": run_spec["layers"], "alphas": run_spec["alphas"],

@@ -100,3 +100,21 @@ dp_SA/answer_matched_lat_steering/output
 dp_SA/unimodal_logit_confidence/output
 
 dp_SA/confidence_steering/output
+
+dp_SA/confidence_steering/trajectory/output/audit_delivery
+
+dp_SA/confidence_steering/trajectory/output/results
+
+dp_SA/confidence_steering/trajectory/output/results_v2
+
+dp_SA/confidence_steering/trajectory/output/results_v3
+
+dp_SA/confidence_steering/trajectory/output/results_v4
+
+dp_SA/confidence_steering/trajectory/output/results_v5
+
+dp_SA/confidence_steering/trajectory/output/results_v6
+
+dp_SA/confidence_steering/trajectory/output
+
+dp_SA/confidence_steering/robust_check/output
