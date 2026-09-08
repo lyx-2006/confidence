@@ -124,3 +124,7 @@ dp_SA/SA_trajectory/LAT2PANL/output
 dp_SA/SA_trajectory/CLE_transport/output
 
 dp_SA/real_sa/output
+
+dp_SA/confidence_gap_comparison/output
+
+dp_SA/real_sa/relationship_analysis/output
