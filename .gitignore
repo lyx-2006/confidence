@@ -118,3 +118,9 @@ dp_SA/confidence_steering/trajectory/output/results_v6
 dp_SA/confidence_steering/trajectory/output
 
 dp_SA/confidence_steering/robust_check/output
+
+dp_SA/SA_trajectory/LAT2PANL/output
+
+dp_SA/SA_trajectory/CLE_transport/output
+
+dp_SA/real_sa/output
