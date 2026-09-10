@@ -132,3 +132,5 @@ dp_SA/real_sa/relationship_analysis/output
 dp_SA/prompt_check/output/smoke
 
 dp_SA/prompt_check/output
+
+dp_SA/real_sa/random_corruption_validation/output
