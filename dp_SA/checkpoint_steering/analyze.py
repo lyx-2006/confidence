@@ -54,10 +54,10 @@ def clustered_mean_ci(rows: Sequence[dict[str, Any]], value: Callable[[dict[str,
     return observed, low, high
 
 
-def build_long_metrics(rows: Sequence[dict[str, Any]], *, repeats: int, seed: int) -> list[dict[str, Any]]:
+def build_long_metrics(rows: Sequence[dict[str, Any]], *, repeats: int, seed: int, positions: Sequence[str] = POSITIONS) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     counter = 0
-    for position in POSITIONS:
+    for position in positions:
         for layer in sorted({int(row["layer"]) for row in rows if row["position"] == position}):
             for alpha in sorted({float(row["alpha"]) for row in rows if row["position"] == position and int(row["layer"]) == layer}):
                 cell = [row for row in rows if row["position"] == position and int(row["layer"]) == layer and float(row["alpha"]) == alpha]
@@ -126,10 +126,10 @@ def _aggregate_item_metric(item_metrics: dict[str, dict[str, float]], metric: st
     return observed, low, high
 
 
-def build_dose_metrics(rows: Sequence[dict[str, Any]], *, repeats: int, seed: int) -> list[dict[str, Any]]:
+def build_dose_metrics(rows: Sequence[dict[str, Any]], *, repeats: int, seed: int, positions: Sequence[str] = POSITIONS) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     counter = 0
-    for position in POSITIONS:
+    for position in positions:
         for layer in sorted({int(row["layer"]) for row in rows if row["position"] == position}):
             base = [row for row in rows if row["position"] == position and int(row["layer"]) == layer]
             for group in GROUPS:
@@ -158,11 +158,11 @@ def build_dose_metrics(rows: Sequence[dict[str, Any]], *, repeats: int, seed: in
     return output
 
 
-def build_position_contrasts(rows: Sequence[dict[str, Any]], *, repeats: int, seed: int) -> list[dict[str, Any]]:
+def build_position_contrasts(rows: Sequence[dict[str, Any]], *, repeats: int, seed: int, positions: Sequence[str] = POSITIONS) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     counter = 0
     layers = sorted({int(row["layer"]) for row in rows})
-    for left, right in POSITION_PAIRS:
+    for left, right in zip(positions, positions[1:]):
         for layer in layers:
             for group in GROUPS:
                 left_rows = _group_rows([row for row in rows if row["position"] == left and int(row["layer"]) == layer], group)
@@ -199,11 +199,11 @@ def build_position_contrasts(rows: Sequence[dict[str, Any]], *, repeats: int, se
     return output
 
 
-def build_wide(long_rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+def build_wide(long_rows: Sequence[dict[str, Any]], positions: Sequence[str] = POSITIONS) -> tuple[list[dict[str, Any]], list[str]]:
     metrics = ("mean_delta_soft_sa", "ci_low", "ci_high", "hard_change_rate", "sample_count")
     columns = [
         f'{position}__L{layer}__a{float(alpha):g}'
-        for position in POSITIONS
+        for position in positions
         for layer in sorted({int(row["layer"]) for row in long_rows if row["position"] == position})
         for alpha in sorted({float(row["alpha"]) for row in long_rows if row["position"] == position and int(row["layer"]) == layer})
     ]
@@ -220,7 +220,7 @@ def build_wide(long_rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]
     return output, ["metric", *columns]
 
 
-def _plots(root: Path, long_rows: Sequence[dict[str, Any]], dose_rows: Sequence[dict[str, Any]]) -> list[str]:
+def _plots(root: Path, long_rows: Sequence[dict[str, Any]], dose_rows: Sequence[dict[str, Any]], positions: Sequence[str] = POSITIONS) -> list[str]:
     import matplotlib.pyplot as plt
 
     root.mkdir(parents=True, exist_ok=True)
@@ -234,7 +234,7 @@ def _plots(root: Path, long_rows: Sequence[dict[str, Any]], dose_rows: Sequence[
         2.0: ("#ef8a82", "--"), 10.0: ("#b2182b", "-"),
     }
     written: list[str] = []
-    for position in POSITIONS:
+    for position in positions:
         fig, ax = plt.subplots(figsize=(7.2, 4.8))
         position_rows = [row for row in all_rows if row["position"] == position]
         bound_keys = ("mean_delta_soft_sa",) if position in no_ci_positions else ("ci_low", "ci_high")
@@ -288,7 +288,7 @@ def _plots(root: Path, long_rows: Sequence[dict[str, Any]], dose_rows: Sequence[
         written.append(name)
 
     fig, ax = plt.subplots(figsize=(8.2, 4.8))
-    for position in POSITIONS:
+    for position in positions:
         data = sorted([row for row in dose_rows if row["position"] == position and row["group"] == "all"], key=lambda row: int(row["layer"]))
         if data:
             means = np.asarray([row["slope"] for row in data], dtype=float)
@@ -318,18 +318,18 @@ def _plots(root: Path, long_rows: Sequence[dict[str, Any]], dose_rows: Sequence[
     return written
 
 
-def _audit_rows(clean_rows: Sequence[dict[str, Any]], trials: Sequence[dict[str, Any]], failures: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def _audit_rows(clean_rows: Sequence[dict[str, Any]], trials: Sequence[dict[str, Any]], failures: Sequence[dict[str, Any]], positions: Sequence[str] = POSITIONS) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for clean in clean_rows:
-        for position in (*POSITIONS, "P1_SAC"):
+        for position in (*positions, "P1_SAC"):
             record = clean["positions"][position]
             output.append({
                 "audit_type": "position", "status": "passed", "case_id": clean["case_id"], "item_id": clean["item_id"],
                 "position": position, "layer": "", "alpha": "", "rendered_index": record["rendered_index"],
                 "processed_index": record["processed_index"], "token_id": record["token_id"], "token_text": record["token_text"],
-                "anchor_occurrence_count": record["anchor_occurrence_count"], "hook_call_count": "", "hook_applied_count": "",
+                "anchor_occurrence_count": record.get("anchor_occurrence_count", ""), "hook_call_count": "", "hook_applied_count": "",
                 "alpha_zero_parity": "", "finite_values": True, "failure": "",
-                "details_json": json.dumps({"anchor_text": record["anchor_text"], "token_window": record["token_window"], "causal_order": clean["positions"]["causal_order"]}, ensure_ascii=False, separators=(",", ":")),
+                "details_json": json.dumps({"anchor_text": record.get("anchor_text"), "token_window": record.get("token_window", []), "causal_order": clean.get("ordered_processed_indices", clean["positions"].get("causal_order", {}))}, ensure_ascii=False, separators=(",", ":")),
             })
     for trial in trials:
         diag = trial["hook_diagnostics"]
@@ -353,7 +353,8 @@ def _audit_rows(clean_rows: Sequence[dict[str, Any]], trials: Sequence[dict[str,
     return output
 
 
-def _readme() -> str:
+def _readme(*, generic: bool = False) -> str:
+    direction = "\n- 本实验正方向为 construction 的 `high_image − high_text` activation 均值差，不是 SA probe 的 Ridge 权重。\n" if generic else ""
     return """# Checkpoint steering 表格说明
 
 - `mean_delta_soft_sa`：干预后 soft SA 减去同一样本 clean soft SA；正值表示更偏图像。
@@ -365,11 +366,17 @@ def _readme() -> str:
 - `symmetric_effect_2/10`：`(delta(+a)-delta(-a))/2`；`asymmetry_2/10`：`delta(+a)+delta(-a)`。
 - `position_contrasts.csv` 的 contrast 始终为后一个检查点减前一个检查点，并在同 item、同 layer 内配对。
 - `run_audit.csv` 汇总字符/token 定位、hook 命中、alpha=0 parity、finite-value 与失败事件。
-"""
+""" + direction
 
 
-def _summary(dose_rows: Sequence[dict[str, Any]]) -> str:
+def _summary(dose_rows: Sequence[dict[str, Any]], *, generic: bool = False) -> str:
     passed = [row for row in dose_rows if row["group"] == "all" and row["bidirectional_pass"]]
+    if generic:
+        return "\n".join([
+            "# PANL→CLE position steering summary", "",
+            f"全样本组中通过双向门禁的位置×层单元：{len(passed)}。正方向表示沿 construction 的 high_image − high_text 均值差方向干预。", "",
+            "方向由 activation 均值差构造，并非 SA probe 的 Ridge 权重；主要推断应联合查看 slope、双向 symmetric effect 及相邻位置 paired contrasts。",
+        ]) + "\n"
     lines = [
         "# Delayed-SA checkpoint steering summary",
         "",
@@ -386,12 +393,12 @@ def _summary(dose_rows: Sequence[dict[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _required_files(root: Path) -> list[Path]:
+def _required_files(root: Path, positions: Sequence[str] = POSITIONS) -> list[Path]:
     tables = [
         "steering_delta_sa_long.csv", "steering_delta_sa_wide.csv", "dose_response_by_position_layer.csv",
         "position_contrasts.csv", "run_audit.csv", "README.md",
     ]
-    figures = [f"{position}_delta_sa_by_layer.png" for position in POSITIONS] + ["position_slope_comparison.png"]
+    figures = [f"{position}_delta_sa_by_layer.png" for position in positions] + ["position_slope_comparison.png"]
     return [*(root / "tables" / name for name in tables), *(root / "figures" / name for name in figures), root / "artifacts" / "diagnostics" / "summary.md"]
 
 
@@ -402,8 +409,12 @@ def analyze(
     resume: bool = False,
     repeats: int | None = None,
     refresh: bool = False,
+    positions: Sequence[str] | None = None,
+    alphas: Sequence[float] | None = None,
+    generic_summary: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_root)
+    configured_positions = tuple(positions or POSITIONS)
     diagnostics = root / "artifacts" / "diagnostics"
     trial_paths = [diagnostics / "steering_trials.jsonl", *sorted(diagnostics.glob("steering_trials_layer_*.jsonl"))]
     trial_paths = [path for path in trial_paths if path.is_file()]
@@ -419,13 +430,13 @@ def analyze(
     position_layers: dict[str, set[int]] = defaultdict(set)
     for row in trials:
         position = str(row["position"])
-        if position not in POSITIONS:
+        if position not in configured_positions:
             raise ValueError(f"Unknown checkpoint position in trial artifacts: {position}")
         layer = int(row["layer"])
         alpha = float(row["alpha"])
         cells[(position, layer, alpha)].add(str(row["case_id"]))
         position_layers[position].add(layer)
-    expected_alphas = set(SMOKE_ALPHAS if smoke else ALPHAS)
+    expected_alphas = set(float(value) for value in (alphas or (SMOKE_ALPHAS if smoke else ALPHAS)))
     for position, layers_for_position in position_layers.items():
         for layer in layers_for_position:
             actual_alphas = {alpha for candidate_position, candidate_layer, alpha in cells if candidate_position == position and candidate_layer == layer}
@@ -455,28 +466,32 @@ def analyze(
         previous = json.loads(progress_path.read_text())
         if previous.get("config_fingerprint") != config["fingerprint"] and not refresh:
             raise ValueError("Analysis resume fingerprint mismatch")
-        if previous.get("status") == "complete" and resume and not refresh and all(path.is_file() and path.stat().st_size > 0 for path in _required_files(root)):
+        if previous.get("status") == "complete" and resume and not refresh and all(path.is_file() and path.stat().st_size > 0 for path in _required_files(root, configured_positions)):
             return {**previous, "resumed_noop": True}
         if not resume and not refresh:
             raise FileExistsError("Analysis output exists; use --resume")
     atomic_json(progress_path, {"status": "running", "config_fingerprint": config["fingerprint"], **config})
 
-    long_rows = build_long_metrics(trials, repeats=repeats, seed=SEED)
-    dose_rows = build_dose_metrics(trials, repeats=repeats, seed=SEED)
-    contrasts = build_position_contrasts(trials, repeats=repeats, seed=SEED)
-    wide_rows, wide_fields = build_wide(long_rows)
+    long_rows = build_long_metrics(trials, repeats=repeats, seed=SEED, positions=configured_positions)
+    dose_rows = build_dose_metrics(trials, repeats=repeats, seed=SEED, positions=configured_positions)
+    contrasts = build_position_contrasts(trials, repeats=repeats, seed=SEED, positions=configured_positions)
+    wide_rows, wide_fields = build_wide(long_rows, configured_positions)
     tables = root / "tables"
     atomic_csv(tables / "steering_delta_sa_long.csv", long_rows)
     atomic_csv(tables / "steering_delta_sa_wide.csv", wide_rows, wide_fields)
     atomic_csv(tables / "dose_response_by_position_layer.csv", dose_rows)
-    atomic_csv(tables / "position_contrasts.csv", contrasts)
+    atomic_csv(
+        tables / "position_contrasts.csv",
+        contrasts,
+        ("from_position", "to_position", "layer", "group", "metric", "contrast", "ci_low", "ci_high", "item_count"),
+    )
     clean_rows = [row for row in load_jsonl(root / "artifacts" / "diagnostics" / "clean_capture.jsonl") if row.get("status") == "completed"]
     failures = load_jsonl(root / "progress" / "failures.jsonl")
-    atomic_csv(tables / "run_audit.csv", _audit_rows(clean_rows, trials, failures))
-    atomic_text(tables / "README.md", _readme())
-    figure_names = _plots(root / "figures", long_rows, dose_rows)
-    atomic_text(root / "artifacts" / "diagnostics" / "summary.md", _summary(dose_rows))
-    missing = [str(path) for path in _required_files(root) if not path.is_file() or path.stat().st_size == 0]
+    atomic_csv(tables / "run_audit.csv", _audit_rows(clean_rows, trials, failures, configured_positions))
+    atomic_text(tables / "README.md", _readme(generic=generic_summary))
+    figure_names = _plots(root / "figures", long_rows, dose_rows, configured_positions)
+    atomic_text(root / "artifacts" / "diagnostics" / "summary.md", _summary(dose_rows, generic=generic_summary))
+    missing = [str(path) for path in _required_files(root, configured_positions) if not path.is_file() or path.stat().st_size == 0]
     if missing:
         raise RuntimeError(f"Completion artifact audit failed: {missing}")
     completion = {

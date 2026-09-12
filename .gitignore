@@ -134,3 +134,9 @@ dp_SA/prompt_check/output/smoke
 dp_SA/prompt_check/output
 
 dp_SA/real_sa/random_corruption_validation/output
+
+dp_SA/SA_probe/output
+
+dp_SA/SA_trajectory/CLE_transport/PANL2CLE/output
+
+dp_SA/SA_probe
