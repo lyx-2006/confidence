@@ -1,5 +1,7 @@
 # Model files (large)
 qwen-2.5-vl/models/
+gemma-3-4b-it/models/
+gemma-3-4b-it/logs/
 
 qwen-2.5-vl/huggingface_cache
 
