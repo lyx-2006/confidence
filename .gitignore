@@ -142,3 +142,6 @@ dp_SA/SA_probe/output
 dp_SA/SA_trajectory/CLE_transport/PANL2CLE/output
 
 dp_SA/SA_probe
+
+# Gemma activation-steering generated artifacts
+gemma review/activation steering/output/
