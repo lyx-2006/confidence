@@ -1,0 +1,10 @@
+# Qwen3-VL-8B-Instruct 本地部署依赖
+# 不要在这里写 torch / torchvision / torchaudio / flash-attn
+# 系统里已装好 PyTorch 2.5.1+cu124
+
+transformers>=4.57.0
+accelerate>=1.0.0
+qwen-vl-utils>=0.0.8
+huggingface-hub>=0.26.0
+safetensors>=0.4.0
+pillow>=10.0.0

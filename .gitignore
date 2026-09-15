@@ -1,6 +1,11 @@
 # Model files (large)
 qwen-2.5-vl/models/
 
+# Qwen3-VL 本地部署：模型参数 / 下载状态 / 日志
+qwen-3-vl/model/
+qwen-3-vl/download.log
+qwen-3-vl/outputs/
+
 qwen-2.5-vl/huggingface_cache
 
 qwen-2.5-vl/logs
@@ -140,3 +145,5 @@ dp_SA/SA_probe/output
 dp_SA/SA_trajectory/CLE_transport/PANL2CLE/output
 
 dp_SA/SA_probe
+
+qwen3 review/short prompt check/output

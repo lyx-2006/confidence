@@ -1,0 +1,10 @@
+# Generated experiment artifacts.  Keep source and documentation tracked.
+/capture/*
+!/capture/.gitignore
+/capture-smoke*/
+/Steering/output/
+/AttentionBlock/output/
+__pycache__/
+.pytest_cache/
+*.pyc
+/short prompt check/output
