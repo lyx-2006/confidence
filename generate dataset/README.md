@@ -1,5 +1,43 @@
 # generate_shape_color_dataset.py
 
+## Qwen3 image pool（独立入口）
+
+`generate_image_pool.py` 生成不带文本先验、不区分 consistent/conflict 的纯图片池。
+场景复杂度、遮挡和 Gaussian blur 只用于产生候选，最终难度由 Qwen3 在固定
+image-only prompt 下的 12 色 normalized entropy 分档。正式图片必须同时满足生成答案
+和 restricted top-1 均等于真实颜色。
+
+先运行固定的 324 张 pilot，再分析并人工确认建议阈值：
+
+```bash
+python "generate dataset/generate_image_pool.py" pilot
+python "generate dataset/generate_image_pool.py" analyze
+```
+
+阈值确认后进行正式生成或导入旧图片；三个阈值均为 0–1 normalized entropy：
+
+```bash
+python "generate dataset/generate_image_pool.py" build \
+  --thresholds 0.20,0.40,0.60 \
+  --quota-per-level 10
+
+python "generate dataset/generate_image_pool.py" import-legacy \
+  --thresholds 0.20,0.40,0.60 \
+  --quota-per-level 10 \
+  --resume
+```
+
+示例阈值仅说明 CLI 格式，不能在 pilot 分析和人工 contact sheet 检查前直接作为正式标准。
+默认模型目录为 `qwen-3-vl/model`，pilot 和正式池分别写入
+`generate dataset/datasets/image_pool_pilot` 与 `generate dataset/datasets/image_pool`。
+恢复已有运行必须使用 `--resume`，且模型、prompt、profile、blur、阈值、seed 和配额配置
+必须与首次运行一致。
+
+每个颜色一个目录，每个 shape 的 JSON 顶层为数组，图片统一命名为
+`shape_color_六位编号.png`。`candidate_results.jsonl` 是完整、可恢复的候选测量账本，
+`rejected.jsonl` 保存精简拒收原因；同一个 `base_scene_id` 的 blur 变体在后续数据划分时
+必须放在同一个 split。
+
 ## 概述
 
 生成**可恢复的、纯图像的形状×颜色视觉推理数据集**。
