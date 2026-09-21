@@ -16,9 +16,9 @@ import os
 import shutil
 from datetime import datetime, timezone
 
-INPUT_PATH = "generate dataset/datasets/generated_shape_color_dataset.summary.json"
-BACKUP_PATH = "generate dataset/datasets/generated_shape_color_dataset.summary.json.bak"
-FLAGGED_PATH = "generate dataset/datasets/generated_shape_color_dataset.flagged.json"
+INPUT_PATH = "generate dataset/datasets/legacy/original/generated_shape_color_dataset.summary.json"
+BACKUP_PATH = "generate dataset/datasets/legacy/original/generated_shape_color_dataset.summary.json.bak"
+FLAGGED_PATH = "generate dataset/datasets/legacy/original/generated_shape_color_dataset.flagged.json"
 
 
 def main():

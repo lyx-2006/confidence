@@ -39,7 +39,9 @@ from typing import Any, Iterable, Sequence
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+ROOT_DIR = PROJECT_DIR.parent
+LEGACY_DATASETS = PROJECT_DIR / "datasets" / "legacy" / "original"
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -3230,7 +3232,7 @@ class RecreateDatasetGenerator:
 
     def __init__(self, args: argparse.Namespace):
         self.args = args
-        self.datasets_root = Path(__file__).resolve().parent / "datasets"
+        self.datasets_root = LEGACY_DATASETS
         self.invalid_root = self.datasets_root / "invalid_datasets"
         self.valid_root = self.datasets_root / "valid_datasets"
         self.invalid_path = self.invalid_root / "generated_shape_color_dataset.json"
@@ -3751,8 +3753,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--input-dataset", default="datasets/dataset_test.json")
     parser.add_argument("--prior-pool", default="datasets/color_prior_pool.json")
-    parser.add_argument("--output-dataset", default="generate dataset/datasets/generated_shape_color_dataset.json")
-    parser.add_argument("--image-dir", default="generate dataset/datasets/generated_shape_color_images")
+    parser.add_argument(
+        "--output-dataset",
+        default="generate dataset/datasets/legacy/original/generated_shape_color_dataset.json",
+    )
+    parser.add_argument(
+        "--image-dir",
+        default="generate dataset/datasets/legacy/original/generated_shape_color_images",
+    )
     parser.add_argument(
         "--model-path",
         default="qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct",

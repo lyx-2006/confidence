@@ -29,11 +29,14 @@ from typing import Any, Iterable, Sequence
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
-ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = SCRIPT_DIR.parents[1]
+ROOT = PROJECT_DIR.parent
+CURRENT_DATASETS = PROJECT_DIR / "datasets" / "current"
+LEGACY_DATASETS = PROJECT_DIR / "datasets" / "legacy"
 DEFAULT_MODEL = ROOT / "qwen-3-vl" / "model"
-DEFAULT_PILOT_ROOT = SCRIPT_DIR / "datasets" / "image_pool_pilot"
-DEFAULT_POOL_ROOT = SCRIPT_DIR / "datasets" / "image_pool"
+DEFAULT_PILOT_ROOT = LEGACY_DATASETS / "experiments" / "image_pool_pilot"
+DEFAULT_POOL_ROOT = CURRENT_DATASETS / "image_pool"
 FAITHFUL_DIR = ROOT / "qwen3 review" / "short prompt check" / "faithful check"
 
 LEVELS = ("very_easy", "easy", "medium", "hard")
@@ -62,7 +65,7 @@ PROFILE_BY_NAME = {profile.name: profile for profile in PROFILES}
 
 
 def _load_legacy() -> Any:
-    path = SCRIPT_DIR / "generate_shape_color_dataset.py"
+    path = SCRIPT_DIR.parent / "legacy" / "generate_shape_color_dataset.py"
     name = "_image_pool_legacy_renderer"
     cached = sys.modules.get(name)
     if cached is not None:
@@ -1290,7 +1293,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "import-legacy":
         sources = args.source or [
             ROOT / "datasets" / "datasets.json",
-            SCRIPT_DIR / "datasets" / "generated_shape_color_dataset.summary.json",
+            LEGACY_DATASETS / "original" / "generated_shape_color_dataset.summary.json",
         ]
         pipeline.import_legacy([path.resolve() for path in sources])
     return 0

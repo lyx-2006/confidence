@@ -14,8 +14,8 @@ import pytest
 from PIL import Image, ImageDraw
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = Path(__file__).with_name("generate_shape_color_dataset.py")
+ROOT = Path(__file__).resolve().parents[4]
+SCRIPT = Path(__file__).resolve().parents[1] / "generate_shape_color_dataset.py"
 SPEC = importlib.util.spec_from_file_location("generate_shape_color_dataset", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -936,7 +936,7 @@ def test_recreate_cli_and_current_invalid_architecture_preflight() -> None:
         MODULE.parse_args(["--recreate", "--dry-run"])
 
     generator = MODULE.RecreateDatasetGenerator.__new__(MODULE.RecreateDatasetGenerator)
-    generator.datasets_root = SCRIPT.parent / "datasets"
+    generator.datasets_root = MODULE.LEGACY_DATASETS
     generator.invalid_root = generator.datasets_root / "invalid_datasets"
     generator.valid_root = generator.datasets_root / "valid_datasets"
     generator.invalid_path = generator.invalid_root / "generated_shape_color_dataset.json"

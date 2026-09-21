@@ -15,7 +15,7 @@ import os
 import shutil
 from datetime import datetime, timezone
 
-BASE_DIR = "generate dataset/datasets"
+BASE_DIR = "generate dataset/datasets/legacy/original"
 SUMMARY_PATH = f"{BASE_DIR}/generated_shape_color_dataset.summary.json"
 FLAGGED_PATH = f"{BASE_DIR}/generated_shape_color_dataset.flagged.json"
 IMAGE_DIR = f"{BASE_DIR}/generated_shape_color_images"

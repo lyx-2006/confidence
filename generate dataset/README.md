@@ -1,4 +1,65 @@
-# generate_shape_color_dataset.py
+# Shape–Color 数据生成
+
+## 目录
+
+```text
+generate dataset/
+├── code/
+│   ├── current/          # 当前 image pool、文本校准和测试集划分代码
+│   │   └── tests/
+│   └── legacy/           # 旧版 text/image 配对生成代码
+│       └── tests/
+└── datasets/
+    ├── current/          # 当前正式数据
+    └── legacy/           # 旧数据、探索实验与中间产物
+```
+
+当前测试数据是 `datasets/current/conflict_test.json`，图片池是
+`datasets/current/interval_pool_full`。测试 JSON 中的 image 路径相对于
+`datasets/current`，移动整个 `current` 目录时仍然有效。
+
+正式 Accepted 图片的完整 layout 保存在各颜色/形状 JSON 的 `layout` 字段中；
+探索实验的 layout 继续以独立 `layout.json` 或 `.layout.json` 保存。整理过程不删除 layout。
+
+## Qwen3 难度探索自动化
+
+`explore_image_difficulty.py` 用于运行固定的 22 轮难度实验：先测试 1、4、7、10
+个图形的无遮挡场景，再对 4、7、10 图形逐级测试 10%–60% 的目标遮挡。每轮固定
+3 色 × 3 图形 × 3 个 seed，并测试 blur `0,2,4,8,12,16,24,32`，共 216 张；
+主实验合计 4752 张。
+
+```bash
+python "generate dataset/code/current/explore_image_difficulty.py" run
+
+# 中断后恢复；配置指纹不一致时会拒绝继续
+python "generate dataset/code/current/explore_image_difficulty.py" run --resume
+```
+
+默认输出到 `generate dataset/datasets/legacy/experiments/image_difficulty_experiments`。每轮目录包含
+`config.json`、`round_NNN.md`、`candidate_results.jsonl`、`summary.json`、
+`contact_sheet.png` 以及可复现的 layout、mask、sharp 和 blur 图片。每轮完成后会原子更新
+`experiment_summary.csv` 和 `SUMMARY.md`。
+
+阈值只从生成答案和 restricted top-1 同时正确的样本中搜索，并要求四档各至少 20 张、
+覆盖至少 6 个 color × shape 组合、median blur 不下降。如果主实验不满足条件，程序会在
+最高可用 Entropy 配置附近最多增加 3 轮新 seed。模型连续异常三次时会停止运行，避免把
+环境错误登记成图片错误。
+
+### 5 轮极端遮挡测试
+
+`run_extreme_difficulty.py` 独立测试 10–12 个语义物体、60%–80% 目标遮挡、2–4 个
+联合遮挡物，并为每个场景叠加 blur `0,2,4,8,12,16,24,32`。每张图片运行三次
+Qwen3 image-only；单次必须同时通过生成答案和 restricted top-1，至少两次正确才通过。
+
+```bash
+python "generate dataset/code/current/run_extreme_difficulty.py" run
+
+# 中断恢复
+python "generate dataset/code/current/run_extreme_difficulty.py" run --resume
+```
+
+默认输出目录为 `generate dataset/datasets/legacy/experiments/image_difficulty_extreme`。三次完整测量均写入
+`candidate_results.jsonl`，最终联合统计位于 `SUMMARY.md` 和 `aggregate_summary.json`。
 
 ## Qwen3 image pool（独立入口）
 
@@ -10,18 +71,18 @@ image-only prompt 下的 12 色 normalized entropy 分档。正式图片必须�
 先运行固定的 324 张 pilot，再分析并人工确认建议阈值：
 
 ```bash
-python "generate dataset/generate_image_pool.py" pilot
-python "generate dataset/generate_image_pool.py" analyze
+python "generate dataset/code/current/generate_image_pool.py" pilot
+python "generate dataset/code/current/generate_image_pool.py" analyze
 ```
 
 阈值确认后进行正式生成或导入旧图片；三个阈值均为 0–1 normalized entropy：
 
 ```bash
-python "generate dataset/generate_image_pool.py" build \
+python "generate dataset/code/current/generate_image_pool.py" build \
   --thresholds 0.20,0.40,0.60 \
   --quota-per-level 10
 
-python "generate dataset/generate_image_pool.py" import-legacy \
+python "generate dataset/code/current/generate_image_pool.py" import-legacy \
   --thresholds 0.20,0.40,0.60 \
   --quota-per-level 10 \
   --resume
@@ -29,7 +90,8 @@ python "generate dataset/generate_image_pool.py" import-legacy \
 
 示例阈值仅说明 CLI 格式，不能在 pilot 分析和人工 contact sheet 检查前直接作为正式标准。
 默认模型目录为 `qwen-3-vl/model`，pilot 和正式池分别写入
-`generate dataset/datasets/image_pool_pilot` 与 `generate dataset/datasets/image_pool`。
+`generate dataset/datasets/legacy/experiments/image_pool_pilot` 与
+`generate dataset/datasets/current/image_pool`。
 恢复已有运行必须使用 `--resume`，且模型、prompt、profile、blur、阈值、seed 和配额配置
 必须与首次运行一致。
 
@@ -37,6 +99,50 @@ python "generate dataset/generate_image_pool.py" import-legacy \
 `shape_color_六位编号.png`。`candidate_results.jsonl` 是完整、可恢复的候选测量账本，
 `rejected.jsonl` 保存精简拒收原因；同一个 `base_scene_id` 的 blur 变体在后续数据划分时
 必须放在同一个 split。
+
+### 12×17 Entropy 区间池完整运行
+
+`run_interval_pool_full.py` 覆盖全部 12 色 × 17 图形，共 204 个 `color × shape`
+组合。默认同时激活 12 个组合，使用 24 个 CPU 生成进程和最多 48 个待处理任务；
+任务按 construction→pair 交错提交，使第一波 worker 覆盖 12 个不同组合。Qwen3
+仍只加载一个实例并逐张测量，生成进程会在 GPU 推理期间继续准备后续图片。
+
+先查看计划或只读状态，不会创建正式输出：
+
+```bash
+python "generate dataset/code/current/run_interval_pool_full.py" plan
+python "generate dataset/code/current/run_interval_pool_full.py" status
+```
+
+正式运行与恢复命令：
+
+```bash
+python "generate dataset/code/current/run_interval_pool_full.py" run
+python "generate dataset/code/current/run_interval_pool_full.py" run --resume
+
+# 两个独立 Qwen worker，各自固定到一张 GPU
+python "generate dataset/code/current/run_interval_pool_full.py" run --resume --gpu-devices 0,1
+```
+
+正式运行默认先从 `datasets/interval_pool_pilot` 导入已完成的候选账本和 accepted PNG。
+导入前会核对源配置指纹、模型、prompt、construction、图片 SHA256 和 attempt 上限；
+导入是幂等的，不调用 Qwen。已有三个组合会继承全部 2377 次测量及各区间状态，
+已经达到配额或 200 次预算的区间不会重复运行。使用 `--no-reuse` 可显式关闭复用。
+正式输出目录为 `datasets/interval_pool_full`。
+
+正式运行把 `_staging` 作为临时目录。Accepted 永久保留最终 PNG、shape JSON、完整
+layout、layout SHA256 和 12 色 logits/probabilities。当前正式池完成整理后已删除大型候选账本
+和失败索引，并把残留 staging 移入 `datasets/legacy/intermediate`；它应作为只读数据使用，
+不能再依赖原目录直接 `--resume`。如需继续生成，请指定新的 output root。
+
+旧 Accepted 若缺少 layout，恢复启动时会根据 seed、shape、color、物体数和遮挡配置
+确定性重建并原子回填。回填结果写入 `layout_sha256`；已有 pilot 样本已通过与原始
+`scene/layout.json` 的逐一哈希一致性测试。
+
+`--gpu-devices 0,1` 使用一个主调度器和两个独立的 Qwen 模型进程，推理结果并行计算，
+但仍由主进程按稳定任务顺序写入唯一账本。不要同时启动两份完整运行命令指向同一输出目录。
+GPU worker 数属于运行时吞吐配置，不改变图片、Entropy 或配额配置，因此单卡任务可在候选终态
+边界停止后，用相同输出目录和 `--resume --gpu-devices 0,1` 安全迁移为双卡。
 
 ## 概述
 
@@ -54,8 +160,8 @@ python "generate dataset/generate_image_pool.py" import-legacy \
 |------|------|--------|------|
 | `--input-dataset` | `str` | `datasets/dataset_test.json` | 现有输入数据集路径，用于发现已有的 shape-color 组合并复用其 `irr`/`null` 图片 |
 | `--prior-pool` | `str` | `datasets/color_prior_pool.json` | 颜色先验池 JSON 文件，必须包含全部 12 种颜色且每种至少有一个 accepted 的非空 `text_clue` |
-| `--output-dataset` | `str` | `generate dataset/datasets/generated_shape_color_dataset.json` | 输出数据集 JSON 路径，每个完成的组合会原子写入 |
-| `--image-dir` | `str` | `generate dataset/datasets/generated_shape_color_images` | 渲染图片输出目录，结构为 `{id}_{branch}_{difficulty}.png` 等 |
+| `--output-dataset` | `str` | `generate dataset/datasets/legacy/original/generated_shape_color_dataset.json` | 输出数据集 JSON 路径，每个完成的组合会原子写入 |
+| `--image-dir` | `str` | `generate dataset/datasets/legacy/original/generated_shape_color_images` | 渲染图片输出目录，结构为 `{id}_{branch}_{difficulty}.png` 等 |
 | `--model-path` | `str` | `qwen-2.5-vl/models/Qwen2.5-VL-7B-Instruct` | Qwen2.5-VL 模型权重目录路径，用于 `ExtendedQwenVLInference` |
 | `--seed` | `int` | 随机生成 (64-bit) | 随机种子，决定形状顺序、冲突颜色映射、布局生成。同一 seed 保证完全可复现。必须 ≥ 0 |
 | `--workers` | `int` | `16` | consistent/conflict branch/DeepSeek 并发进程数，范围 1–64；每个进程内部严格先 easy、后 hard |
@@ -95,19 +201,19 @@ pip install openai Pillow
 ### 2. 运行测试
 
 ```bash
-python -m pytest "generate dataset/test_generate_shape_color_dataset.py" -v
+python -m pytest "generate dataset/code/legacy/tests/test_generate_shape_color_dataset.py" -v
 ```
 
 ### 3. 试运行
 
 ```bash
-python "generate dataset/generate_shape_color_dataset.py" --dry-run
+python "generate dataset/code/legacy/generate_shape_color_dataset.py" --dry-run
 ```
 
 ### 4. 正式运行
 
 ```bash
-python "generate dataset/generate_shape_color_dataset.py" \
+python "generate dataset/code/legacy/generate_shape_color_dataset.py" \
   --workers 16 \
   --seed 42 \
   --input-dataset datasets/dataset_test.json \
@@ -121,7 +227,7 @@ python "generate dataset/generate_shape_color_dataset.py" \
 
 ```bash
 # Ctrl+C 中断后，直接使用 --resume 继续
-python "generate dataset/generate_shape_color_dataset.py" --resume
+python "generate dataset/code/legacy/generate_shape_color_dataset.py" --resume
 ```
 
 收到 `Ctrl+C` 时，父进程会取消等待任务、终止并回收所有 branch worker；被中断的 GPU
@@ -130,10 +236,10 @@ python "generate dataset/generate_shape_color_dataset.py" --resume
 ### 6. 重建失败的 conflict-hard
 
 ```bash
-python "generate dataset/generate_shape_color_dataset.py" --recreate
+python "generate dataset/code/legacy/generate_shape_color_dataset.py" --recreate
 
 # Ctrl+C 后恢复
-python "generate dataset/generate_shape_color_dataset.py" --recreate --resume
+python "generate dataset/code/legacy/generate_shape_color_dataset.py" --recreate --resume
 ```
 
 重建模式固定读取 `datasets/invalid_datasets/generated_shape_color_dataset.json`，仅复用
@@ -180,7 +286,7 @@ valid 发布及 16 个 artifact 完整性复核通过后，对应源 item 和 ar
 ## 输出文件结构
 
 ```
-generate dataset/datasets/
+generate dataset/datasets/legacy/original/
 ├── generated_shape_color_dataset.json   # 主输出
 ├── generated_shape_color_dataset.state.json  # 恢复状态
 ├── generated_shape_color_dataset.gpu_queue.json  # FIFO GPU 测试队列

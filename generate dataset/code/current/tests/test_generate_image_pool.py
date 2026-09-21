@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 
-SCRIPT = Path(__file__).with_name("generate_image_pool.py")
+SCRIPT = Path(__file__).resolve().parents[1] / "generate_image_pool.py"
 SPEC = importlib.util.spec_from_file_location("generate_image_pool", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 POOL = importlib.util.module_from_spec(SPEC)

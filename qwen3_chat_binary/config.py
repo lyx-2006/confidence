@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+EXPERIMENT_ROOT = Path(__file__).resolve().parent
+REPOSITORY_ROOT = EXPERIMENT_ROOT.parent
+MODEL_PATH = REPOSITORY_ROOT / "qwen-3-vl" / "model"
+INFERENCE_PATH = REPOSITORY_ROOT / "qwen-3-vl" / "interface.py"
+DATASET_PATH = REPOSITORY_ROOT / "generate dataset" / "datasets" / "current" / "conflict_test.json"
+OUTPUT_ROOT = EXPERIMENT_ROOT / "output"
+CAPTURE_ROOT = OUTPUT_ROOT / "Capture"
+STEERING_OUTPUT_ROOT = OUTPUT_ROOT / "Steering"
+COUNTERFACTUAL_OUTPUT_ROOT = OUTPUT_ROOT / "Counterfactual"
+ANSWER_MATCHED_OUTPUT_ROOT = OUTPUT_ROOT / "AnswerMatchedSteering"
+
+VARIANTS = ("native_boundary", "explicit_newline")
+POSITIONS = ("LAT", "PANL", "PANL+1", "CLE", "SAC")
+DEFAULT_STEERING_POSITIONS = ("PANL", "PANL+1", "CLE")
+EXPECTED_NUM_HIDDEN_LAYERS = 36
+EXPECTED_HIDDEN_SIZE = 4096
+CAPTURE_LAYERS = tuple(range(8, EXPECTED_NUM_HIDDEN_LAYERS))
+DEFAULT_STEERING_LAYERS = (10, 12, 14, 16, 18, 20, 22, 24, 26)
+DEFAULT_ALPHAS = (-5.0, -2.0, 0.0, 2.0, 5.0)
+
+SEED = 42
+VECTOR_NORM_FRACTION = 0.03
+CONSTRUCTION_PER_SIDE = 25
+IMAGE_TEST_COUNT = 50
+TEXT_TEST_COUNT = 50
+ERROR_RATE_LIMIT = 0.05
+LOGIT_PARITY_TOLERANCE = 1e-6
+HIDDEN_DEFINITION = "decoder_block_output_pre_final_norm"

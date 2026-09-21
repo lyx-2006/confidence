@@ -11,7 +11,7 @@ import os
 import shutil
 from datetime import datetime, timezone
 
-BASE_DIR = "generate dataset/datasets"
+BASE_DIR = "generate dataset/datasets/legacy/original"
 VALID_JSON = f"{BASE_DIR}/valid_datasets/generated_shape_color_dataset.json"
 INVALID_JSON = f"{BASE_DIR}/invalid_datasets/generated_shape_color_dataset.json"
 VALID_IMG = f"{BASE_DIR}/valid_datasets/images"

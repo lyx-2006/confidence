@@ -147,3 +147,7 @@ dp_SA/SA_trajectory/CLE_transport/PANL2CLE/output
 dp_SA/SA_probe
 
 qwen3 review/short prompt check/output
+
+qwen3_chat_binary/prompt test
+
+qwen3_chat_binary/experiments/distributed_propagation
